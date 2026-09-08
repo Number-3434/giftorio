@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 #[derive(Serialize)]
 pub struct Blueprint {
     pub blueprint: BlueprintInner,
@@ -11,6 +11,7 @@ pub struct BlueprintInner {
     pub entities: Vec<Entity>,
     pub wires: Vec<Wire>,
     pub item: &'static str,
+    pub label: String,
     pub version: u64,
 }
 

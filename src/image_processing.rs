@@ -1,10 +1,17 @@
-use image::AnimationDecoder;
-use image::{DynamicImage, Frame};
+use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_SECOND};
+use crate::progress::report_progress;
 use image::imageops::FilterType;
-use rayon::prelude::*;
+use image::{AnimationDecoder, DynamicImage};
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
-use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_SECOND};
+
+macro_rules! console_log {
+    ($($arg:tt)*) => {
+        web_sys::console::log_1(
+            &format!($($arg)*).into()
+        );
+    };
+}
 
 /// Decodes the provided image data into a vector of frames based on the image type.
 ///
@@ -17,20 +24,32 @@ use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_SECOND};
 ///
 /// # Returns
 ///
-/// A vector of `Frame` objects or a JavaScript error.
-pub fn get_frames(image_data: &[u8], image_type: &str) -> Result<Vec<Frame>, JsValue> {
+/// An iterator of `Frame` objects or a JavaScript error.
+pub fn get_frames<'a>(
+    image_data: &'a [u8],
+    image_type: &str,
+) -> Result<image::Frames<'a>, JsValue> {
     let cursor = Cursor::new(image_data);
-    let decoder_result = match image_type {
-        "gif" => image::codecs::gif::GifDecoder::new(cursor).map(|d| d.into_frames()),
-        "webp" => image::codecs::webp::WebPDecoder::new(cursor).map(|d| d.into_frames()),
-        _ => return Err(JsValue::from_str("Unsupported image type. Only 'gif' and 'webp' are allowed.")),
-    };
 
-    let frames = decoder_result
-        .map_err(|e| JsValue::from_str(&format!("{} decode error: {}", image_type.to_uppercase(), e)))?;
+    match image_type {
+        "gif" => {
+            let decoder = image::codecs::gif::GifDecoder::new(cursor)
+                .map_err(|e| JsValue::from_str(&format!("GIF decode error: {}", e)))?;
 
-    frames.collect_frames()
-        .map_err(|e| JsValue::from_str(&format!("Frame collection error: {}", e)))
+            Ok(decoder.into_frames())
+        }
+
+        "webp" => {
+            let decoder = image::codecs::webp::WebPDecoder::new(cursor)
+                .map_err(|e| JsValue::from_str(&format!("WebP decode error: {}", e)))?;
+
+            Ok(decoder.into_frames())
+        }
+
+        _ => Err(JsValue::from_str(
+            "Unsupported image type. Only 'gif' and 'webp' are allowed.",
+        )),
+    }
 }
 
 /// Processes the image by decoding frames, sampling, resizing, and optionally converting to grayscale.
@@ -52,62 +71,105 @@ pub fn process_image(
     max_size: u32,
     target_fps: u32,
     grayscale_bits: u32,
+    resampling_filter: String,
 ) -> Result<(Vec<DynamicImage>, u32), JsValue> {
-    // First pass: decode frames and gather durations.
-    let frame_vec = get_frames(image_data, image_type)?;
-    let mut durations = Vec::with_capacity(frame_vec.len());
-    let mut total_ms = 0u32;
-    for frame in &frame_vec {
-        let (ms, _) = frame.delay().numer_denom_ms();
-        let delay = if ms == 0 { DEFAULT_FRAME_DELAY_MS } else { ms };
-        durations.push(delay);
-        total_ms += delay;
-    }
+    report_progress(0.0, "Starting single-pass decode...");
 
-    // Compute average frame duration and derive FPS.
-    let avg_frame_duration = total_ms as f64 / frame_vec.len() as f64;
-    let original_fps = (MS_PER_SECOND / avg_frame_duration).floor() as u32;
-    let effective_fps = target_fps.min(original_fps);
+    // First frame determines dimensions
+    let frame_0 = get_frames(image_data, image_type)?
+        .next()
+        .ok_or_else(|| JsValue::from_str("No frames found"))?
+        .map_err(|e| JsValue::from_str(&format!("Decode error: {e}")))?;
 
-    // Determine target frame count.
-    let target_total_frames = ((total_ms as f64 / 1000.0) * effective_fps as f64).round() as usize;
+    let (width, height) = frame_0.buffer().dimensions();
 
-    // Sample frames based on cumulative timing.
-    let mut sampled_indices = Vec::with_capacity(target_total_frames);
-    let mut next_target_time = 0.0;
-    let mut accumulated_time = 0.0;
-    for (i, &delay) in durations.iter().enumerate() {
-        accumulated_time += delay as f64;
-        while accumulated_time >= next_target_time && sampled_indices.len() < target_total_frames {
-            sampled_indices.push(i);
-            next_target_time += MS_PER_SECOND / effective_fps as f64;
-        }
-    }
-    if sampled_indices.is_empty() {
-        sampled_indices.push(0);
-    }
-
-    let (width, height) = frame_vec[0].buffer().dimensions();
+    // Compute resize dimensions
     let scale_factor = (max_size as f64 / width as f64)
         .min(max_size as f64 / height as f64)
         .min(1.0);
+
     let new_width = (width as f64 * scale_factor).round() as u32;
     let new_height = (height as f64 * scale_factor).round() as u32;
 
-    // Second pass: process the sampled frames in parallel.
-    let processed: Vec<DynamicImage> = sampled_indices
-        .par_iter()
-        .map(|&i| {
-            let frame = &frame_vec[i];
-            let mut img = DynamicImage::ImageRgba8(frame.clone().into_buffer());
+    // Sanitize input FPS
+    let effective_fps = target_fps.max(1);
 
-            // Convert to grayscale if requested.
-            if grayscale_bits > 0 {
-                img = DynamicImage::ImageLuma8(img.to_luma8());
+    let mut processed = Vec::new(); // Output frames
+    let mut rolling_buffer: Vec<(DynamicImage, u32)> = Vec::new(); // store (image, cumulative_time)
+    let mut next_sample_frame_idx = 0; // Timestamp of when we should sample the next frame
+    let mut total_ms = 0u32; // Total offset from start in ms
+
+    let filter_type = match resampling_filter.as_str() {
+        "catrom" => FilterType::CatmullRom,
+        "gaussian" => FilterType::Gaussian,
+        "lanczos3" => FilterType::Lanczos3,
+        "nearest" => FilterType::Nearest,
+        "triangle" => FilterType::Triangle,
+        _ => return Err(JsValue::from_str("Invalid resampling filter type")),
+    };
+
+    // Streaming loop
+    for (i, frame) in get_frames(image_data, image_type)?.enumerate() {
+        if i % 3 == 0 {
+            report_progress(
+                0.10, // We don't know the exact progress
+                &format!("Streaming frame {}", i),
+            );
+        }
+
+        let frame = frame.map_err(|e| JsValue::from_str(&format!("Decode error: {e}")))?;
+        let (ms, _) = frame.delay().numer_denom_ms();
+        let delay = if ms == 0 { DEFAULT_FRAME_DELAY_MS } else { ms };
+
+        total_ms += delay;
+
+        // Decode + resize
+        let mut img = DynamicImage::ImageRgba8(frame.into_buffer());
+        if grayscale_bits > 0 {
+            img = DynamicImage::ImageLuma8(img.to_luma8());
+        }
+        let img = img.resize(new_width, new_height, filter_type);
+
+        rolling_buffer.push((img, total_ms)); // Add to rolling buffer
+
+        // Keep buffer bounded (e.g., last 0.5 seconds)
+        while let Some((_, t)) = rolling_buffer.first() {
+            if total_ms - *t > 500 {
+                rolling_buffer.remove(0);
+            } else {
+                break;
             }
-            img.resize(new_width, new_height, FilterType::Triangle)
-        })
-        .collect();
+        }
+
+        // Sample frames as long as we passed the next sample timestamp
+        while ((next_sample_frame_idx as f64 * MS_PER_SECOND / effective_fps as f64) as u32)
+            < total_ms
+        {
+            let mut best_img = None;
+            let mut best_dt = u32::MAX;
+
+            for (img, t) in &rolling_buffer {
+                let dt = total_ms.abs_diff(*t);
+                if dt < best_dt {
+                    best_dt = dt;
+                    best_img = Some(img.clone());
+                }
+            }
+
+            if let Some(img) = best_img {
+                processed.push(img);
+            }
+            next_sample_frame_idx += 1
+        }
+    }
+
+    // Guarantee at least one frame
+    if processed.is_empty() {
+        if let Some((img, _)) = rolling_buffer.last() {
+            processed.push(img.clone());
+        }
+    }
+
     Ok((processed, effective_fps))
 }
 

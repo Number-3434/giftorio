@@ -1,11 +1,11 @@
 use wasm_bindgen::prelude::*;
 
-mod progress;
-mod image_processing;
 mod blueprint;
-mod signals;
 mod constants;
+mod image_processing;
 mod models;
+mod progress;
+mod signals;
 
 /// Public entry point for WebAssembly.
 ///
@@ -23,7 +23,8 @@ mod models;
 ///
 /// A Factorio blueprint string on success.
 #[wasm_bindgen]
-pub fn run_blueprint(
+pub async fn run_blueprint(
+    name: String,
     image_data: &[u8],
     image_type: &str,
     use_dlc: bool,
@@ -31,17 +32,32 @@ pub fn run_blueprint(
     max_size: u32,
     substation_quality: String,
     grayscale_bits: u32,
-) -> Result<String, JsValue> {
+    resampling_filter: String,
+    on_group_ready: Option<js_sys::Function>,
+) -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
     // Process the image to extract frames and determine the effective FPS.
-    let (frames, fps) = image_processing::process_image(image_data, image_type, max_size, target_fps, grayscale_bits)?;
+    let (frames, fps) = image_processing::process_image(
+        image_data,
+        image_type,
+        max_size,
+        target_fps,
+        grayscale_bits,
+        resampling_filter,
+    )?;
     if frames.is_empty() {
         return Err(JsValue::from_str("No frames sampled!"));
     }
 
-    // Build the complete blueprint JSON.
-    let blueprint_json = blueprint::update_full_blueprint(fps, frames, use_dlc, grayscale_bits, substation_quality)?;
+    blueprint::update_full_blueprint(
+        name,
+        fps,
+        frames,
+        use_dlc,
+        grayscale_bits,
+        substation_quality,
+        on_group_ready,
+    )?;
 
-    // Encode the blueprint into a Factorio blueprint string.
-    let blueprint_str = blueprint::encode_blueprint(&blueprint_json)?;
-    Ok(blueprint_str)
+    Ok(())
 }

@@ -1,15 +1,24 @@
 use crate::constants::*;
 use crate::image_processing::rgb_to_int;
 use crate::models::*;
-use crate::progress::report_progress;
+use crate::progress::{report_progress, set_progress};
 use crate::signals::get_signals_with_quality;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use image::GenericImageView;
 use std::collections::{HashMap, HashSet};
-use std::io::Write;
-use wasm_bindgen::JsValue;
 use std::sync::Arc;
+
+use wasm_bindgen::JsValue;
+
+macro_rules! w {
+    ($dst:expr, $($arg:tt)*) => {
+        write!($dst, $($arg)*)
+            .map_err(|e| JsValue::from_str(&format!("IO error: {}", e)))
+    };
+}
+
+const ENTITY_COMPRESS_CHUNK_SIZE: usize = 100;
 
 /// Encodes the blueprint JSON as a Factorio blueprint string.
 ///
@@ -21,21 +30,75 @@ use std::sync::Arc;
 ///
 /// A Factorio blueprint string on success.
 pub fn encode_blueprint(blueprint: &Blueprint) -> Result<String, JsValue> {
-    report_progress(80, "Encoding blueprint...");
-    let json_bytes = serde_json::to_vec(blueprint)
-        .map_err(|e| JsValue::from_str(&format!("Serialization error: {}", e)))?;
+    use std::io::Write;
 
-    report_progress(85, "Compressing blueprint...");
-    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
-    encoder
-        .write_all(&json_bytes)
-        .map_err(|e| JsValue::from_str(&format!("Compression error: {}", e)))?;
-    let compressed = encoder
+    let entities = &blueprint.blueprint.entities;
+    let wires = &blueprint.blueprint.wires;
+
+    report_progress(0.50, "Encoding blueprint...");
+
+    let mut compressor = ZlibEncoder::new(Vec::new(), Compression::default());
+
+    // Start JSON
+    w!(compressor, "{{\"blueprint\":{{\"entities\":[")?;
+
+    let total_entities = entities.len();
+
+    for (i, e) in entities.chunks(ENTITY_COMPRESS_CHUNK_SIZE).enumerate() {
+        if i > 0 {
+            w!(compressor, ",")?; // Delimiter
+        }
+
+        let entity_json_bytes = serde_json::to_vec(e)
+            .map_err(|err| JsValue::from_str(&format!("Serialization error: {}", err)))?;
+
+        // Remove array brackets
+        let entity_json_bytes = &entity_json_bytes[1..entity_json_bytes.len() - 1];
+
+        compressor
+            .write_all(&entity_json_bytes)
+            .map_err(|err| JsValue::from_str(&format!("Write error: {}", err)))?;
+
+        // Report progress if not lamp
+        if !matches!(
+            e[0].control_behavior,
+            Some(ControlBehavior::ColorLamp { .. }) | Some(ControlBehavior::GrayLamp { .. })
+        ) {
+            let global_index = i * e.len();
+            set_progress(
+                0.50,
+                0.95,
+                global_index as f64 / total_entities as f64,
+                &format!("Compressing {}/{}", global_index, total_entities),
+            );
+        }
+    }
+
+    w!(compressor, "],\"wires\":")?;
+
+    let wires_json_bytes = serde_json::to_vec(wires)
+        .map_err(|err| JsValue::from_str(&format!("Serialization error: {}", err)))?;
+
+    compressor
+        .write_all(&wires_json_bytes)
+        .map_err(|err| JsValue::from_str(&format!("Write error: {}", err)))?;
+
+    w!(compressor, "}}}}")?;
+
+    let compressed = compressor
         .finish()
         .map_err(|e| JsValue::from_str(&format!("Compression finish error: {}", e)))?;
 
-    let b64_encoded = base64::encode(&compressed);
-    report_progress(100, "Blueprint generation complete. Loading to browser...");
+    report_progress(0.98, "Writing...");
+
+    let mut b64_output = Vec::new();
+    base64::write::EncoderWriter::new(&mut b64_output, base64::STANDARD)
+        .write_all(&compressed)
+        .map_err(|e| JsValue::from_str(&format!("Base64 error: {}", e)))?;
+
+    let b64_encoded = String::from_utf8(b64_output)
+        .map_err(|e| JsValue::from_str(&format!("UTF8 error: {}", e)))?;
+
     Ok(format!("0{}", b64_encoded))
 }
 
@@ -61,7 +124,8 @@ pub fn generate_timer(
     let mut wires = Vec::new();
 
     entities.push(
-        Entity::new(1,
+        Entity::new(
+            1,
             CONSTANT_COMBINATOR,
             Position {
                 x: TIMER_ENTITY1_POSITION.0,
@@ -125,11 +189,19 @@ pub fn generate_timer(
         .with_direction(DIRECTION_RIGHT)
         .with_control_behavior(ControlBehavior::Arithmetic {
             arithmetic_conditions: ArithmeticConditions {
-                first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_T.to_string()), quality: None },
+                first_signal: Signal {
+                    type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                    name: Arc::new(SIGNAL_T.to_string()),
+                    quality: None,
+                },
                 second_signal: None,
                 second_constant: Some(1),
                 operation: OPERATION_SUB,
-                output_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_T.to_string()), quality: None },
+                output_signal: Signal {
+                    type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                    name: Arc::new(SIGNAL_T.to_string()),
+                    quality: None,
+                },
             },
         }),
     );
@@ -151,11 +223,19 @@ pub fn generate_timer(
             .with_direction(DIRECTION_LEFT)
             .with_control_behavior(ControlBehavior::Arithmetic {
                 arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_T.to_string()), quality: None },
+                    first_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_T.to_string()),
+                        quality: None,
+                    },
                     second_signal: None,
                     second_constant: Some((ticks_per_frame * frames_per_combinator) as i32),
                     operation: OPERATION_MOD,
-                    output_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_S.to_string()), quality: None },
+                    output_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_S.to_string()),
+                        quality: None,
+                    },
                 },
             }),
         );
@@ -171,11 +251,19 @@ pub fn generate_timer(
             )
             .with_control_behavior(ControlBehavior::Arithmetic {
                 arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_S.to_string()), quality: None },
+                    first_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_S.to_string()),
+                        quality: None,
+                    },
                     second_signal: None,
                     second_constant: Some(ticks_per_frame as i32),
                     operation: OPERATION_DIV,
-                    output_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_F.to_string()), quality: None },
+                    output_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_F.to_string()),
+                        quality: None,
+                    },
                 },
             }),
         );
@@ -192,14 +280,24 @@ pub fn generate_timer(
             .with_direction(DIRECTION_RIGHT)
             .with_control_behavior(ControlBehavior::Arithmetic {
                 arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
+                    first_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_EACH.to_string()),
+                        quality: None,
+                    },
                     second_signal: None,
                     second_constant: Some(grayscale_bits as i32),
                     operation: OPERATION_MUL,
-                    output_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
+                    output_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_EACH.to_string()),
+                        quality: None,
+                    },
                 },
             })
-            .with_description("Calculates the bit shift necessary for the frame we should be rendering."),
+            .with_description(
+                "Calculates the bit shift necessary for the frame we should be rendering.",
+            ),
         );
 
         wires.push([3, 2, 4, 2]);
@@ -247,7 +345,8 @@ pub fn generate_substations(
     let mut occupied_cells = HashSet::new();
     let mut current_entity = start_entity_number;
     let half_coverage = ((coverage as f64) - 2.0) / 2.0;
-    let mut frame_coverage_count = (((frame_count as f64) - half_coverage) / (coverage as f64)).ceil() as u32;
+    let mut frame_coverage_count =
+        (((frame_count as f64) - half_coverage) / (coverage as f64)).ceil() as u32;
     while ((frame_count as f64) - half_coverage + (frame_coverage_count as f64 * 2.0))
         > (frame_coverage_count as f64 * coverage as f64)
     {
@@ -286,7 +385,12 @@ pub fn generate_substations(
             occupied_cells.insert((x, y - 1));
             occupied_cells.insert((x, y));
             if i > 0 {
-                substation_wires.push([current_entity, 5, current_entity - num_substations_width, 5]);
+                substation_wires.push([
+                    current_entity,
+                    5,
+                    current_entity - num_substations_width,
+                    5,
+                ]);
             }
             if j > 0 {
                 substation_wires.push([current_entity, 5, current_entity - 1, 5]);
@@ -348,16 +452,33 @@ pub fn generate_frame_combinators(
             .with_direction(DIRECTION_RIGHT)
             .with_control_behavior(ControlBehavior::Arithmetic {
                 arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
-                    second_signal: Some(Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_F.to_string()), quality: None }),
+                    first_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_EACH.to_string()),
+                        quality: None,
+                    },
+                    second_signal: Some(Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_F.to_string()),
+                        quality: None,
+                    }),
                     second_constant: None,
                     operation: OPERATION_SHIFT_R,
-                    output_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
+                    output_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_EACH.to_string()),
+                        quality: None,
+                    },
                 },
             }),
         );
 
-        let first_decider_id = current_entity_number + if grayscale_bits == 1 || grayscale_bits == 4 { 4 } else { 3 };
+        let first_decider_id = current_entity_number
+            + if grayscale_bits == 1 || grayscale_bits == 4 {
+                4
+            } else {
+                3
+            };
         wires.push([current_entity_number, 2, first_decider_id, 2]);
         wires.push([current_entity_number, 1, first_decider_id, 3]);
         current_entity_number += 1;
@@ -374,11 +495,25 @@ pub fn generate_frame_combinators(
             .with_direction(DIRECTION_RIGHT)
             .with_control_behavior(ControlBehavior::Arithmetic {
                 arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
+                    first_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_EACH.to_string()),
+                        quality: None,
+                    },
                     second_signal: None,
-                    second_constant: Some(if grayscale_bits == 1 { 1 } else if grayscale_bits == 4 { 15 } else { 255 }),
+                    second_constant: Some(if grayscale_bits == 1 {
+                        1
+                    } else if grayscale_bits == 4 {
+                        15
+                    } else {
+                        255
+                    }),
                     operation: OPERATION_AND,
-                    output_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
+                    output_signal: Signal {
+                        type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                        name: Arc::new(SIGNAL_EACH.to_string()),
+                        quality: None,
+                    },
                 },
             }),
         );
@@ -397,11 +532,19 @@ pub fn generate_frame_combinators(
                 .with_direction(DIRECTION_LEFT)
                 .with_control_behavior(ControlBehavior::Arithmetic {
                     arithmetic_conditions: ArithmeticConditions {
-                        first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
+                        first_signal: Signal {
+                            type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                            name: Arc::new(SIGNAL_EACH.to_string()),
+                            quality: None,
+                        },
                         second_signal: None,
                         second_constant: Some(if grayscale_bits == 1 { 255 } else { 17 }),
                         operation: OPERATION_MUL,
-                        output_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_EACH.to_string()), quality: None },
+                        output_signal: Signal {
+                            type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                            name: Arc::new(SIGNAL_EACH.to_string()),
+                            quality: None,
+                        },
                     },
                 }),
             );
@@ -437,13 +580,21 @@ pub fn generate_frame_combinators(
             decider_conditions: DeciderConditions {
                 conditions: vec![
                     Condition {
-                        first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_T.to_string()), quality: None },
+                        first_signal: Signal {
+                            type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                            name: Arc::new(SIGNAL_T.to_string()),
+                            quality: None,
+                        },
                         constant: lower_bound,
                         comparator: COMPARATOR_GREATER_EQUAL,
                         compare_type: None,
                     },
                     Condition {
-                        first_signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(SIGNAL_T.to_string()), quality: None },
+                        first_signal: Signal {
+                            type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                            name: Arc::new(SIGNAL_T.to_string()),
+                            quality: None,
+                        },
                         constant: upper_bound,
                         comparator: COMPARATOR_LESS,
                         compare_type: Some(COMPARE_AND),
@@ -579,12 +730,14 @@ pub fn generate_lamps(
 ///
 /// The final blueprint as a JSON value.
 pub fn update_full_blueprint(
+    name: String,
     fps: u32,
     sampled_frames: Vec<image::DynamicImage>,
     use_dlc: bool,
     grayscale_bits: u32,
     substation_quality: String,
-) -> Result<Blueprint, JsValue> {
+    on_group_ready: Option<js_sys::Function>,
+) -> Result<(), JsValue> {
     report_progress(0, "Starting blueprint update");
 
     // Get signals internally.
@@ -596,20 +749,29 @@ pub fn update_full_blueprint(
 
     let use_grayscale = grayscale_bits > 0;
     let total_frames = sampled_frames.len() as u32;
-    let frames_per_combinator = if grayscale_bits > 0 { 32 / grayscale_bits } else { 1 };
+    let frames_per_combinator = if grayscale_bits > 0 {
+        32 / grayscale_bits
+    } else {
+        1
+    };
     let (full_width, full_height) = sampled_frames[0].dimensions();
     let max_columns_per_group = ((signals.len() as u32) / full_height).min(full_width);
     let num_groups = (full_width as f64 / max_columns_per_group as f64).ceil() as u32;
     let max_columns_per_group = full_width / num_groups;
     if max_columns_per_group < 1 {
-        return Err(JsValue::from_str("Not enough signals for even one column of lamps!"));
+        return Err(JsValue::from_str(
+            "Not enough signals for even one column of lamps!",
+        ));
     }
     let max_rows_per_group =
-        (((total_frames as f64 / ((max_columns_per_group as f64 / 2.0).floor())).ceil()) / frames_per_combinator as f64).ceil() as u32;
+        (((total_frames as f64 / ((max_columns_per_group as f64 / 2.0).floor())).ceil())
+            / frames_per_combinator as f64)
+            .ceil() as u32;
 
     let ticks_per_frame = (60.0 / fps as f64) as u32;
     let stop = total_frames * ticks_per_frame;
-    let (timer_entities, timer_wires) = generate_timer(stop, grayscale_bits, ticks_per_frame, frames_per_combinator);
+    let (timer_entities, timer_wires) =
+        generate_timer(stop, grayscale_bits, ticks_per_frame, frames_per_combinator);
 
     let mut all_entities = timer_entities;
     let mut all_wires: Vec<Wire> = timer_wires;
@@ -619,13 +781,20 @@ pub fn update_full_blueprint(
         .max()
         .unwrap_or(0)
         + 1;
-    report_progress(10, "Generating power grid");
+    report_progress(0.10, "Generating power grid");
     let (substation_entities, substation_wires, occupied_cells, next_entity_new) =
         generate_substations(
             substation_quality,
             full_width,
             full_height,
-            max_rows_per_group + if grayscale_bits == 1 || grayscale_bits == 4 { 2 } else if grayscale_bits == 8 { 1 } else { 0 },
+            max_rows_per_group
+                + if grayscale_bits == 1 || grayscale_bits == 4 {
+                    2
+                } else if grayscale_bits == 8 {
+                    1
+                } else {
+                    0
+                },
             next_entity,
         );
 
@@ -648,7 +817,11 @@ pub fn update_full_blueprint(
                         .iter()
                         .map(|frame| frame.crop_imm(group_left, 0, group_width, full_height))
                         .collect();
-                    pack_grayscale_frames_to_outputs(&cropped_frames, signals.clone(), grayscale_bits)
+                    pack_grayscale_frames_to_outputs(
+                        &cropped_frames,
+                        signals.clone(),
+                        grayscale_bits,
+                    )
                 })
                 .collect::<Result<Vec<_>, _>>()?
         } else {
@@ -661,14 +834,25 @@ pub fn update_full_blueprint(
         };
 
         let group_offset_x = group_index * max_columns_per_group;
-        let first_connection_entity = if use_grayscale { next_entity } else { next_entity + 1 };
+        let first_connection_entity = if use_grayscale {
+            next_entity
+        } else {
+            next_entity + 1
+        };
+
         let (group_combinators, mut group_comb_wires, new_next_entity) = generate_frame_combinators(
             &group_frames_outputs,
             &substation_occupied_y,
             ticks_per_frame * frames_per_combinator,
             next_entity,
             group_offset_x as f64 + 0.5,
-            if grayscale_bits == 1 || grayscale_bits == 4 { -5.0 } else if grayscale_bits == 8 { -4.0 } else { -3.0 },
+            if grayscale_bits == 1 || grayscale_bits == 4 {
+                -5.0
+            } else if grayscale_bits == 8 {
+                -4.0
+            } else {
+                -3.0
+            },
             max_rows_per_group,
             grayscale_bits,
         );
@@ -692,7 +876,11 @@ pub fn update_full_blueprint(
         let first_lamp_entity = group_lamps[0].entity_number;
         if use_grayscale {
             group_comb_wires.push([first_lamp_entity, 2, first_connection_entity, 2]);
-            let last_shifter = if grayscale_bits == 1 || grayscale_bits == 4 { first_connection_entity + 2 } else { first_connection_entity + 1 };
+            let last_shifter = if grayscale_bits == 1 || grayscale_bits == 4 {
+                first_connection_entity + 2
+            } else {
+                first_connection_entity + 1
+            };
             group_comb_wires.push([first_lamp_entity, 1, last_shifter, 3]);
         } else {
             group_comb_wires.push([first_lamp_entity, 1, first_connection_entity, 3]);
@@ -709,27 +897,56 @@ pub fn update_full_blueprint(
         all_wires.extend(group_comb_wires);
         all_wires.extend(group_lamp_wires);
 
-        let percent = 20 + ((group_index + 1) * 50 / num_groups);
-        report_progress(
-            percent,
-            &format!("Processed chunk {}/{}", group_index + 1, num_groups),
+        set_progress(
+            0.30,
+            0.40,
+            group_index as f64 / num_groups as f64,
+            &format!("Processed chunk {}/{}", group_index, num_groups),
         );
     }
 
     let blueprint = Blueprint {
         blueprint: BlueprintInner {
             icons: vec![Icon {
-                signal: Signal { type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()), name: Arc::new(DECIDER_COMBINATOR.to_string()), quality: None, },
+                signal: Signal {
+                    type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+                    name: Arc::new(DECIDER_COMBINATOR.to_string()),
+                    quality: None,
+                },
                 index: 1,
             }],
             entities: all_entities,
             wires: all_wires,
             item: BLUEPRINT,
+            label: name,
             version: BLUEPRINT_VERSION,
         },
     };
 
-    Ok(blueprint)
+    if let Some(cb) = &on_group_ready {
+        use js_sys::{Object, Reflect};
+        let obj = Object::new();
+
+        Reflect::set(
+            &obj,
+            &JsValue::from_str("blueprint"),
+            &JsValue::from_str(&encode_blueprint(&blueprint)?),
+        )?;
+        Reflect::set(
+            &obj,
+            &JsValue::from_str("group_index"),
+            &JsValue::from_f64(1 as f64),
+        )?;
+        Reflect::set(
+            &obj,
+            &JsValue::from_str("num_groups"),
+            &JsValue::from_f64(num_groups as f64),
+        )?;
+
+        cb.call1(&JsValue::NULL, &obj)?;
+    }
+
+    Ok(())
 }
 
 /// Converts an RGB pixel to an integer using a utility function.
@@ -768,7 +985,7 @@ pub fn frame_to_outputs(
         outputs.push(CombinatorOutput {
             copy_count_from_input: false,
             constant: Some(value),
-            signal
+            signal,
         });
     }
     Ok(outputs)
@@ -793,8 +1010,10 @@ pub fn pack_grayscale_frames_to_outputs(
     if frames.is_empty() {
         return Err(JsValue::from_str("No frames provided for packing"));
     }
+
     let (width, height) = frames[0].dimensions();
     let num_pixels = (width * height) as usize;
+
     if num_pixels > signals.len() {
         return Err(JsValue::from_str(&format!(
             "Frame pixel count ({}) exceeds available signals ({}).",
@@ -802,32 +1021,39 @@ pub fn pack_grayscale_frames_to_outputs(
             signals.len()
         )));
     }
+
     let luma_images: Vec<_> = frames.iter().map(|frame| frame.to_luma8()).collect();
     let mut outputs = Vec::with_capacity(num_pixels);
+
     for i in 0..num_pixels {
-        let mut packed_value = 0;
+        let mut packed_value = 0u32;
+
         for (j, img) in luma_images.iter().enumerate() {
             let pixel_value = img.as_raw()[i];
-            if grayscale_bits == 1 {
-                let binary_value = if pixel_value >= GRAYSCALE_THRESHOLD {
-                    1
-                } else {
-                    0
-                };
-                packed_value |= (binary_value as u32) << j;
-            } else if grayscale_bits == 4 {
-                let four_bit = pixel_value >> 4;
-                packed_value |= (four_bit as u32) << (4 * j);
-            } else if grayscale_bits == 8 {
-                packed_value |= (pixel_value as u32) << (8 * j);
-            }
+            let value = match grayscale_bits {
+                1 => {
+                    if pixel_value >= GRAYSCALE_THRESHOLD {
+                        1
+                    } else {
+                        0
+                    }
+                }
+                4 => (pixel_value >> 4) as u32,
+                8 => pixel_value as u32,
+                _ => {
+                    return Err(JsValue::from_str("Unsupported grayscale bit depth"));
+                }
+            };
+
+            packed_value |= value << (grayscale_bits * j as u32);
         }
-        let signal = Arc::clone(&signals[i]);
+
         outputs.push(CombinatorOutput {
             copy_count_from_input: false,
             constant: Some(packed_value as i32),
-            signal,
+            signal: Arc::clone(&signals[i]),
         });
     }
+
     Ok(outputs)
 }

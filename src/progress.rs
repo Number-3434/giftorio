@@ -23,12 +23,21 @@ pub fn set_progress_callback(callback: Function) {
 ///
 /// # Arguments
 ///
-/// * `percentage` - A value between 0 and 100 representing the progress.
+/// * `percentage` - A value between 0 and 1 representing the progress.
 /// * `status` - A status message indicating the current stage.
-pub fn report_progress(percentage: u32, status: &str) {
+pub fn report_progress<T>(percentage: T, status: &str)
+where
+    T: Into<f64>,
+{
+    let pct = 100.0 * percentage.into();
+
     PROGRESS_CALLBACK.with(|progress| {
         if let Some(ref callback) = *progress.borrow() {
-            let _ = callback.call2(&JsValue::NULL, &JsValue::from(percentage), &JsValue::from(status));
+            let _ = callback.call2(&JsValue::NULL, &JsValue::from(pct), &JsValue::from(status));
         }
     });
+}
+
+pub fn set_progress(start: f64, end: f64, progress: f64, msg: &str) {
+    report_progress(progress * (end - start) + start, &msg);
 }

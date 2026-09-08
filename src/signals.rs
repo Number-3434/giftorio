@@ -1,7 +1,7 @@
-use std::sync::Arc;
 use crate::constants::*;
 use crate::models::Signal;
 use serde_json::Value;
+use std::sync::Arc;
 
 /// Enhances the provided signals by associating quality levels based on DLC usage.
 ///
@@ -31,6 +31,17 @@ pub fn get_signals_with_quality(use_dlc: bool) -> Vec<Arc<Signal>> {
                 vec![QUALITY_NORMAL, QUALITY_UNKNOWN]
             };
             for quality in qualities.iter() {
+                let signal_name = signal["name"].as_str().unwrap();
+                let signal_type = signal["type"].as_str().unwrap();
+
+                // Skip the common signal of F, S, T as they're used internally
+                if signal_type == "virtual" && *quality == QUALITY_NORMAL {
+                    if signal_name == SIGNAL_F || signal_name == SIGNAL_S || signal_name == SIGNAL_T
+                    {
+                        continue;
+                    }
+                }
+
                 let signal = Arc::from(Signal {
                     type_: Arc::new(signal["type"].as_str().unwrap().to_string()),
                     name: Arc::new(signal["name"].as_str().unwrap().to_string()),
