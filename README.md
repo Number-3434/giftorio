@@ -1,7 +1,8 @@
 # GIFtorio
 
-[GIFtorio](https://giftor.io) is a web application that converts animated GIFs into Factorio blueprints. The resulting blueprint creates an animated display using the game's circuit network and lamps. It requires absolutely no mods - works on vanilla Factorio version 2.0 and the Space Age DLC.
-![example nyan gif](https://github.com/colinchilds/giftorio/blob/main/web/assets/img/nyan.gif?raw=true)
+[GIFtorio](https://giftor.io) is a web application that converts animated GIFs into Factorio blueprints. The resulting blueprint creates an
+animated display using the game's circuit network and lamps. It requires absolutely no mods - works on vanilla Factorio version 2.0 and the
+Space Age DLC. ![example nyan gif](https://github.com/colinchilds/giftorio/blob/main/web/assets/img/nyan.gif?raw=true)
 
 ## Features
 
@@ -12,9 +13,20 @@
 - Attempts to maintain animation timing similar to the original GIF
 - Supports different substation qualities when using the Space Age DLC
 
+## Additional Features (in this fork)
+
+- Uses all 13,341 available signals from Space Age (+80% more than old version)
+- Max size (longest side) increased to 1,080 - so big the entire screen cannot fit in min zoom in Editor mode
+- Optimised for memory performance on longer videos. Tested with a 13,000+ frame GIF rendering at 270 max width.
+- Added support for filters (nearest, triangle, catrom, lanczos3, gaussian), increasing the quality of resolution of the output.
+- Remembers last settings and settings are remembered between page reloads (local storage).
+- Changed clipboard copy to file download mechanic for huge blueprints (>50 MB). (Factorio 2.0.25: a file containing the blueprint text can
+  be dragged into the game and Factorio will import it as a blueprint). Added progress updates.
+
 ## Prerequisites
 
 For development:
+
 - Rust (latest stable version)
 - Node (latest LTS version)
 - wasm-pack (`cargo install wasm-pack`)
@@ -56,14 +68,15 @@ npm start
 ## How It Works
 
 The application:
+
 1. Uses WebAssembly (compiled from Rust) to process GIFs efficiently in the browser
 2. Loads and downscales the input GIF to a manageable size
 3. Converts each frame into a series of circuit network signals
 4. Creates a blueprint containing:
-   - A grid of substations to power the display
-   - Constant combinators to store pixel data
-   - Decider combinators to control frame timing
-   - A grid of lamps to display the image
+    - A grid of substations to power the display
+    - Constant combinators to store pixel data
+    - Decider combinators to control frame timing
+    - A grid of lamps to display the image
 5. Outputs an encoded blueprint string compatible with Factorio
 
 ## Limitations
@@ -71,11 +84,16 @@ The application:
 - Maximum image size is limited by available signals, but more realistically by in-game performance.
 - Higher resolution images will require more in-game entities and may impact performance
 - Browser must support WebAssembly
-- Longer GIFs can take a really long time to process and may cause the game to lag. We recommend trying keep gifs to only a few seconds. If you have a really long gif, consider using the grayscale option, as it can signficantly reduce blueprint size.
+- Longer GIFs can take a really long time to process and may cause the game to lag. We recommend trying keep gifs to only a few seconds. If
+  you have a really long gif, consider using the grayscale option, as it can signficantly reduce blueprint size.
 
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Credits
+
+- [@colinchilds](https://github.com/colinchilds) for the original [GIFtorio](https://github.com/colinchilds/giftorio) project
 
 ## License
 
