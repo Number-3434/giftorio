@@ -114,14 +114,16 @@ pub fn process_image(
     // Streaming loop
     for (i, frame) in get_frames(image_data, &image_type)?.enumerate() {
         // % of prime number cuz i like seeing it go through every number :D
-        report_progress(
-            0.10, // We don't know the exact progress
-            &format!(
-                "Streaming frame {} ({})",
-                i,
-                format_duration(total_ms as u64)
-            ),
-        );
+        if i % 3 == 0 {
+            report_progress(
+                0.10, // We don't know the exact progress
+                &format!(
+                    "Streaming frame {} ({})",
+                    i,
+                    format_duration(total_ms as u64)
+                ),
+            );
+        }
 
         let frame = frame.map_err(|e| JsValue::from_str(&format!("Decode error: {e}")))?;
         let (ms, _) = frame.delay().numer_denom_ms();

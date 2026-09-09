@@ -9,7 +9,6 @@ use std::sync::Arc;
 use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 500;
-const SWAP_ALL_WIRES: bool = true;
 
 pub struct BlueprintEncoder {
     blueprint: Blueprint,
