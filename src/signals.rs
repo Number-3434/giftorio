@@ -20,22 +20,22 @@ pub fn get_signals_with_quality(use_dlc: bool) -> Vec<Arc<Signal>> {
             let mut signals_vec = Vec::new();
             let qualities = if use_dlc {
                 vec![
-                    QUALITY_NORMAL,
-                    QUALITY_UNCOMMON,
-                    QUALITY_RARE,
-                    QUALITY_EPIC,
-                    QUALITY_LEGENDARY,
-                    QUALITY_UNKNOWN,
+                    QUAL_NORMAL,
+                    QUAL_UNCOMMON,
+                    QUAL_RARE,
+                    QUAL_EPIC,
+                    QUAL_LEGENDARY,
+                    QUAL_UNKNOWN,
                 ]
             } else {
-                vec![QUALITY_NORMAL, QUALITY_UNKNOWN]
+                vec![QUAL_NORMAL, QUAL_UNKNOWN]
             };
             for quality in qualities.iter() {
                 let signal_name = signal["name"].as_str().unwrap();
                 let signal_type = signal["type"].as_str().unwrap();
 
                 // Skip the common signal of F, S, T as they're used internally
-                if signal_type == "virtual" && *quality == QUALITY_NORMAL {
+                if signal_type == "virtual" && *quality == QUAL_NORMAL {
                     if signal_name == SIGNAL_F || signal_name == SIGNAL_S || signal_name == SIGNAL_T
                     {
                         continue;

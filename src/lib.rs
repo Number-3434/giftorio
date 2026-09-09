@@ -24,7 +24,7 @@ mod signals;
 /// A Factorio blueprint string on success.
 #[wasm_bindgen]
 pub async fn run_blueprint(
-    name: String,
+    name: &str,
     image_data: &[u8],
     image_type: &str,
     use_dlc: bool,
@@ -33,7 +33,8 @@ pub async fn run_blueprint(
     substation_quality: String,
     grayscale_bits: u32,
     resampling_filter: String,
-    on_group_ready: Option<js_sys::Function>,
+    on_group_ready: &js_sys::Function,
+    send_chunk: &js_sys::Function,
 ) -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     // Process the image to extract frames and determine the effective FPS.
@@ -49,15 +50,33 @@ pub async fn run_blueprint(
         return Err(JsValue::from_str("No frames sampled!"));
     }
 
-    blueprint::update_full_blueprint(
-        name,
+    let blueprint = blueprint::generate_blueprint(
+        name.to_string(),
         fps,
         frames,
         use_dlc,
         grayscale_bits,
         substation_quality,
-        on_group_ready,
     )?;
+    let mut encoder = blueprint::BlueprintEncoder::new(blueprint);
+    let mut buf = Vec::new();
+
+    while !encoder.done() {
+        buf.clear();
+        encoder.next_chunk(&mut buf)?;
+
+        let chunk = js_sys::Uint8Array::from(&buf[..]);
+        let promise = send_chunk.call1(&JsValue::NULL, &chunk)?;
+
+        wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(promise)).await?;
+    }
+
+    use js_sys::{Object, Reflect};
+    let obj = Object::new();
+
+    Reflect::set(&obj, &JsValue::from_str("label"), &JsValue::from_str(name))?;
+
+    on_group_ready.call1(&JsValue::NULL, &obj)?;
 
     Ok(())
 }

@@ -5,12 +5,15 @@ use image::{AnimationDecoder, DynamicImage};
 use std::io::Cursor;
 use wasm_bindgen::prelude::*;
 
-macro_rules! console_log {
-    ($($arg:tt)*) => {
-        web_sys::console::log_1(
-            &format!($($arg)*).into()
-        );
-    };
+fn format_duration(ms: u64) -> String {
+    let total_seconds = ms / 1000;
+
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    let milliseconds = ms % 1000;
+
+    return format!("{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}");
 }
 
 /// Decodes the provided image data into a vector of frames based on the image type.
@@ -110,10 +113,15 @@ pub fn process_image(
 
     // Streaming loop
     for (i, frame) in get_frames(image_data, image_type)?.enumerate() {
-        if i % 3 == 0 {
+        // % of prime number cuz i like seeing it go through every number :D
+        if i % 7 == 0 {
             report_progress(
                 0.10, // We don't know the exact progress
-                &format!("Streaming frame {}", i),
+                &format!(
+                    "Streaming frame {} ({})",
+                    i,
+                    format_duration(total_ms as u64)
+                ),
             );
         }
 

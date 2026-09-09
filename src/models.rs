@@ -1,3 +1,4 @@
+use crate::constants::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 #[derive(Serialize)]
@@ -28,6 +29,23 @@ pub struct Signal {
     pub name: Arc<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quality: Option<&'static str>,
+}
+impl Signal {
+    pub fn new(type_: &str, name: &str) -> Self {
+        Self {
+            type_: Arc::new(type_.to_string()),
+            name: Arc::new(name.to_string()),
+            quality: None,
+        }
+    }
+
+    pub fn new_virtual(name: &str) -> Self {
+        Self {
+            type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+            name: Arc::new(name.to_string()),
+            quality: None,
+        }
+    }
 }
 
 pub type Wire = [u32; 4];
@@ -89,6 +107,16 @@ impl Entity {
 pub struct Position {
     pub x: f64,
     pub y: f64,
+}
+impl Position {
+    pub fn new(x: f64, y: f64) -> Self {
+        Self { x, y }
+    }
+}
+impl From<(f64, f64)> for Position {
+    fn from((x, y): (f64, f64)) -> Self {
+        Self::new(x, y)
+    }
 }
 
 #[derive(Serialize)]
@@ -163,6 +191,15 @@ pub struct CombinatorOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub constant: Option<i32>,
     pub signal: Arc<Signal>,
+}
+impl CombinatorOutput {
+    pub fn new(signal: Arc<Signal>, constant: Option<i32>) -> Self {
+        Self {
+            copy_count_from_input: constant.is_none(),
+            constant,
+            signal,
+        }
+    }
 }
 
 #[derive(Serialize)]

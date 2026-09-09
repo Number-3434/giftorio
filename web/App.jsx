@@ -56,7 +56,7 @@ const INITIAL_VALUES = (() => {
 	}
 })();
 
-function App() {
+function App({ worker }) {
 	// State
 	const [formData, setFormData] = createStore({ ...INITIAL_VALUES });
 	const [isGenerating, setIsGenerating] = createSignal(false);
@@ -70,31 +70,14 @@ function App() {
 	const [isMobile, setIsMobile] = createSignal(false);
 	let form;
 
-	// Worker setup
-	const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
-
 	// Refs
 	let formRefs = {};
-
-	function mkFormHtml() {
-		// Only render first 100 characters of blueprint.
-		const MAX_CHARS = 200;
-		const blueprintStr = blueprintData().content;
-		let innerHTML = blueprintStr.slice(0, MAX_CHARS);
-
-		if (blueprintStr.length > MAX_CHARS) {
-			innerHTML += `...`;
-		}
-
-		innerHTML += ` (${formatBytes(blueprintStr.length)} total)`;
-
-		return innerHTML;
-	}
 
 	// Worker message handler
 	worker.onmessage = async (event) => {
 		if (event.data.progress) {
 			const { percentage, status } = event.data.progress;
+
 			setProgress({ percentage, status });
 			formRefs.progressBar.style.width = `${percentage}%`;
 			formRefs.progressStatus.textContent = status;
@@ -105,8 +88,8 @@ function App() {
 
 			formRefs.progressContainer.classList.add("hidden");
 			formRefs.blueprintResult.classList.remove("hidden");
-			formRefs.responseText.innerHTML = mkFormHtml();
-			formRefs.submitButton.disabled = false;
+			formRefs.responseText.innerHTML = "Blueprint downloaded!";
+			formRefs.submitButton.disabled = true;
 
 			setInitialValues(formData);
 		} else if (event.data.error) {
@@ -169,6 +152,7 @@ function App() {
 		try {
 			const imageData = new Uint8Array(await formData.file.arrayBuffer());
 			worker.postMessage({
+				type: "generate",
 				name: formData.file.name,
 				imageData,
 				imageType: formData.file.type.substring(6 /* image/ */),

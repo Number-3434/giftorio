@@ -15,9 +15,13 @@ Space Age DLC. ![example nyan gif](https://github.com/colinchilds/giftorio/blob/
 
 ## Additional Features (in this fork)
 
-- Uses all 13,341 available signals from Space Age (+80% more than old version)
-- Max size (longest side) increased to 1,080 - so big the entire screen cannot fit in min zoom in Editor mode
+- TODO: Add blueprint insertion to save files, Factorio doesn't seem to like 500 MB+ blueprint strings.
 - Optimised for memory performance on longer videos. Tested with a 13,000+ frame GIF rendering at 270 max width.
+- Uses chunked streaming of video frames to reduce memory pressure. (The old version had multiple buffers of the entire video which can
+  destroy RAM especially on longer videos.) Uses a single streaming video pass. (As opposed to accumulating all frames into a buffer then
+  processing in parallel).
+- Uses 13,341 available signals from Space Age (+80% more than old version, 3 signals reserved for internal calulations)
+- Max size (longest side) increased to 1,080 - so big the entire screen cannot fit in min zoom in Editor mode
 - Added support for filters (nearest, triangle, catrom, lanczos3, gaussian), increasing the quality of resolution of the output.
 - Remembers last settings and settings are remembered between page reloads (local storage).
 - Changed clipboard copy to file download mechanic for huge blueprints (>50 MB). (Factorio 2.0.25: a file containing the blueprint text can

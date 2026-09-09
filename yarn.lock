@@ -795,6 +795,11 @@ source-map-js@^1.2.1:
   resolved "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz"
   integrity sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==
 
+streamsaver@^2.0.6:
+  version "2.0.6"
+  resolved "https://registry.npmjs.org/streamsaver/-/streamsaver-2.0.6.tgz"
+  integrity sha512-LK4e7TfCV8HzuM0PKXuVUfKyCB1FtT9L0EGxsFk5Up8njj0bXK8pJM9+Wq2Nya7/jslmCQwRK39LFm55h7NBTw==
+
 tailwindcss@^4.0.0, tailwindcss@4.0.6:
   version "4.0.6"
   resolved "https://registry.npmjs.org/tailwindcss/-/tailwindcss-4.0.6.tgz"

@@ -13,8 +13,8 @@ pub const TIMER_ENTITY5_POSITION: (f64, f64) = (-2.5, -5.5);
 pub const TIMER_ENTITY6_POSITION: (f64, f64) = (-1.5, -6.0);
 
 /// Direction constants.
-pub const DIRECTION_RIGHT: u32 = 4;
-pub const DIRECTION_LEFT: u32 = 12;
+pub const DIR_RIGHT: u32 = 4;
+pub const DIR_LEFT: u32 = 12;
 
 /// Blueprint version constant.
 pub const BLUEPRINT_VERSION: u64 = 562949955518464;
@@ -23,18 +23,18 @@ pub const BLUEPRINT_VERSION: u64 = 562949955518464;
 pub const GRAYSCALE_THRESHOLD: u8 = 128;
 
 /// Quality constants.
-pub const QUALITY_NORMAL: &str = "normal";
-pub const QUALITY_UNCOMMON: &'static str = "uncommon";
-pub const QUALITY_RARE: &'static str = "rare";
-pub const QUALITY_EPIC: &'static str = "epic";
-pub const QUALITY_LEGENDARY: &'static str = "legendary";
-pub const QUALITY_UNKNOWN: &'static str = "quality-unknown";
-pub const QUALITY_NONE: &'static str = "none";
+pub const QUAL_NORMAL: &str = "normal";
+pub const QUAL_UNCOMMON: &'static str = "uncommon";
+pub const QUAL_RARE: &'static str = "rare";
+pub const QUAL_EPIC: &'static str = "epic";
+pub const QUAL_LEGENDARY: &'static str = "legendary";
+pub const QUAL_UNKNOWN: &'static str = "quality-unknown";
+pub const QUAL_NONE: &'static str = "none";
 
 /// Entity types
-pub const DECIDER_COMBINATOR: &'static str = "decider-combinator";
-pub const ARITHMETIC_COMBINATOR: &'static str = "arithmetic-combinator";
-pub const CONSTANT_COMBINATOR: &'static str = "constant-combinator";
+pub const DECIDER_COMB: &'static str = "decider-combinator";
+pub const ARITHMETIC_COMB: &'static str = "arithmetic-combinator";
+pub const CONSTANT_COMB: &'static str = "constant-combinator";
 pub const SUBSTATION: &'static str = "substation";
 pub const LAMP: &'static str = "small-lamp";
 pub const BLUEPRINT: &'static str = "blueprint";
@@ -49,9 +49,9 @@ pub const SIGNAL_T: &'static str = "signal-T";
 pub const SIGNAL_EACH: &'static str = "signal-each";
 
 /// Comparators
-pub const COMPARATOR_EQUAL: &'static str = "=";
-pub const COMPARATOR_GREATER_EQUAL: &'static str = ">=";
-pub const COMPARATOR_LESS: &'static str = "<";
+pub const COMPARATOR_EQ: &'static str = "=";
+pub const COMPARATOR_GE: &'static str = ">=";
+pub const COMPARATOR_LT: &'static str = "<";
 
 /// Operations
 pub const OPERATION_MOD: &'static str = "%";
