@@ -18,22 +18,37 @@ async function run() {
 			pendingWrites.delete(event.data.id);
 			event.data.error ? pending.reject(new Error(event.data.error)) : pending.resolve();
 		} else if (event.data.type === "generate") {
-			const { name, imageData, imageType, targetFps, maxSize, useDLC, substationQuality, grayscaleBits, resamplingFilter } =
-				event.data;
+			const {
+				name,
+				imageData,
+				imageType,
+				targetFps,
+				maxSize,
+				useDLC,
+				substationQuality,
+				grayscaleBits,
+				resamplingFilter,
+				useGreenLampWires,
+				useHorizontalLampWires,
+			} = event.data;
 
 			try {
 				postMessage({ type: "start", filename: "blueprint.json" });
 
 				await run_blueprint(
-					name,
+					{
+						name,
+						imageType,
+						useDLC,
+						targetFps,
+						maxSize,
+						substationQuality,
+						grayscaleBits,
+						resamplingFilter,
+						useGreenLampWires,
+						useHorizontalLampWires,
+					},
 					imageData,
-					imageType,
-					useDLC,
-					targetFps,
-					maxSize,
-					substationQuality,
-					grayscaleBits,
-					resamplingFilter,
 					data => postMessage({ blueprint: data }),
 					chunk =>
 						new Promise((resolve, reject) => {

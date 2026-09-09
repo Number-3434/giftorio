@@ -70,7 +70,7 @@ pub fn get_frames<'a>(
 /// A tuple containing the processed frames (`DynamicImage`s) and the effective FPS.
 pub fn process_image(
     image_data: &[u8],
-    image_type: &str,
+    image_type: String,
     max_size: u32,
     target_fps: u32,
     grayscale_bits: u32,
@@ -79,7 +79,7 @@ pub fn process_image(
     report_progress(0.0, "Starting single-pass decode...");
 
     // First frame determines dimensions
-    let frame_0 = get_frames(image_data, image_type)?
+    let frame_0 = get_frames(image_data, &image_type)?
         .next()
         .ok_or_else(|| JsValue::from_str("No frames found"))?
         .map_err(|e| JsValue::from_str(&format!("Decode error: {e}")))?;
@@ -112,7 +112,7 @@ pub fn process_image(
     };
 
     // Streaming loop
-    for (i, frame) in get_frames(image_data, image_type)?.enumerate() {
+    for (i, frame) in get_frames(image_data, &image_type)?.enumerate() {
         // % of prime number cuz i like seeing it go through every number :D
         if i % 7 == 0 {
             report_progress(

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 500;
+const SWAP_ALL_WIRES: bool = true;
 
 pub struct BlueprintEncoder {
     blueprint: Blueprint,
@@ -514,6 +515,7 @@ pub fn generate_frame_combinators(
 /// * `start_x` - Starting X coordinate.
 /// * `start_y` - Starting Y coordinate.
 /// * `use_grayscale` - If true, configure lamps for grayscale mode.
+/// * `use_horizontal_lamp_wires` - If true, configure lamps to connect horizontally instead of vertically.
 ///
 /// # Returns
 ///
@@ -527,12 +529,13 @@ pub fn generate_lamps(
     start_x: i32,
     start_y: i32,
     use_grayscale: bool,
+    use_horizontal_lamp_wires: bool,
 ) -> (Vec<Entity>, Vec<Wire>, u32, u32) {
     let mut lamp_entities = Vec::new();
     let mut lamp_wires = Vec::new();
     let mut current_entity = start_entity_number;
     let mut previous_entities: HashMap<i32, u32> = HashMap::new();
-    let top_right_lamp: u32 = 0;
+    let mut top_right_lamp: u32 = 0;
     let mut previous_entity: Option<u32>;
 
     for r in 0..grid_height as i32 {
@@ -565,16 +568,22 @@ pub fn generate_lamps(
                 .with_always_on(true);
             lamp_entities.push(lamp);
 
-            // Connect lamps horizontally
-            if let Some(prev) = previous_entity {
-                lamp_wires.push([current_entity, 1, prev, 1]);
+            if r == 0 && c > 0 {
+                lamp_wires.push([current_entity, 1, current_entity - 1, 1]);
+                lamp_wires.push([current_entity, 2, current_entity - 1, 2]);
+                top_right_lamp = current_entity;
+            } else if use_horizontal_lamp_wires {
+                if let Some(prev) = previous_entity {
+                    lamp_wires.push([current_entity, 1, prev, 1]);
+                }
+                previous_entity = Some(current_entity);
             }
-            previous_entity = Some(current_entity);
 
-            // Vertical connection between all rows
-            if r > 0 && c + 1 == grid_width as i32 {
-                if let Some(&prev_entity) = previous_entities.get(&x) {
-                    lamp_wires.push([current_entity, 1, prev_entity, 1]);
+            if r > 0 {
+                if !use_horizontal_lamp_wires || (c + 1 == grid_width as i32) {
+                    if let Some(&prev_entity) = previous_entities.get(&x) {
+                        lamp_wires.push([current_entity, 1, prev_entity, 1]);
+                    }
                 }
             }
             previous_entities.insert(x, current_entity);
@@ -605,6 +614,8 @@ pub fn generate_blueprint(
     use_dlc: bool,
     grayscale_bits: u32,
     substation_quality: String,
+    use_green_lamp_wires: bool,
+    use_horizontal_lamp_wires: bool,
 ) -> Result<Blueprint, JsValue> {
     report_progress(0, "Starting blueprint update");
 
@@ -734,6 +745,7 @@ pub fn generate_blueprint(
             group_offset_x as i32,
             0,
             use_grayscale,
+            use_horizontal_lamp_wires,
         );
         next_entity = new_next_entity;
 
@@ -767,6 +779,24 @@ pub fn generate_blueprint(
             group_index as f64 / num_groups as f64,
             &format!("Processed chunk {}/{}", group_index, num_groups),
         );
+    }
+
+    // Swap all wires if requested (default uses red wires, so swap all for green)
+    if use_green_lamp_wires {
+        fn get_swap(x: u32) -> u32 {
+            match x {
+                1 => 2, // circuit_green / combinator_input_green -> circuit_red / combinator_input_red
+                2 => 1, // circuit_red / combinator_input_red -> circuit_green / combinator_input_green
+                3 => 4, // combinator_output_green -> combinator_output_red
+                4 => 3, // combinator_output_red -> combinator_output_green
+                _ => x, // usually just copper
+            }
+        }
+
+        for w in all_wires.iter_mut() {
+            w[1] = get_swap(w[1]);
+            w[3] = get_swap(w[3]);
+        }
     }
 
     let blueprint = Blueprint {

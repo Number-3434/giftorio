@@ -13,9 +13,12 @@ const _INITIAL_VALUES = {
 	substationQuality: "normal",
 	resamplingFilter: "catrom",
 	grayscaleBits: 0,
+	wireColor: "green",
+	connectionDirection: "horizontal",
 };
-const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
 const FILTER_TYPES = ["catrom", "gaussian", "lanczos3", "nearest", "triangle"];
+const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
+const WIRE_COLORS = ["green", "red"];
 
 function downloadTxt(text, filename = "file.txt") {
 	const blob = new Blob([text], { type: "text/plain" });
@@ -27,17 +30,6 @@ function downloadTxt(text, filename = "file.txt") {
 	a.click();
 
 	URL.revokeObjectURL(url);
-}
-function formatBytes(bytes) {
-	const units = ["B", "KB", "MB", "GB", "TB"];
-	let i = 0;
-
-	while (bytes >= 1024 && i < units.length - 1) {
-		bytes /= 1024;
-		i++;
-	}
-
-	return `${bytes.toPrecision(3)} ${units[i]}`;
 }
 
 function setInitialValues(values) {
@@ -156,12 +148,14 @@ function App({ worker }) {
 				name: formData.file.name,
 				imageData,
 				imageType: formData.file.type.substring(6 /* image/ */),
-				targetFps: formData.targetFps,
-				maxSize: formData.maxSize,
-				useDLC: formData.useDLC,
+				targetFps: +formData.targetFps,
+				maxSize: +formData.maxSize,
+				useDLC: !!formData.useDLC,
 				substationQuality: formData.substationQuality,
-				grayscaleBits: formData.grayscaleBits,
+				grayscaleBits: +formData.grayscaleBits,
 				resamplingFilter: formData.resamplingFilter,
+				useGreenLampWires: formData.wireColor === "green",
+				useHorizontalLampWires: formData.connectionDirection === "horizontal",
 			});
 		} catch (err) {
 			console.error("Failed to process file:", err);
@@ -501,6 +495,70 @@ function App({ worker }) {
 									<option value="triangle">Triangle</option>
 								</select>
 							</div>
+
+							{/* Wire Color */}
+							<div class="mb-4">
+								<label class="block text-white-500 mb-2" for="resamplingFilter">
+									Wire Colour
+									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
+									<div className="tooltip">
+										The colour of the wires used to connect the lamps. Green is usually recommended as green wires
+										connect horizontally in straight lines and take up the least space. Red wires are darker and harder
+										to see but take up more space as the wire does not connect straight.
+										<br />
+										<br />
+										Note that changing this setting will completely flip all wires (all red wires become green, all
+										green wires become red, and vice versa).
+										<br />
+										<br />
+										Note that there will always be a horizontal wire of the other colour connecting the lamps together
+										at the top row.
+									</div>
+								</label>
+								<select
+									ref={(el) => (formRefs.wireColor = el)}
+									id="wireColor"
+									name="wireColor"
+									class="bg-gray-100 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									value={formData.wireColor}
+									onChange={(e) => setFormData("wireColor", e.currentTarget.value)}
+								>
+									<option value="green">Green</option>
+									<option value="red">Red</option>
+								</select>
+							</div>
+
+							{/* Wire Connection */}
+							<div class="mb-4">
+								<label class="block text-white-500 mb-2" for="resamplingFilter">
+									Wire Connection Direction
+									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
+									<div className="tooltip">
+										Whether the majority of wires on the lamps should connect horizontally to the next lamps or
+										vertically.
+										<br />
+										<br />
+										Horizontal connections are usually recommended as they are more visually pleasing and take minimal
+										screen space with green wires. Red wires can also connect horizontally and do not take up space on
+										the lamps themselves.
+										<br />
+										<br />
+										Red wires only connect straight vertically. Green wires connect straight both horizontally and
+										vertically.
+									</div>
+								</label>
+								<select
+									ref={(el) => (formRefs.connectionDirection = el)}
+									id="connectionDirection"
+									name="connectionDirection"
+									class="bg-gray-100 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									value={formData.connectionDirection}
+									onChange={(e) => setFormData("connectionDirection", e.currentTarget.value)}
+								>
+									<option value="horizontal">Horizontal</option>
+									<option value="vertical">Vertical</option>
+								</select>
+							</div>
 						</div>
 					</div>
 
@@ -549,9 +607,9 @@ function App({ worker }) {
 										rel="noopener noreferrer"
 										class="text-bright-green-500 hover:text-tan-500"
 									>
-										a small donation
+										supporting the original creator
 									</a>{" "}
-									to help with development costs!
+									!
 								</p>
 							</div>
 						</div>

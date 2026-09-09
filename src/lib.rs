@@ -7,6 +7,29 @@ mod models;
 mod progress;
 mod signals;
 
+#[derive(serde::Deserialize)]
+pub struct BlueprintOptions {
+    pub name: String,
+    #[serde(rename = "imageType")]
+    pub image_type: String,
+    #[serde(rename = "useDLC")]
+    pub use_dlc: bool,
+    #[serde(rename = "targetFps")]
+    pub target_fps: u32,
+    #[serde(rename = "maxSize")]
+    pub max_size: u32,
+    #[serde(rename = "substationQuality")]
+    pub substation_quality: String,
+    #[serde(rename = "grayscaleBits")]
+    pub grayscale_bits: u32,
+    #[serde(rename = "resamplingFilter")]
+    pub resampling_filter: String,
+    #[serde(rename = "useGreenLampWires")]
+    pub use_green_lamp_wires: bool,
+    #[serde(rename = "useHorizontalLampWires")]
+    pub use_horizontal_lamp_wires: bool,
+}
+
 /// Public entry point for WebAssembly.
 ///
 /// # Parameters
@@ -24,39 +47,35 @@ mod signals;
 /// A Factorio blueprint string on success.
 #[wasm_bindgen]
 pub async fn run_blueprint(
-    name: &str,
+    options: JsValue,
     image_data: &[u8],
-    image_type: &str,
-    use_dlc: bool,
-    target_fps: u32,
-    max_size: u32,
-    substation_quality: String,
-    grayscale_bits: u32,
-    resampling_filter: String,
     on_group_ready: &js_sys::Function,
     send_chunk: &js_sys::Function,
 ) -> Result<(), JsValue> {
-    console_error_panic_hook::set_once();
+    let options: BlueprintOptions = serde_wasm_bindgen::from_value(options)?;
+
     // Process the image to extract frames and determine the effective FPS.
     let (frames, fps) = image_processing::process_image(
         image_data,
-        image_type,
-        max_size,
-        target_fps,
-        grayscale_bits,
-        resampling_filter,
+        options.image_type,
+        options.max_size,
+        options.target_fps,
+        options.grayscale_bits,
+        options.resampling_filter,
     )?;
     if frames.is_empty() {
         return Err(JsValue::from_str("No frames sampled!"));
     }
 
     let blueprint = blueprint::generate_blueprint(
-        name.to_string(),
+        options.name.to_string(),
         fps,
         frames,
-        use_dlc,
-        grayscale_bits,
-        substation_quality,
+        options.use_dlc,
+        options.grayscale_bits,
+        options.substation_quality,
+        options.use_green_lamp_wires,
+        options.use_horizontal_lamp_wires,
     )?;
     let mut encoder = blueprint::BlueprintEncoder::new(blueprint);
     let mut buf = Vec::new();
@@ -74,7 +93,11 @@ pub async fn run_blueprint(
     use js_sys::{Object, Reflect};
     let obj = Object::new();
 
-    Reflect::set(&obj, &JsValue::from_str("label"), &JsValue::from_str(name))?;
+    Reflect::set(
+        &obj,
+        &JsValue::from_str("label"),
+        &JsValue::from_str(&options.name.to_string()),
+    )?;
 
     on_group_ready.call1(&JsValue::NULL, &obj)?;
 
