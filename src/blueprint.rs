@@ -144,23 +144,23 @@ pub fn generate_timer(
 
     entities.push(
         Entity::new(2, DECIDER_COMB, Position::from(TIMER_ENTITY2_POSITION))
-        .with_direction(DIR_RIGHT)
-        .with_control_behavior(ControlBehavior::Decider {
-            decider_conditions: DeciderConditions {
-                conditions: vec![Condition {
-                    first_signal: Signal::new_virtual(SIGNAL_T),
-                    constant: stop as i32,
-                    comparator: COMPARATOR_LT,
-                    compare_type: None,
-                }],
-                outputs: vec![CombinatorOutput::new(
-                    Arc::from(Signal::new_virtual(SIGNAL_T)),
-                    None,
-                )],
-            },
-        })
-        .with_description("[virtual-signal=signal-T] is our timer that ticks up 60 times per second up to the max ticks for the entire gif. \
-        When it reaches the max, it will start over, resetting the gif. This timer is used to know which frames to render."));
+            .with_direction(DIR_RIGHT)
+            .with_control_behavior(ControlBehavior::Decider {
+                decider_conditions: DeciderConditions {
+                    conditions: vec![Condition {
+                        first_signal: Signal::new_virtual(SIGNAL_T),
+                        constant: stop as i32,
+                        comparator: COMPARATOR_LT,
+                        compare_type: None,
+                    }],
+                    outputs: vec![CombinatorOutput::new(
+                        Arc::from(Signal::new_virtual(SIGNAL_T)),
+                        None,
+                    )],
+                },
+            }).with_description("[virtual-signal=signal-T] is our timer that ticks up 60 times per second up to the max ticks for the entire gif. \
+            When it reaches the max, it will start over, resetting the gif. This timer is used to know which frames to render.")
+    );
 
     entities.push(
         Entity::new(3, ARITHMETIC_COMB, Position::from(TIMER_ENTITY3_POSITION))
@@ -532,9 +532,11 @@ pub fn generate_lamps(
     let mut lamp_wires = Vec::new();
     let mut current_entity = start_entity_number;
     let mut previous_entities: HashMap<i32, u32> = HashMap::new();
-    let mut top_right_lamp: u32 = 0;
+    let top_right_lamp: u32 = 0;
+    let mut previous_entity: Option<u32>;
 
     for r in 0..grid_height as i32 {
+        previous_entity = None;
         for c in 0..grid_width as i32 {
             let x = start_x + c;
             let y = start_y + r;
@@ -562,12 +564,15 @@ pub fn generate_lamps(
                 .with_control_behavior(colors)
                 .with_always_on(true);
             lamp_entities.push(lamp);
-            if r == 0 && c > 0 {
-                lamp_wires.push([current_entity, 1, current_entity - 1, 1]);
-                lamp_wires.push([current_entity, 2, current_entity - 1, 2]);
-                top_right_lamp = current_entity;
+
+            // Connect lamps horizontally
+            if let Some(prev) = previous_entity {
+                lamp_wires.push([current_entity, 1, prev, 1]);
             }
-            if r > 0 {
+            previous_entity = Some(current_entity);
+
+            // Vertical connection between all rows
+            if r > 0 && c + 1 == grid_width as i32 {
                 if let Some(&prev_entity) = previous_entities.get(&x) {
                     lamp_wires.push([current_entity, 1, prev_entity, 1]);
                 }

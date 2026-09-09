@@ -89,7 +89,7 @@ function App({ worker }) {
 			formRefs.progressContainer.classList.add("hidden");
 			formRefs.blueprintResult.classList.remove("hidden");
 			formRefs.responseText.innerHTML = "Blueprint downloaded!";
-			formRefs.submitButton.disabled = true;
+			formRefs.submitButton.disabled = false;
 
 			setInitialValues(formData);
 		} else if (event.data.error) {

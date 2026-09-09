@@ -31,20 +31,19 @@ pub struct Signal {
     pub quality: Option<&'static str>,
 }
 impl Signal {
-    pub fn new(type_: &str, name: &str) -> Self {
-        Self {
-            type_: Arc::new(type_.to_string()),
-            name: Arc::new(name.to_string()),
-            quality: None,
-        }
-    }
-
     pub fn new_virtual(name: &str) -> Self {
         Self {
             type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
             name: Arc::new(name.to_string()),
             quality: None,
         }
+    }
+}
+
+fn is_none_or_normal(value: &Option<String>) -> bool {
+    match value {
+        None => true,
+        Some(s) => s == "normal",
     }
 }
 
@@ -61,7 +60,7 @@ pub struct Entity {
     pub control_behavior: Option<ControlBehavior>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub player_description: Option<&'static str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "is_none_or_normal")]
     pub quality: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub always_on: Option<bool>,
