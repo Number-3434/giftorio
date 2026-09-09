@@ -260,7 +260,7 @@ function App({ worker }) {
 				<div ref={form} class="panel-container flex">
 					<div classList={{ hidden: isGenerating() }} class="panel form">
 						<div class="flex items-center justify-between">
-							<h2 class="text-tan-500">Convert GIF to Blueprint</h2>
+							<h2 class="text-tan-500">Convert GIF (or WebP) to Blueprint</h2>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown}></div>
 							<div
 								class="mb-[10px] w-5 h-5 flex items-center content-center justify-center"
@@ -309,9 +309,14 @@ function App({ worker }) {
 									Max Size
 									<img src={infoIcon} class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<span class="tooltip">
-										Maximum size of the longest side (length or width) of the output image in tiles. Larger values
-										create bigger blueprints but take longer to generate and may have a negative impact on game
-										performance.
+										Maximum size of the longest side (length or width) of the output image in tiles.
+										<br />
+										<br />
+										Larger values create higher resolution blueprints but take longer to generate and import, and can
+										negatively impact on game performance.
+										<br />
+										<br />
+										Blueprint size increases x4 for a x2 increase in max size.
 									</span>
 								</label>
 								<input
@@ -363,8 +368,11 @@ function App({ worker }) {
 										Use Space Age DLC?
 										<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 										<span className="tooltip">
-											If enabled, this can increase the number of available signals and substations, reducing the
-											number of combinators needed in the blueprint. It also allows for higher quality substations.
+											If enabled, dramatically increases the number of available signals, reducing the number of
+											combinators in the blueprint by ~15x. It also allows for higher quality substations.
+											<br />
+											<br />
+											Requires the Space Age DLC (v0.2.77 or later).
 										</span>
 									</div>
 								</label>
@@ -402,9 +410,14 @@ function App({ worker }) {
 									Framerate
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<span className="tooltip">
-										Maximum framerate of the output blueprint. The blueprint will not exceed the original framerate of
-										the GIF. The higher the framerate, the more frames will be generated, increasing the size of the
-										blueprint and impacting game performance.
+										Maximum framerate of the output blueprint.
+										<br />
+										<br />
+										The blueprint will not exceed the original framerate of the GIF. Higher framerates require more
+										frames to be generated, increasing the size of the blueprint.
+										<br />
+										<br /> This can also impact UPS (game performance; may cause stutters), although Factorio will
+										attempt to continue rendering at 1:1 time.
 									</span>
 								</label>
 								<input
@@ -424,10 +437,16 @@ function App({ worker }) {
 									Color Mode
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<span className="tooltip">
-										Full color will try to match the original GIF colors. If the blueprint is too large, you can try
-										using grayscale. 8-bit grayscale has 256 shades of gray and can reduce the blueprint size by 60-70%,
-										while 4-bit grayscale has 16 shades of gray and can reduce the blueprint size by up to 85%. Full
-										black and white is roughly 32x smaller than full color.
+										Full color will try to match the original GIF colors.
+										<br />
+										<br />
+										If the blueprint is very large, using grayscale will greatly reduce the size. Grayscale is also
+										recommended (and has no visual difference compared to Full color) for black-and-white GIFs.
+										<br />
+										<br />
+										8-bit grayscale has 256 shades of gray and can reduce the blueprint size by 60-70%, while 4-bit
+										grayscale has 16 shades of gray and can reduce the blueprint size by up to 85%. Full black and white
+										is roughly 32x smaller than full color.
 									</span>
 								</label>
 								<select
@@ -507,8 +526,9 @@ function App({ worker }) {
 										to see but take up more space as the wire does not connect straight.
 										<br />
 										<br />
-										Note that changing this setting will completely flip all wires (all red wires become green, all
-										green wires become red, and vice versa).
+										Note that the wire colour used will slightly tint the image the same colour. Also note that changing
+										this setting will completely flip all wires (all red wires become green, all green wires become red,
+										and vice versa).
 										<br />
 										<br />
 										Note that there will always be a horizontal wire of the other colour connecting the lamps together
