@@ -8,7 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wasm_bindgen::JsValue;
 
-const ENCODE_CHUNK_SIZE: usize = 500;
+const ENCODE_CHUNK_SIZE: usize = 100;
 
 pub struct BlueprintEncoder {
     blueprint: Blueprint,
