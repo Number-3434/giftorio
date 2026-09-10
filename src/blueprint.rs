@@ -1,5 +1,5 @@
 use crate::constants::*;
-use crate::image_processing::rgb_to_int;
+use crate::image_processing::{rgb_to_int, FrameData};
 use crate::models::*;
 use crate::progress::{report_progress, set_progress};
 use crate::signals::get_signals_with_quality;
@@ -9,7 +9,11 @@ use std::sync::Arc;
 use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 500;
-
+macro_rules! log {
+    ($($arg:tt)*) => {
+        web_sys::console::log_1(&format!($($arg)*).into());
+    };
+}
 pub struct BlueprintEncoder {
     blueprint: Blueprint,
     current_chunk_idx: usize,
@@ -608,8 +612,7 @@ pub fn generate_lamps(
 /// The final blueprint as a struct.
 pub fn generate_blueprint(
     name: String,
-    fps: u32,
-    sampled_frames: Vec<image::DynamicImage>,
+    frame_data: &mut FrameData,
     use_dlc: bool,
     grayscale_bits: u32,
     substation_quality: String,
@@ -621,18 +624,18 @@ pub fn generate_blueprint(
     // Get signals internally.
     let signals: Vec<Arc<Signal>> = get_signals_with_quality(use_dlc);
 
-    if sampled_frames.is_empty() {
+    if frame_data.total_frames() == 0 {
         return Err(JsValue::from_str("No sampled frames"));
     }
 
     let use_grayscale = grayscale_bits > 0;
-    let total_frames = sampled_frames.len() as u32;
+    let total_frames = frame_data.total_frames() as u32;
     let frames_per_combinator = if grayscale_bits > 0 {
         32 / grayscale_bits
     } else {
         1
     };
-    let (full_width, full_height) = sampled_frames[0].dimensions();
+    let (full_width, full_height) = frame_data.dimensions();
     let max_columns_per_group = ((signals.len() as u32) / full_height).min(full_width);
     let num_groups = (full_width as f64 / max_columns_per_group as f64).ceil() as u32;
     let max_columns_per_group = full_width / num_groups;
@@ -646,7 +649,7 @@ pub fn generate_blueprint(
             / frames_per_combinator as f64)
             .ceil() as u32;
 
-    let ticks_per_frame = (60.0 / fps as f64) as u32;
+    let ticks_per_frame = (60.0 / frame_data.fps() as f64) as u32;
     let stop = total_frames * ticks_per_frame;
     let (timer_entities, timer_wires) =
         generate_timer(stop, grayscale_bits, ticks_per_frame, frames_per_combinator);
@@ -686,23 +689,41 @@ pub fn generate_blueprint(
         let group_width = group_right - group_left;
 
         let group_frames_outputs = if use_grayscale {
-            sampled_frames
-                .chunks(frames_per_combinator as usize)
-                .map(|chunk| {
-                    let cropped_frames: Vec<image::DynamicImage> = chunk
-                        .iter()
-                        .map(|frame| frame.crop_imm(group_left, 0, group_width, full_height))
-                        .collect();
-                    pack_grayscale_frames_to_outputs(
-                        &cropped_frames,
-                        signals.clone(),
-                        grayscale_bits,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?
+            let mut outputs = Vec::new();
+
+            loop {
+                let mut frames = Vec::with_capacity(frames_per_combinator as usize);
+
+                for _ in 0..frames_per_combinator {
+                    match frame_data.next() {
+                        Some(frame) => frames.push(frame),
+                        None => break,
+                    }
+                }
+
+                if frames.is_empty() {
+                    break;
+                }
+
+                let cropped_frames = frames
+                    .into_iter()
+                    .map(|frame| {
+                        frame.map(|frame| frame.crop_imm(group_left, 0, group_width, full_height))
+                    })
+                    .collect::<Result<Vec<_>, JsValue>>()?;
+
+                outputs.push(pack_grayscale_frames_to_outputs(
+                    &cropped_frames,
+                    signals.clone(),
+                    grayscale_bits,
+                )?);
+            }
+
+            outputs
         } else {
             let mut outputs = Vec::new();
-            for frame in &sampled_frames {
+            for frame in frame_data.by_ref() {
+                let frame = frame?;
                 let cropped = frame.crop_imm(group_left, 0, group_width, full_height);
                 outputs.push(frame_to_outputs(&cropped, signals.clone())?);
             }

@@ -3,6 +3,7 @@ use wasm_bindgen::prelude::*;
 mod blueprint;
 mod constants;
 mod image_processing;
+mod image_utils;
 mod models;
 mod progress;
 mod signals;
@@ -12,6 +13,8 @@ pub struct BlueprintOptions {
     pub name: String,
     #[serde(rename = "imageType")]
     pub image_type: String,
+    #[serde(rename = "includeLastFrame")]
+    pub include_last_frame: bool,
     #[serde(rename = "useDLC")]
     pub use_dlc: bool,
     #[serde(rename = "targetFps")]
@@ -55,22 +58,19 @@ pub async fn run_blueprint(
     let options: BlueprintOptions = serde_wasm_bindgen::from_value(options)?;
 
     // Process the image to extract frames and determine the effective FPS.
-    let (frames, fps) = image_processing::process_image(
+    let mut frame_data = image_processing::FrameData::new(
         image_data,
         options.image_type,
         options.max_size,
         options.target_fps,
         options.grayscale_bits,
         options.resampling_filter,
+        options.include_last_frame,
     )?;
-    if frames.is_empty() {
-        return Err(JsValue::from_str("No frames sampled!"));
-    }
 
     let blueprint = blueprint::generate_blueprint(
         options.name.to_string(),
-        fps,
-        frames,
+        &mut frame_data,
         options.use_dlc,
         options.grayscale_bits,
         options.substation_quality,

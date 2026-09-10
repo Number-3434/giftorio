@@ -1,6 +1,7 @@
 use crate::constants::*;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
 #[derive(Serialize)]
 pub struct Blueprint {
     pub blueprint: BlueprintInner,

@@ -10,6 +10,7 @@ const _INITIAL_VALUES = {
 	targetFps: 15,
 	maxSize: 50,
 	useDLC: false,
+	includeLastFrame: false,
 	substationQuality: "normal",
 	resamplingFilter: "catrom",
 	grayscaleBits: 0,
@@ -58,7 +59,7 @@ function App({ worker }) {
 	const [isDragging, setIsDragging] = createSignal(false);
 	const [xOffset, setXOffset] = createSignal(0);
 	const [yOffset, setYOffset] = createSignal(0);
-	const [showAdvanced, setShowAdvanced] = createSignal(false);
+	const [showAdvanced, setShowAdvanced] = createSignal(true);
 	const [isMobile, setIsMobile] = createSignal(false);
 	let form;
 
@@ -151,6 +152,7 @@ function App({ worker }) {
 				targetFps: +formData.targetFps,
 				maxSize: +formData.maxSize,
 				useDLC: !!formData.useDLC,
+				includeLastFrame: !!formData.includeLastFrame,
 				substationQuality: formData.substationQuality,
 				grayscaleBits: +formData.grayscaleBits,
 				resamplingFilter: formData.resamplingFilter,
@@ -258,7 +260,7 @@ function App({ worker }) {
 				</div>
 
 				<div ref={form} class="panel-container flex">
-					<div classList={{ hidden: isGenerating() }} class="panel form">
+					<div classList={{ hidden: isGenerating() }} class="panel form flex-shrink-0">
 						<div class="flex items-center justify-between">
 							<h2 class="text-tan-500">Convert GIF (or WebP) to Blueprint</h2>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown}></div>
@@ -304,8 +306,8 @@ function App({ worker }) {
 							</div>
 
 							{/* Max Size Input */}
-							<div class="mb-4">
-								<label class="block text-white-500 mb-2" for="maxsize">
+							<div class="mb-4 flex items-center justify-between">
+								<label class="text-white-500" for="maxsize">
 									Max Size
 									<img src={infoIcon} class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<span class="tooltip">
@@ -319,9 +321,10 @@ function App({ worker }) {
 										Blueprint size increases x4 for a x2 increase in max size.
 									</span>
 								</label>
+
 								<input
 									ref={(el) => (formRefs.maxsize = el)}
-									class="bg-gray-100 focus:bg-tan-500 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									class="bg-gray-100 focus:bg-tan-500 w-24 px-3 py-2 border rounded focus:outline-none focus:ring"
 									type="number"
 									id="maxsize"
 									onInput={(e) => setFormData("maxSize", e.target.value)}
@@ -348,14 +351,42 @@ function App({ worker }) {
 						</form>
 					</div>
 
-					<div class="panel" classList={{ hidden: !showAdvanced() || isGenerating() }}>
+					<div class="panel w-full" classList={{ hidden: !showAdvanced() || isGenerating() }}>
 						<div class="flex items-center justify-between">
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
 						</div>
-						<div class="panel-inset-light p-6 rounded shadow-md w-full max-w-md">
+
+						<div class="panel-inset-light p-3 shadow-md w-full max-w-md">
+							{/* Last Frame toggle */}
+							<div class="mb-1 flex">
+								<label class="checkbox-label">
+									<input
+										type="checkbox"
+										class="sr-only"
+										checked={formData.includeLastFrame}
+										onChange={(e) => setFormData("includeLastFrame", e.currentTarget.checked)}
+									/>
+									<div class="checkbox"></div>
+									<div class="ml-3 text-white-500">
+										Include Last Frame
+										<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
+										<span className="tooltip">
+											If enabled, the last frame of the GIF may be included. Usually this should be disabled unless it
+											is desirable to see the last frame of the GIF (and the GIF doesn't loop).
+											<br />
+											<br />
+											This option will interfere with GIF looping as it will always an extra frame at the end. For
+											example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames,
+											one at the start, and one at the end. With this option disabled, the output GIF will only have 1
+											frame.
+										</span>
+									</div>
+								</label>
+							</div>
+
 							{/* DLC toggle */}
-							<div class="mb-4 flex">
+							<div class="mb-1 flex">
 								<label class="checkbox-label">
 									<input
 										type="checkbox"
@@ -364,7 +395,7 @@ function App({ worker }) {
 										onChange={(e) => setFormData("useDLC", e.currentTarget.checked)}
 									/>
 									<div class="checkbox"></div>
-									<div class="ml-4 text-white-500">
+									<div class="ml-3 text-white-500">
 										Use Space Age DLC?
 										<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 										<span className="tooltip">
@@ -379,7 +410,7 @@ function App({ worker }) {
 							</div>
 
 							{/* Substation Quality Select */}
-							<div class="mb-4">
+							<div class="mb-1 flex items-center justify-between">
 								<label class="block text-white-500 mb-2" for="substationQuality">
 									Substation Quality
 								</label>
@@ -387,7 +418,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.substationQuality = el)}
 									id="substationQuality"
 									name="substationQuality"
-									class="bg-gray-100 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									class="bg-gray-100 w-30 px-4 py-1 font-semibold border focus:outline-none focus:ring"
 									value={formData.substationQuality}
 									onChange={(e) => setFormData("substationQuality", e.currentTarget.value)}
 								>
@@ -405,7 +436,7 @@ function App({ worker }) {
 							</div>
 
 							{/* Framerate Input */}
-							<div class="mb-4">
+							<div class="mb-1 flex items-center justify-between">
 								<label className="block text-white-500 mb-2" htmlFor="framerate">
 									Framerate
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
@@ -416,24 +447,28 @@ function App({ worker }) {
 										The blueprint will not exceed the original framerate of the GIF. Higher framerates require more
 										frames to be generated, increasing the size of the blueprint.
 										<br />
-										<br /> This can also impact UPS (game performance; may cause stutters), although Factorio will
-										attempt to continue rendering at 1:1 time.
+										<br />
+										This can also impact UPS (game performance; may cause stutters), although Factorio will attempt to
+										continue rendering at 1:1 time.
 									</span>
 								</label>
-								<input
-									ref={(el) => (formRefs.framerate = el)}
-									class="bg-gray-100 focus:bg-tan-500 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
-									type="number"
-									id="framerate"
-									value={formData.targetFps}
-									onChange={(e) => setFormData("targetFps", e.target.value)}
-									placeholder="Enter max framerate (won't exceed original)"
-								/>
+
+								<div class="flex items-center gap-3 w-20">
+									<input
+										ref={(el) => (formRefs.framerate = el)}
+										class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
+										type="number"
+										id="framerate"
+										value={formData.targetFps}
+										onChange={(e) => setFormData("targetFps", e.target.value)}
+										placeholder="Enter max framerate (won't exceed original)"
+									/>
+								</div>
 							</div>
 
 							{/* Color Mode */}
-							<div class="mb-4">
-								<label class="block text-white-500 mb-2" for="grayscaleBits">
+							<div class="mb-1 flex items-center justify-between">
+								<label class="text-white-500" for="grayscaleBits">
 									Color Mode
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<span className="tooltip">
@@ -453,7 +488,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.grayscaleBits = el)}
 									id="grayscaleBits"
 									name="grayscaleBits"
-									class="bg-gray-100 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									class="bg-gray-100 w-30 px-2 py-1.5 border focus:outline-none focus:ring"
 									value={formData.grayscaleBits}
 									onChange={(e) => setFormData("grayscaleBits", parseInt(e.currentTarget.value))}
 								>
@@ -465,8 +500,8 @@ function App({ worker }) {
 							</div>
 
 							{/* Filter Type */}
-							<div class="mb-4">
-								<label class="block text-white-500 mb-2" for="resamplingFilter">
+							<div class="mb-1 flex items-center justify-between">
+								<label class="text-white-500" for="resamplingFilter">
 									Resampling Filter
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<div className="tooltip">
@@ -503,7 +538,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.resamplingFilter = el)}
 									id="resamplingFilter"
 									name="resamplingFilter"
-									class="bg-gray-100 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									class="bg-gray-100 w-40 px-4 py-1 border focus:outline-none focus:ring"
 									value={formData.resamplingFilter}
 									onChange={(e) => setFormData("resamplingFilter", e.currentTarget.value)}
 								>
@@ -516,8 +551,8 @@ function App({ worker }) {
 							</div>
 
 							{/* Wire Color */}
-							<div class="mb-4">
-								<label class="block text-white-500 mb-2" for="resamplingFilter">
+							<div class="mb-1 flex items-center justify-between">
+								<label class="text-white-500" for="wireColor">
 									Wire Colour
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<div className="tooltip">
@@ -539,7 +574,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.wireColor = el)}
 									id="wireColor"
 									name="wireColor"
-									class="bg-gray-100 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									class="bg-gray-100 w-30 font-semibold px-5 py-1 border rounded focus:outline-none focus:ring"
 									value={formData.wireColor}
 									onChange={(e) => setFormData("wireColor", e.currentTarget.value)}
 								>
@@ -549,8 +584,8 @@ function App({ worker }) {
 							</div>
 
 							{/* Wire Connection */}
-							<div class="mb-4">
-								<label class="block text-white-500 mb-2" for="resamplingFilter">
+							<div class="mb-1 flex items-center justify-between">
+								<label class="text-white-500" for="connectionDirection">
 									Wire Connection Direction
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<div className="tooltip">
@@ -571,7 +606,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.connectionDirection = el)}
 									id="connectionDirection"
 									name="connectionDirection"
-									class="bg-gray-100 w-full px-3 py-2 border rounded focus:outline-none focus:ring"
+									class="bg-gray-100 w-30 font-semibold px-5 py-1 border rounded focus:outline-none focus:ring"
 									value={formData.connectionDirection}
 									onChange={(e) => setFormData("connectionDirection", e.currentTarget.value)}
 								>

@@ -29,6 +29,7 @@ async function run() {
 				grayscaleBits,
 				resamplingFilter,
 				useGreenLampWires,
+				includeLastFrame,
 				useHorizontalLampWires,
 			} = event.data;
 
@@ -42,6 +43,7 @@ async function run() {
 						useDLC,
 						targetFps,
 						maxSize,
+						includeLastFrame,
 						substationQuality,
 						grayscaleBits,
 						resamplingFilter,
