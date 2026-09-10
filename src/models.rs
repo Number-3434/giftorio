@@ -23,7 +23,7 @@ pub struct Icon {
     pub index: u32,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Signal {
     #[serde(rename = "type")]
     pub type_: Arc<String>,
@@ -50,7 +50,7 @@ fn is_none_or_normal(value: &Option<String>) -> bool {
 
 pub type Wire = [u32; 4];
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Entity {
     pub entity_number: u32,
     pub name: &'static str,
@@ -103,7 +103,7 @@ impl Entity {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Position {
     pub x: f64,
     pub y: f64,
@@ -119,7 +119,7 @@ impl From<(f64, f64)> for Position {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(untagged)]
 pub enum ControlBehavior {
     Constant {
@@ -145,18 +145,18 @@ pub enum ControlBehavior {
     },
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Sections {
     pub sections: Vec<Section>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Section {
     pub index: u32,
     pub filters: Vec<Filter>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Filter {
     pub index: u32,
     #[serde(rename = "type")]
@@ -170,13 +170,13 @@ pub struct Filter {
     pub count: Option<u32>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct DeciderConditions {
     pub conditions: Vec<Condition>,
     pub outputs: Vec<CombinatorOutput>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct Condition {
     pub first_signal: Signal,
     pub constant: i32,
@@ -185,7 +185,7 @@ pub struct Condition {
     pub compare_type: Option<&'static str>,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Clone, Serialize)]
 pub struct CombinatorOutput {
     pub copy_count_from_input: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -202,7 +202,7 @@ impl CombinatorOutput {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 pub struct ArithmeticConditions {
     pub first_signal: Signal,
     #[serde(skip_serializing_if = "Option::is_none")]

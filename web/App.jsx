@@ -351,7 +351,7 @@ function App({ worker }) {
 						</form>
 					</div>
 
-					<div class="panel w-full" classList={{ hidden: !showAdvanced() || isGenerating() }}>
+					<div class="panel w-110" classList={{ hidden: !showAdvanced() || isGenerating() }}>
 						<div class="flex items-center justify-between">
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
@@ -488,7 +488,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.grayscaleBits = el)}
 									id="grayscaleBits"
 									name="grayscaleBits"
-									class="bg-gray-100 w-30 px-2 py-1.5 border focus:outline-none focus:ring"
+									class="bg-gray-100 px-2 py-1.5 border focus:outline-none focus:ring"
 									value={formData.grayscaleBits}
 									onChange={(e) => setFormData("grayscaleBits", parseInt(e.currentTarget.value))}
 								>
@@ -538,7 +538,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.resamplingFilter = el)}
 									id="resamplingFilter"
 									name="resamplingFilter"
-									class="bg-gray-100 w-40 px-4 py-1 border focus:outline-none focus:ring"
+									class="bg-gray-100 px-4 py-1 pr-50 border font-semibold focus:outline-none focus:ring"
 									value={formData.resamplingFilter}
 									onChange={(e) => setFormData("resamplingFilter", e.currentTarget.value)}
 								>
@@ -574,7 +574,7 @@ function App({ worker }) {
 									ref={(el) => (formRefs.wireColor = el)}
 									id="wireColor"
 									name="wireColor"
-									class="bg-gray-100 w-30 font-semibold px-5 py-1 border rounded focus:outline-none focus:ring"
+									class="bg-gray-100 font-semibold px-5 py-1 border rounded focus:outline-none focus:ring"
 									value={formData.wireColor}
 									onChange={(e) => setFormData("wireColor", e.currentTarget.value)}
 								>
