@@ -16,7 +16,7 @@ const _INITIAL_VALUES = {
 	grayscaleBits: 0,
 	wireColor: "green",
 	connectionDirection: "horizontal",
-	compressionLevel: 2,
+	temporalCompressionBufferMs: 500,
 };
 const FILTER_TYPES = ["catrom", "gaussian", "lanczos3", "nearest", "triangle"];
 const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
@@ -258,7 +258,7 @@ function App({ worker }) {
 						resamplingFilter: formData.resamplingFilter,
 						useGreenLampWires: formData.wireColor === "green",
 						useHorizontalLampWires: formData.connectionDirection === "horizontal",
-						compressionLevel: +formData.compressionLevel,
+						temporalCompressionBufferMs: +formData.temporalCompressionBufferMs,
 					},
 				},
 			});
@@ -501,34 +501,37 @@ function App({ worker }) {
 
 							{/* Compression Level */}
 							<div class="mb-1 flex items-center justify-between">
-								<label className="block text-white-500 mb-2" htmlFor="compressionLevel">
-									Compression Level
+								<label className="block text-white-500 mb-2" htmlFor="temporalCompressionBufferMs">
+									Temporal Compression Window (ms)
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<span className="tooltip">
-										Turns on compression, which can dramatically reduce file size at the cost of using a lot more
-										combinators.
+										If set to a non-zero value, the blueprint will be compressed using temporal compression between two
+										frames. This can dramatically reduce file size at the cost of using twice the number of decider
+										combinators for data storage.
 										<br />
 										<br />
 										This option uses basic temporal compression, so any pixels that remain unchanged throughout the
-										frames will be compressed into a single combinator. The compression level indicates the number of
-										frames this will occur over (e.g. compression level 1 is no compression, level 2 means any pixles in
-										the last frame that did not change in the previous frame will be compressed into a single combinator
-										instead of using two combinators.)
+										frames will be compressed into a single combinator. This is calculated each frame.
+										<br />
+										<br />
+										This setting changes the window size (in ms) of the scan time for changed pixels. Any pixels that
+										remain the same within this time are compresed into a single combinator. This feature is
+										experimental and is subject to change.
 									</span>
 								</label>
 
-								<div class="flex items-center gap-3 w-20">
+								<div class="flex items-center gap-3">
 									<input
-										ref={(el) => (formRefs.compressionLevel = el)}
+										ref={(el) => (formRefs.temporalCompressionBufferMs = el)}
 										class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
 										type="number"
-										id="compressionLevel"
-										min="1"
-										max="15"
-										step="1"
-										value={formData.compressionLevel}
-										onChange={(e) => setFormData("compressionLevel", e.target.value)}
-										placeholder="Enter compression level (1-5)"
+										id="temporalCompressionBufferMs"
+										min="0"
+										max="5000"
+										step="100"
+										value={formData.temporalCompressionBufferMs}
+										onChange={(e) => setFormData("temporalCompressionBufferMs", e.target.value)}
+										placeholder="0-5000"
 									/>
 								</div>
 							</div>
