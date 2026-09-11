@@ -647,19 +647,20 @@ pub fn generate_blueprint(
         return Err(JsValue::from_str("No sampled frames"));
     }
 
-    let compressed_multiplier = if args.temporal_compression_buffer_ms > 0 {
-        2
-    } else {
-        1
-    };
     let n_comp_buf_frames = if args.temporal_compression_buffer_ms > 0 {
         (args.temporal_compression_buffer_ms as u64).div_ceil(frame_data.fps() as u64) as usize
     } else {
         1
     };
+    let n_comp_frames_per_chunk = if n_comp_buf_frames > 1 { 1 } else { 0 } as usize;
     let use_grayscale = args.grayscale_bits > 0;
     let n_frames = frame_data.total_frames();
-    let n_scaled_frames = frame_data.total_frames() * compressed_multiplier;
+    let n_scaled_frames = frame_data.total_frames()
+        * if args.temporal_compression_buffer_ms > 0 {
+            2
+        } else {
+            1
+        };
     let frames_per_comb = if args.grayscale_bits > 0 {
         32 / args.grayscale_bits
     } else {
@@ -852,8 +853,6 @@ pub fn generate_blueprint(
     }
 
     all_entities.sort_by_key(|entity| entity.entity_number);
-
-    let n_comp_frames_per_chunk = if n_comp_buf_frames > 1 { 1 } else { 0 };
 
     for (frame_i, frame) in frame_data.by_ref().enumerate() {
         let frame = frame?;
