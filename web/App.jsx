@@ -510,8 +510,15 @@ function App({ worker }) {
 										combinators for data storage.
 										<br />
 										<br />
-										This option uses basic temporal compression, so any pixels that remain unchanged throughout the
-										frames will be compressed into a single combinator. This is calculated each frame.
+										The current implementation scans all the pixels every{" "}
+										<strong>Temporal Compression Window (ms)</strong>. It then finds all the pixels that have not
+										changed in the last <strong>Temporal Compression Window (ms)</strong> and stores them in a single
+										combinator. The other pixels (that changed) are stored in per-frame combinators.
+										<br />
+										<br />
+										This setting should be fine-tuned based on the amount of movement in the GIF. Higher sampling
+										windows can give greter compression, but if large portions of the GIF are moving the compression
+										value is reduced in comparison to shorter sampling times.
 										<br />
 										<br />
 										This setting changes the window size (in ms) of the scan time for changed pixels. Any pixels that
