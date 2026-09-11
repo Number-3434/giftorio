@@ -1,5 +1,5 @@
+use crate::blueprint::BlueprintArgs;
 use wasm_bindgen::prelude::*;
-
 mod blueprint;
 mod constants;
 mod image_processing;
@@ -7,31 +7,6 @@ mod image_utils;
 mod models;
 mod progress;
 mod signals;
-
-#[derive(serde::Deserialize)]
-pub struct BlueprintOptions {
-    pub name: String,
-    #[serde(rename = "imageType")]
-    pub image_type: String,
-    #[serde(rename = "includeLastFrame")]
-    pub include_last_frame: bool,
-    #[serde(rename = "useDLC")]
-    pub use_dlc: bool,
-    #[serde(rename = "targetFps")]
-    pub target_fps: u32,
-    #[serde(rename = "maxSize")]
-    pub max_size: u32,
-    #[serde(rename = "substationQuality")]
-    pub substation_quality: String,
-    #[serde(rename = "grayscaleBits")]
-    pub grayscale_bits: u32,
-    #[serde(rename = "resamplingFilter")]
-    pub resampling_filter: String,
-    #[serde(rename = "useGreenLampWires")]
-    pub use_green_lamp_wires: bool,
-    #[serde(rename = "useHorizontalLampWires")]
-    pub use_horizontal_lamp_wires: bool,
-}
 
 /// Public entry point for WebAssembly.
 ///
@@ -55,28 +30,12 @@ pub async fn run_blueprint(
     on_group_ready: &js_sys::Function,
     send_chunk: &js_sys::Function,
 ) -> Result<(), JsValue> {
-    let options: BlueprintOptions = serde_wasm_bindgen::from_value(options)?;
+    let args: BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
 
     // Process the image to extract frames and determine the effective FPS.
-    let mut frame_data = image_processing::FrameData::new(
-        image_data,
-        options.image_type,
-        options.max_size,
-        options.target_fps,
-        options.grayscale_bits,
-        options.resampling_filter,
-        options.include_last_frame,
-    )?;
+    let mut frame_data = image_processing::FrameData::new(image_data, &args)?;
 
-    let blueprint = blueprint::generate_blueprint(
-        options.name.to_string(),
-        &mut frame_data,
-        options.use_dlc,
-        options.grayscale_bits,
-        options.substation_quality,
-        options.use_green_lamp_wires,
-        options.use_horizontal_lamp_wires,
-    )?;
+    let blueprint = blueprint::generate_blueprint(&mut frame_data, &args)?;
     let mut encoder = blueprint::BlueprintEncoder::new(blueprint);
     let mut buf = Vec::new();
 
@@ -96,7 +55,7 @@ pub async fn run_blueprint(
     Reflect::set(
         &obj,
         &JsValue::from_str("label"),
-        &JsValue::from_str(&options.name.to_string()),
+        &JsValue::from_str(&args.name.to_string()),
     )?;
 
     on_group_ready.call1(&JsValue::NULL, &obj)?;

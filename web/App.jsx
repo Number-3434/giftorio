@@ -16,6 +16,7 @@ const _INITIAL_VALUES = {
 	grayscaleBits: 0,
 	wireColor: "green",
 	connectionDirection: "horizontal",
+	compressionLevel: 2,
 };
 const FILTER_TYPES = ["catrom", "gaussian", "lanczos3", "nearest", "triangle"];
 const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
@@ -48,6 +49,104 @@ const INITIAL_VALUES = (() => {
 		return { ..._INITIAL_VALUES };
 	}
 })();
+const FORM_ELEMENTS = {
+	useDLC: {
+		name: "Use Space Age DLC?",
+		type: "checkbox",
+		tooltip: [
+			"If enabled, dramatically increases the number of available signals,",
+			"reducing the number of combinators in the blueprint by ~15x.",
+			"It also allows for higher quality substations.",
+			"\n\nRequires the Space Age DLC (v0.2.77 or later).",
+		].join(" "),
+	},
+	includeLastFrame: {
+		name: "Include Last Frame",
+		type: "checkbox",
+		tooltip: [
+			"If enabled, the last frame of the GIF may be included.",
+			"Usually this should be disabled unless it is desirable to see the last frame of the GIF (and the GIF doesn't loop).",
+			"\n\nThis option will interfere with GIF looping as it will always an extra frame at the end.",
+			"For example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames, one at the start, and one at the end.",
+			"\n\nWith this option disabled, the output GIF will only have 1 frame.",
+		].join(" "),
+	},
+	grayscaleBits: {
+		name: "Color Mode",
+		type: "select",
+		tooltip: [
+			"Full color will try to match the original GIF colors.",
+			"\n\nIf the blueprint is very large, using grayscale will greatly reduce the size.",
+			"Grayscale is also recommended (and has no visual difference compared to Full color) for black-and-white GIFs.",
+			"\n\n8-bit grayscale has 256 shades of gray and can reduce the blueprint size by 60-70%,",
+			"while 4-bit grayscale has 16 shades of gray and can reduce the blueprint size by up to 85%.",
+			"Full black and white is roughly 32x smaller than full color.",
+		].join(" "),
+		options: {
+			["0"]: "Full Color",
+			["8"]: "8-bit Grayscale (256 shades)",
+			["4"]: "4-bit Grayscale (16 shades)",
+			["1"]: "1-bit (black & white only)",
+		},
+	},
+	resamplingFilter: {
+		name: "Resampling Filter",
+		type: "select",
+		tooltip: [
+			"The filter used to resample the image.",
+			"\n",
+			"\n<strong>Catmull-Rom</strong> (the default) has good sharpness,",
+			"temporal stability, low ringing, low shimmer, and predictable behaviour across resolutions.",
+			"\n<strong>Lanczos3</strong> is the best high-quality, sharp filter but can shimmer.",
+			"\n<strong>Gaussian</strong> generates very smooth outputs but can blur pixel art.",
+			'\n<strong>Nearest</strong> generates crisp outputs but may look "blocky".',
+			"\n<strong>Triangle</strong> is a basic inexpensive, low-quality filter.",
+		].join(" "),
+		options: {
+			catrom: "Catmull-Rom",
+			gaussian: "Gaussian",
+			lanczos3: "Lanczos3",
+			nearest: "Nearest",
+			triangle: "Triangle",
+		},
+	},
+	wireColor: {
+		name: "Wire Colour",
+		type: "select",
+		tooltip: [
+			"The colour of the wires used to connect the lamps.",
+			"\n",
+			"\n<strong>Green</strong> is usually recommended as green wires connect horizontally in straight lines and take up the least space.",
+			"\n<strong>Red</strong> wires are darker and harder to see but take up more space as the wire does not connect straight.",
+			"\n",
+			"\nThe wire colour used will slightly tint the image the same colour.",
+			"Note that changing this setting will completely flip all wires (all red wires become green, all green wires become red, and vice versa).",
+			"There will always be a horizontal wire of the other colour connecting the lamps together at the top row.",
+		].join(" "),
+		options: {
+			green: "Green",
+			red: "Red",
+		},
+	},
+	connectionDirection: {
+		name: "Wire Connection Direction",
+		type: "select",
+		tooltip: [
+			"Whether the majority of wires on the lamps should connect horizontally to the next lamps or vertically.",
+			"\n",
+			"\n<strong>Horizontal</strong> connections are usually recommended as they take minimal screen space,",
+			"but require vertical connections between groups that may be quite visible.",
+			"\n<strong>Vertical</strong> connections are much more noticeable, but chunk seams are invisible.",
+			"\n",
+			"\nRed wires only connect straight vertically.",
+			"\nGreen wires connect straight both horizontally and vertically.",
+		].join(" "),
+		options: {
+			horizontal: "Horizontal",
+			vertical: "Vertical",
+		},
+	},
+};
 
 function App({ worker }) {
 	// State
@@ -145,19 +244,23 @@ function App({ worker }) {
 		try {
 			const imageData = new Uint8Array(await formData.file.arrayBuffer());
 			worker.postMessage({
-				type: "generate",
-				name: formData.file.name,
-				imageData,
-				imageType: formData.file.type.substring(6 /* image/ */),
-				targetFps: +formData.targetFps,
-				maxSize: +formData.maxSize,
-				useDLC: !!formData.useDLC,
-				includeLastFrame: !!formData.includeLastFrame,
-				substationQuality: formData.substationQuality,
-				grayscaleBits: +formData.grayscaleBits,
-				resamplingFilter: formData.resamplingFilter,
-				useGreenLampWires: formData.wireColor === "green",
-				useHorizontalLampWires: formData.connectionDirection === "horizontal",
+				generate: {
+					imageData,
+					args: {
+						name: formData.file.name,
+						imageType: formData.file.type.substring(6 /* image/ */),
+						targetFps: +formData.targetFps,
+						maxSize: +formData.maxSize,
+						useDLC: !!formData.useDLC,
+						includeLastFrame: !!formData.includeLastFrame,
+						substationQuality: formData.substationQuality,
+						grayscaleBits: +formData.grayscaleBits,
+						resamplingFilter: formData.resamplingFilter,
+						useGreenLampWires: formData.wireColor === "green",
+						useHorizontalLampWires: formData.connectionDirection === "horizontal",
+						compressionLevel: +formData.compressionLevel,
+					},
+				},
 			});
 		} catch (err) {
 			console.error("Failed to process file:", err);
@@ -292,17 +395,24 @@ function App({ worker }) {
 							</div>
 						</div>
 						<form onSubmit={handleSubmit} class="panel-inset-light bg-gray-500 p-6 rounded shadow-md w-full max-w-md">
-							{/* File Input */}
-							<div class="mb-4">
-								<input
-									ref={(el) => (formRefs.gifInput = el)}
-									class="text-white-500 w-full focus:outline-none focus:ring"
-									type="file"
-									id="gifInput"
-									required
-									onChange={(e) => setFormData("file", e.target.files[0])}
-									accept="image/gif,image/webp"
-								/>
+							<div class="mb-4 flex items-center justify-between">
+								{/* File Input */}
+								<div class="">
+									<input
+										ref={(el) => (formRefs.gifInput = el)}
+										class="text-white-500 w-full focus:outline-none focus:ring"
+										type="file"
+										id="gifInput"
+										required
+										onChange={(e) => setFormData("file", e.target.files[0])}
+										accept="image/gif,image/webp"
+									/>
+								</div>
+
+								{/* <div>
+									<div class="text-gray-400">asd</div>
+									<div class="text-gray-400">asd</div>
+								</div> */}
 							</div>
 
 							{/* Max Size Input */}
@@ -358,83 +468,6 @@ function App({ worker }) {
 						</div>
 
 						<div class="panel-inset-light p-3 shadow-md w-full max-w-md">
-							{/* Last Frame toggle */}
-							<div class="mb-1 flex">
-								<label class="checkbox-label">
-									<input
-										type="checkbox"
-										class="sr-only"
-										checked={formData.includeLastFrame}
-										onChange={(e) => setFormData("includeLastFrame", e.currentTarget.checked)}
-									/>
-									<div class="checkbox"></div>
-									<div class="ml-3 text-white-500">
-										Include Last Frame
-										<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-										<span className="tooltip">
-											If enabled, the last frame of the GIF may be included. Usually this should be disabled unless it
-											is desirable to see the last frame of the GIF (and the GIF doesn't loop).
-											<br />
-											<br />
-											This option will interfere with GIF looping as it will always an extra frame at the end. For
-											example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames,
-											one at the start, and one at the end. With this option disabled, the output GIF will only have 1
-											frame.
-										</span>
-									</div>
-								</label>
-							</div>
-
-							{/* DLC toggle */}
-							<div class="mb-1 flex">
-								<label class="checkbox-label">
-									<input
-										type="checkbox"
-										class="sr-only"
-										checked={formData.useDLC}
-										onChange={(e) => setFormData("useDLC", e.currentTarget.checked)}
-									/>
-									<div class="checkbox"></div>
-									<div class="ml-3 text-white-500">
-										Use Space Age DLC?
-										<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-										<span className="tooltip">
-											If enabled, dramatically increases the number of available signals, reducing the number of
-											combinators in the blueprint by ~15x. It also allows for higher quality substations.
-											<br />
-											<br />
-											Requires the Space Age DLC (v0.2.77 or later).
-										</span>
-									</div>
-								</label>
-							</div>
-
-							{/* Substation Quality Select */}
-							<div class="mb-1 flex items-center justify-between">
-								<label class="block text-white-500 mb-2" for="substationQuality">
-									Substation Quality
-								</label>
-								<select
-									ref={(el) => (formRefs.substationQuality = el)}
-									id="substationQuality"
-									name="substationQuality"
-									class="bg-gray-100 w-30 px-4 py-1 font-semibold border focus:outline-none focus:ring"
-									value={formData.substationQuality}
-									onChange={(e) => setFormData("substationQuality", e.currentTarget.value)}
-								>
-									<option value="normal">Normal</option>
-									{formData.useDLC && (
-										<>
-											<option value="uncommon">Uncommon</option>
-											<option value="rare">Rare</option>
-											<option value="epic">Epic</option>
-											<option value="legendary">Legendary</option>
-										</>
-									)}
-									<option value="none">None</option>
-								</select>
-							</div>
-
 							{/* Framerate Input */}
 							<div class="mb-1 flex items-center justify-between">
 								<label className="block text-white-500 mb-2" htmlFor="framerate">
@@ -466,154 +499,72 @@ function App({ worker }) {
 								</div>
 							</div>
 
-							{/* Color Mode */}
+							{/* Compression Level */}
 							<div class="mb-1 flex items-center justify-between">
-								<label class="text-white-500" for="grayscaleBits">
-									Color Mode
+								<label className="block text-white-500 mb-2" htmlFor="compressionLevel">
+									Compression Level
 									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
 									<span className="tooltip">
-										Full color will try to match the original GIF colors.
+										Turns on compression, which can dramatically reduce file size at the cost of using a lot more
+										combinators.
 										<br />
 										<br />
-										If the blueprint is very large, using grayscale will greatly reduce the size. Grayscale is also
-										recommended (and has no visual difference compared to Full color) for black-and-white GIFs.
-										<br />
-										<br />
-										8-bit grayscale has 256 shades of gray and can reduce the blueprint size by 60-70%, while 4-bit
-										grayscale has 16 shades of gray and can reduce the blueprint size by up to 85%. Full black and white
-										is roughly 32x smaller than full color.
+										This option uses basic temporal compression, so any pixels that remain unchanged throughout the
+										frames will be compressed into a single combinator. The compression level indicates the number of
+										frames this will occur over (e.g. compression level 1 is no compression, level 2 means any pixles in
+										the last frame that did not change in the previous frame will be compressed into a single combinator
+										instead of using two combinators.)
 									</span>
 								</label>
-								<select
-									ref={(el) => (formRefs.grayscaleBits = el)}
-									id="grayscaleBits"
-									name="grayscaleBits"
-									class="bg-gray-100 px-2 py-1.5 border focus:outline-none focus:ring"
-									value={formData.grayscaleBits}
-									onChange={(e) => setFormData("grayscaleBits", parseInt(e.currentTarget.value))}
-								>
-									<option value="0">Full Color</option>
-									<option value="8">8-bit Grayscale (256 shades)</option>
-									<option value="4">4-bit Grayscale (16 shades)</option>
-									<option value="1">1-bit (black & white only)</option>
-								</select>
-							</div>
 
-							{/* Filter Type */}
+								<div class="flex items-center gap-3 w-20">
+									<input
+										ref={(el) => (formRefs.compressionLevel = el)}
+										class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
+										type="number"
+										id="compressionLevel"
+										min="1"
+										max="15"
+										step="1"
+										value={formData.compressionLevel}
+										onChange={(e) => setFormData("compressionLevel", e.target.value)}
+										placeholder="Enter compression level (1-5)"
+									/>
+								</div>
+							</div>
+							{/* Substation Quality Select */}
 							<div class="mb-1 flex items-center justify-between">
-								<label class="text-white-500" for="resamplingFilter">
-									Resampling Filter
-									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<div className="tooltip">
-										The filter used to resample the image.
-										<br />
-										<br />
-										<br />
-										<strong>Catmull-Rom</strong> (the default) is a cubic filter with good sharpness, temporal
-										stability, low ringing, low shimmer, and predictable behaviour across resolutions.
-										<br />
-										<br />
-										<strong>Lanczos3</strong> is the best high-quality, sharp filter but can shimmer. It can give
-										extremely detailed outputs, but is ununstable. It uses a large kernel, may introduce ringing,
-										amplifies tiny differences, and is not temporally stable.
-										<br />
-										<br />
-										<strong>Gaussian</strong> generates very smooth outputs but softens detail. It is the most
-										temporally stable filter, and smoothens out noise, palette differences, dithering, shimmer, crawling
-										pixels, etc, but also softens edges, reduces detail, and can blur pixel art.
-										<br />
-										<br />
-										<strong>Nearest</strong> is a simple, low-quality, low-detail filter that is fast and simple. It is
-										the mathematically the stablest filter, using no interpolation, and garuntees no flicker, but may
-										look "blocky". Nearest is crisp, pixelated, harsh on the edges, but is the cleanest and most stable
-										filter.
-										<br />
-										<br />
-										<strong>Triangle</strong> is a CPU-friendly, low-quality, low-detail filter that is fast and simple.
-										It is the least stable of the filters, but also the least CPU-expensive. Triangle filter should work
-										fine for most resolutions, but can introduce extreme artifacts at specific resolutions.
-									</div>
+								<label class="block text-white-500 mb-2" for="substationQuality">
+									Substation Quality
 								</label>
 								<select
-									ref={(el) => (formRefs.resamplingFilter = el)}
-									id="resamplingFilter"
-									name="resamplingFilter"
-									class="bg-gray-100 px-4 py-1 pr-50 border font-semibold focus:outline-none focus:ring"
-									value={formData.resamplingFilter}
-									onChange={(e) => setFormData("resamplingFilter", e.currentTarget.value)}
+									ref={(el) => (formRefs.substationQuality = el)}
+									id="substationQuality"
+									name="substationQuality"
+									class="bg-gray-100 w-30 px-4 py-1 font-semibold border focus:outline-none focus:ring"
+									value={formData.substationQuality}
+									onChange={(e) => setFormData("substationQuality", e.currentTarget.value)}
 								>
-									<option value="catrom">Catmull-Rom</option>
-									<option value="gaussian">Gaussian</option>
-									<option value="lanczos3">Lanczos3</option>
-									<option value="nearest">Nearest</option>
-									<option value="triangle">Triangle</option>
+									<option value="normal">Normal</option>
+									{formData.useDLC && (
+										<>
+											<option value="uncommon">Uncommon</option>
+											<option value="rare">Rare</option>
+											<option value="epic">Epic</option>
+											<option value="legendary">Legendary</option>
+										</>
+									)}
+									<option value="none">None</option>
 								</select>
 							</div>
-
-							{/* Wire Color */}
-							<div class="mb-1 flex items-center justify-between">
-								<label class="text-white-500" for="wireColor">
-									Wire Colour
-									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<div className="tooltip">
-										The colour of the wires used to connect the lamps. Green is usually recommended as green wires
-										connect horizontally in straight lines and take up the least space. Red wires are darker and harder
-										to see but take up more space as the wire does not connect straight.
-										<br />
-										<br />
-										Note that the wire colour used will slightly tint the image the same colour. Also note that changing
-										this setting will completely flip all wires (all red wires become green, all green wires become red,
-										and vice versa).
-										<br />
-										<br />
-										Note that there will always be a horizontal wire of the other colour connecting the lamps together
-										at the top row.
-									</div>
-								</label>
-								<select
-									ref={(el) => (formRefs.wireColor = el)}
-									id="wireColor"
-									name="wireColor"
-									class="bg-gray-100 font-semibold px-5 py-1 border rounded focus:outline-none focus:ring"
-									value={formData.wireColor}
-									onChange={(e) => setFormData("wireColor", e.currentTarget.value)}
-								>
-									<option value="green">Green</option>
-									<option value="red">Red</option>
-								</select>
-							</div>
-
-							{/* Wire Connection */}
-							<div class="mb-1 flex items-center justify-between">
-								<label class="text-white-500" for="connectionDirection">
-									Wire Connection Direction
-									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<div className="tooltip">
-										Whether the majority of wires on the lamps should connect horizontally to the next lamps or
-										vertically.
-										<br />
-										<br />
-										Horizontal connections are usually recommended as they are more visually pleasing and take minimal
-										screen space with green wires. Red wires can also connect horizontally and do not take up space on
-										the lamps themselves.
-										<br />
-										<br />
-										Red wires only connect straight vertically. Green wires connect straight both horizontally and
-										vertically.
-									</div>
-								</label>
-								<select
-									ref={(el) => (formRefs.connectionDirection = el)}
-									id="connectionDirection"
-									name="connectionDirection"
-									class="bg-gray-100 w-30 font-semibold px-5 py-1 border rounded focus:outline-none focus:ring"
-									value={formData.connectionDirection}
-									onChange={(e) => setFormData("connectionDirection", e.currentTarget.value)}
-								>
-									<option value="horizontal">Horizontal</option>
-									<option value="vertical">Vertical</option>
-								</select>
-							</div>
+							{Object.entries(FORM_ELEMENTS).map(([k, v]) =>
+								makeFormElement({
+									formData,
+									formRefs,
+									setFormData,
+									obj: { [k]: v },
+								}),
+							)}
 						</div>
 					</div>
 
@@ -702,6 +653,72 @@ function App({ worker }) {
 			</div>
 		</>
 	);
+}
+
+function makeFormElement({ formData, formRefs, setFormData, obj }) {
+	const k = Object.keys(obj)[0];
+	const v = obj[k];
+	const { name, tooltip = null, type } = v;
+
+	function mkTooltip(text) {
+		if (!text) {
+			return null;
+		}
+
+		const el = document.createElement("div");
+		el.classList.add("tooltip");
+		el.innerHTML = text.replaceAll("\n", "<br />");
+
+		return (
+			<>
+				<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
+				{el}
+			</>
+		);
+	}
+
+	if (type === "checkbox") {
+		return (
+			<div class="mb-1 flex">
+				<label class="checkbox-label">
+					<input
+						type="checkbox"
+						class="sr-only"
+						checked={formData[k]}
+						onChange={(e) => setFormData(k, e.currentTarget.checked)}
+					/>
+					<div class="checkbox"></div>
+					<div class="ml-3 text-white-500">
+						{name}
+						{mkTooltip(tooltip)}
+					</div>
+				</label>
+			</div>
+		);
+	} else if (type === "select") {
+		const { options } = v;
+
+		return (
+			<div class="mt-1 mb-1 flex items-center justify-between factorio-select-container">
+				<label class="block text-white-500" for={k}>
+					{name}
+					{mkTooltip(tooltip)}
+				</label>
+				<select
+					ref={(e) => (formRefs[k] = e)}
+					id={k}
+					name={k}
+					class="bg-gray-100 font-semibold border focus:outline-none focus:ring"
+					value={formData[k]}
+					onChange={(e) => setFormData(k, e.currentTarget.value)}
+				>
+					{Object.entries(options).map(([k, v]) => (
+						<option value={k}>{v}</option>
+					))}
+				</select>
+			</div>
+		);
+	}
 }
 
 export default App;

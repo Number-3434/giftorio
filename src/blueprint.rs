@@ -10,6 +10,33 @@ use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 100;
 
+#[derive(serde::Deserialize)]
+pub struct BlueprintArgs {
+    pub name: String,
+    #[serde(rename = "imageType")]
+    pub image_type: String,
+    #[serde(rename = "compressionLevel")]
+    pub compression_level: u32,
+    #[serde(rename = "includeLastFrame")]
+    pub include_last_frame: bool,
+    #[serde(rename = "useDLC")]
+    pub use_dlc: bool,
+    #[serde(rename = "targetFps")]
+    pub target_fps: u32,
+    #[serde(rename = "maxSize")]
+    pub max_size: u32,
+    #[serde(rename = "substationQuality")]
+    pub substation_quality: String,
+    #[serde(rename = "grayscaleBits")]
+    pub grayscale_bits: u32,
+    #[serde(rename = "resamplingFilter")]
+    pub resampling_filter: String,
+    #[serde(rename = "useGreenLampWires")]
+    pub use_green_lamp_wires: bool,
+    #[serde(rename = "useHorizontalLampWires")]
+    pub use_horizontal_lamp_wires: bool,
+}
+
 pub struct BlueprintEncoder {
     blueprint: Blueprint,
     current_chunk_idx: usize,
@@ -231,7 +258,7 @@ pub fn generate_timer(
         wires.push([6, 4, 3, 4]);
     }
 
-    (entities, wires)
+    return (entities, wires);
 }
 
 /// Generates substation entities and wires for powering the blueprint.
@@ -319,12 +346,13 @@ pub fn generate_substations(
             current_entity += 1;
         }
     }
-    (
+
+    return (
         substation_entities,
         substation_wires,
         occupied_cells,
         current_entity,
-    )
+    );
 }
 
 /// Generates combinator entities and wiring for each frame group.
@@ -343,6 +371,7 @@ pub fn generate_substations(
 /// # Returns
 ///
 /// A tuple containing combinator entities, their wires, and the next entity number.
+/// Does not populate combinators with data.
 pub fn generate_frame_combinators(
     n_chunks: u32,
     occupied_y: &HashSet<i32>,
@@ -436,16 +465,16 @@ pub fn generate_frame_combinators(
     }
 
     let mut first_decider = true;
-    let mut x_offset = 0.0;
-    let mut y_offset = 0.0;
+    let (mut x_offset, mut y_offset) = (0.0, 0.0);
     let mut row_in_this_column = 0;
-    let mut previous_first_decider: Option<u32> = None;
+    let mut prev_first_decider: Option<u32> = None;
 
+    // Generates combinators up to down, then left ro right.
     for _ in 0..n_chunks as usize {
-        let mut current_y = base_y - row_in_this_column as f64 - y_offset;
-        if occupied_y.contains(&(current_y.floor() as i32)) {
+        let mut curr_y = base_y - (row_in_this_column as f64) - y_offset;
+        if occupied_y.contains(&(curr_y.floor() as i32)) {
             y_offset += 2.0;
-            current_y -= 2.0;
+            curr_y -= 2.0;
         }
         let decider_num = curr_entity_idx + 1;
 
@@ -453,21 +482,22 @@ pub fn generate_frame_combinators(
             Entity::new(
                 decider_num,
                 DECIDER_COMB,
-                Position::new(base_decider_x + x_offset, current_y),
+                Position::new(base_decider_x + x_offset, curr_y),
             )
             .with_direction(DIR_RIGHT),
         );
 
         if !first_decider {
-            let previous_decider_id = decider_num - 2;
-            wires.push([previous_decider_id, 2, decider_num, 2]);
-            wires.push([previous_decider_id, 3, decider_num, 3]);
+            // Wire to previous decider
+            let prev_decider_id = decider_num - 2;
+            wires.push([prev_decider_id, 2, decider_num, 2]);
+            wires.push([prev_decider_id, 3, decider_num, 3]);
         } else {
-            if let Some(prev) = previous_first_decider {
+            if let Some(prev) = prev_first_decider {
                 wires.push([prev, 2, decider_num, 2]);
                 wires.push([prev, 3, decider_num, 3]);
             }
-            previous_first_decider = Some(decider_num);
+            prev_first_decider = Some(decider_num);
         }
 
         first_decider = false;
@@ -481,7 +511,8 @@ pub fn generate_frame_combinators(
             x_offset += 2.0;
         }
     }
-    (other_entities, new_entities, wires, curr_entity_idx)
+
+    return (other_entities, new_entities, wires, curr_entity_idx);
 }
 
 /// Generates a grid of lamp entities for the blueprint.
@@ -571,7 +602,8 @@ pub fn generate_lamps(
             current_entity += 1;
         }
     }
-    (lamp_entities, lamp_wires, current_entity, top_right_lamp)
+
+    return (lamp_entities, lamp_wires, current_entity, top_right_lamp);
 }
 
 /// Builds the complete blueprint JSON by combining all components.
@@ -589,27 +621,22 @@ pub fn generate_lamps(
 ///
 /// The final blueprint as a struct.
 pub fn generate_blueprint(
-    name: String,
     frame_data: &mut FrameData,
-    use_dlc: bool,
-    grayscale_bits: u32,
-    substation_quality: String,
-    use_green_lamp_wires: bool,
-    use_horizontal_lamp_wires: bool,
+    args: &BlueprintArgs,
 ) -> Result<Blueprint, JsValue> {
     report_progress(0, "Starting blueprint update");
 
     // Get signals internally.
-    let signals: Vec<Arc<Signal>> = get_signals_with_quality(use_dlc);
+    let signals: Vec<Arc<Signal>> = get_signals_with_quality(args.use_dlc);
 
     if frame_data.total_frames() == 0 {
         return Err(JsValue::from_str("No sampled frames"));
     }
 
-    let use_grayscale = grayscale_bits > 0;
-    let n_frames = frame_data.total_frames() as u32;
-    let frames_per_combinator = if grayscale_bits > 0 {
-        32 / grayscale_bits
+    let use_grayscale = args.grayscale_bits > 0;
+    let n_frames = frame_data.total_frames();
+    let frames_per_combinator = if args.grayscale_bits > 0 {
+        32 / args.grayscale_bits
     } else {
         1
     };
@@ -622,15 +649,20 @@ pub fn generate_blueprint(
             "Not enough signals for even one column of lamps!",
         ));
     }
-    let max_rows_per_group = (((n_frames as f64 / ((max_columns_per_group as f64 / 2.0).floor()))
-        .ceil())
+    let max_rows_per_group = (((n_frames as f64 * args.compression_level as f64
+        / ((max_columns_per_group as f64 / 2.0).floor()))
+    .ceil())
         / frames_per_combinator as f64)
         .ceil() as u32;
 
     let ticks_per_frame = (60.0 / frame_data.fps() as f64) as u32;
     let stop = n_frames * ticks_per_frame;
-    let (timer_entities, timer_wires) =
-        generate_timer(stop, grayscale_bits, ticks_per_frame, frames_per_combinator);
+    let (timer_entities, timer_wires) = generate_timer(
+        stop,
+        args.grayscale_bits,
+        ticks_per_frame,
+        frames_per_combinator,
+    );
 
     let mut all_entities = timer_entities;
     let mut all_wires: Vec<Wire> = timer_wires;
@@ -643,11 +675,11 @@ pub fn generate_blueprint(
     report_progress(0.10, "Generating power grid");
     let (substation_entities, substation_wires, occupied_cells, next_entity_new) =
         generate_substations(
-            substation_quality,
+            args.substation_quality.clone(),
             full_width,
             full_height,
             max_rows_per_group
-                + match grayscale_bits {
+                + match args.grayscale_bits {
                     1 | 4 => 2,
                     8 => 1,
                     _ => 0,
@@ -678,17 +710,17 @@ pub fn generate_blueprint(
 
         let (other_entities, data_combinators, mut group_comb_wires, new_next_entity) =
             generate_frame_combinators(
-                n_frames.div_ceil(frames_per_combinator),
+                (n_frames * args.compression_level).div_ceil(frames_per_combinator),
                 &substation_occupied_y,
                 next_entity,
                 group_offset_x as f64 + 0.5,
-                match grayscale_bits {
+                match args.grayscale_bits {
                     1 | 4 => -5.0,
                     8 => -4.0,
                     _ => -3.0,
                 },
                 max_rows_per_group,
-                grayscale_bits,
+                args.grayscale_bits,
             );
         if group_index == 0 {
             group_comb_wires.push([3, 4, first_connection_entity, 2]);
@@ -704,14 +736,14 @@ pub fn generate_blueprint(
             group_offset_x as i32,
             0,
             use_grayscale,
-            use_horizontal_lamp_wires,
+            args.use_horizontal_lamp_wires,
         );
         next_entity = new_next_entity;
 
         let first_lamp_entity = group_lamps[0].entity_number;
         if use_grayscale {
             group_comb_wires.push([first_lamp_entity, 2, first_connection_entity, 2]);
-            let last_shifter = if grayscale_bits == 1 || grayscale_bits == 4 {
+            let last_shifter = if args.grayscale_bits == 1 || args.grayscale_bits == 4 {
                 first_connection_entity + 2
             } else {
                 first_connection_entity + 1
@@ -762,6 +794,7 @@ pub fn generate_blueprint(
         .collect();
 
     let mk_control_behaviour = |i: usize, outputs: Vec<CombinatorOutput>| -> ControlBehavior {
+        // Bounds e.g. 8-16, 16-24, etc.
         let lower_bound = (i as u32 * ticks_per_group) as i32;
         let upper_bound = ((i as u32 + 1) * ticks_per_group) as i32;
 
@@ -810,14 +843,14 @@ pub fn generate_blueprint(
                 outputs = pack_grayscale_frames_to_outputs(
                     &state.grayscale_buffer,
                     signals.clone(),
-                    grayscale_bits,
+                    args.grayscale_bits,
                 )?;
             } else {
                 outputs = frame_to_outputs(&cropped, signals.clone())?;
             }
 
-            let target_entity_number =
-                all_data_combinator_entity_indexes[group_i as usize][state.curr_chunk_idx];
+            let target_entity_number = all_data_combinator_entity_indexes[(group_i) as usize]
+                [state.curr_chunk_idx * args.compression_level as usize];
 
             // Increment entity index until we find the data combinator for this group
             while all_entities[state.curr_entity_idx].entity_number < target_entity_number {
@@ -835,7 +868,7 @@ pub fn generate_blueprint(
     }
 
     // Swap all wires if requested (default uses red wires, so swap all for green)
-    if use_green_lamp_wires {
+    if args.use_green_lamp_wires {
         fn get_swap(x: u32) -> u32 {
             match x {
                 1 => 2, // circuit_green / combinator_input_green -> circuit_red / combinator_input_red
@@ -861,7 +894,7 @@ pub fn generate_blueprint(
             entities: all_entities,
             wires: all_wires,
             item: BLUEPRINT,
-            label: name.clone(),
+            label: args.name.clone(),
             version: BLUEPRINT_VERSION,
         },
     };
@@ -904,6 +937,7 @@ pub fn frame_to_outputs(
         let signal = Arc::clone(&signals[i]);
         outputs.push(CombinatorOutput::new(signal, Some(value)));
     }
+
     Ok(outputs)
 }
 

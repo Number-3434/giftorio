@@ -1,3 +1,4 @@
+use crate::blueprint::BlueprintArgs;
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_SECOND};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
 use crate::progress::set_progress;
@@ -58,22 +59,16 @@ impl FrameData<'_> {
     }
 }
 impl<'a> FrameData<'a> {
-    pub fn new(
-        image_data: &'a [u8],
-        image_type: String,
-        max_size: u32,
-        target_fps: u32,
-        grayscale_bits: u32,
-        resampling_filter: String,
-        include_last_frame: bool,
-    ) -> Result<Self, JsValue> {
-        let frame_data = get_frames(&image_data, &image_type)?;
+    pub fn new(image_data: &'a [u8], args: &BlueprintArgs) -> Result<Self, JsValue> {
+        let frame_data = get_frames(&image_data, &args.image_type)?;
 
         let in_dim = frame_data.dimensions();
         let n_frames = frame_data.n_frames();
 
         let (w, h) = (in_dim.0 as f64, in_dim.1 as f64);
-        let scale_factor = (max_size as f64 / w).min(max_size as f64 / h).min(1.0);
+        let scale_factor = (args.max_size as f64 / w)
+            .min(args.max_size as f64 / h)
+            .min(1.0);
 
         fn expected_output_frames(
             total_duration_ms: u32,
@@ -93,7 +88,7 @@ impl<'a> FrameData<'a> {
             buf: Vec::new(),
             curr_frame_idx: 0,
             curr_n_ms: 0,
-            filter_type: match resampling_filter.as_str() {
+            filter_type: match args.resampling_filter.as_str() {
                 "catrom" => FilterType::CatmullRom,
                 "gaussian" => FilterType::Gaussian,
                 "lanczos3" => FilterType::Lanczos3,
@@ -102,19 +97,19 @@ impl<'a> FrameData<'a> {
                 _ => return Err(JsValue::from_str("Invalid resampling filter type")),
             },
             frames: frame_data.frames,
-            grayscale_bits,
+            grayscale_bits: args.grayscale_bits,
             in_dim,
             in_n_frames: n_frames,
-            include_last_frame,
+            include_last_frame: args.include_last_frame,
             next_samp_idx: 0,
             out_dim_raw: ((w * scale_factor), (h * scale_factor)),
             out_n_frames: expected_output_frames(
                 frame_data.total_duration_ms.as_millis() as u32,
-                target_fps.max(1),
-                include_last_frame,
+                args.target_fps.max(1),
+                args.include_last_frame,
             ),
             output_frames: VecDeque::new(),
-            target_fps: target_fps.max(1),
+            target_fps: args.target_fps.max(1),
         };
 
         Ok(obj)

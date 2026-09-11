@@ -17,39 +17,13 @@ async function run() {
 
 			pendingWrites.delete(event.data.id);
 			event.data.error ? pending.reject(new Error(event.data.error)) : pending.resolve();
-		} else if (event.data.type === "generate") {
-			const {
-				name,
-				imageData,
-				imageType,
-				targetFps,
-				maxSize,
-				useDLC,
-				substationQuality,
-				grayscaleBits,
-				resamplingFilter,
-				useGreenLampWires,
-				includeLastFrame,
-				useHorizontalLampWires,
-			} = event.data;
+		} else if (event.data.generate) {
+			const { imageData, args } = event.data.generate;
 
 			try {
 				postMessage({ type: "start", filename: "blueprint.json" });
-
 				await run_blueprint(
-					{
-						name,
-						imageType,
-						useDLC,
-						targetFps,
-						maxSize,
-						includeLastFrame,
-						substationQuality,
-						grayscaleBits,
-						resamplingFilter,
-						useGreenLampWires,
-						useHorizontalLampWires,
-					},
+					args,
 					imageData,
 					data => postMessage({ blueprint: data }),
 					chunk =>
