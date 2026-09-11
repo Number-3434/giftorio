@@ -61,10 +61,10 @@ const FORM_ELEMENTS = {
 		].join(" "),
 	},
 	includeLastFrame: {
-		name: "Include Last Frame",
+		name: "Always Include Last Frame",
 		type: "checkbox",
 		tooltip: [
-			"If enabled, the last frame of the GIF may be included.",
+			"If enabled, the last frame of the GIF will always be included.",
 			"Usually this should be disabled unless it is desirable to see the last frame of the GIF (and the GIF doesn't loop).",
 			"\n\nThis option will interfere with GIF looping as it will always an extra frame at the end.",
 			"For example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames, one at the start, and one at the end.",
