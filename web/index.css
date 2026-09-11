@@ -320,7 +320,7 @@ input[type=checkbox]:checked~.checkbox {
 .tooltip {
     @apply invisible fixed bg-dark-gray-500 text-white-500 text-sm p-2 z-50;
     width: max-content;
-    max-width: 300px;
+    max-width: 500px;
     white-space: normal;
     pointer-events: none;
     box-shadow:

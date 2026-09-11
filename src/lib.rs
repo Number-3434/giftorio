@@ -30,6 +30,8 @@ pub async fn run_blueprint(
     on_group_ready: &js_sys::Function,
     send_chunk: &js_sys::Function,
 ) -> Result<(), JsValue> {
+    console_error_panic_hook::set_once();
+
     let args: BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
 
     // Process the image to extract frames and determine the effective FPS.

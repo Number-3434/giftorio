@@ -3,20 +3,23 @@ use crate::image_processing::{rgb_to_int, FrameData};
 use crate::models::*;
 use crate::progress::{report_progress, set_progress};
 use crate::signals::get_signals_with_quality;
-use image::GenericImageView;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 100;
-
+macro_rules! log {
+    ($($arg:tt)*) => {
+        web_sys::console::log_1(&format!($($arg)*).into());
+    };
+}
 #[derive(serde::Deserialize)]
 pub struct BlueprintArgs {
     pub name: String,
     #[serde(rename = "imageType")]
     pub image_type: String,
-    #[serde(rename = "compressionLevel")]
-    pub compression_level: u32,
+    #[serde(rename = "temporalCompressionBufferMs")]
+    pub temporal_compression_buffer_ms: u32,
     #[serde(rename = "includeLastFrame")]
     pub include_last_frame: bool,
     #[serde(rename = "useDLC")]
@@ -373,7 +376,7 @@ pub fn generate_substations(
 /// A tuple containing combinator entities, their wires, and the next entity number.
 /// Does not populate combinators with data.
 pub fn generate_frame_combinators(
-    n_chunks: u32,
+    n_chunks: u64,
     occupied_y: &HashSet<i32>,
     base_entity_number: u32,
     base_decider_x: f64,
@@ -533,7 +536,7 @@ pub fn generate_frame_combinators(
 ///
 /// A tuple with lamp entities, lamp wires, the next entity number, and the top-right lamp entity.
 pub fn generate_lamps(
-    signals: Vec<Arc<Signal>>,
+    signals: &[Arc<Signal>],
     grid_width: u32,
     grid_height: u32,
     occupied_cells: &HashSet<(i32, i32)>,
@@ -608,6 +611,17 @@ pub fn generate_lamps(
 
 /// Builds the complete blueprint JSON by combining all components.
 ///
+/// EDITS:
+/// 1. Added streaming. The pipeline is now:
+/// - Generate the locations of all entities + wires (combinators, lamps, etc.)
+/// - Iterate through each frame and THEN populate the data of the already-generated entities.
+/// 2. Added compression. The pipeline is now:
+/// - Same as above, but after we accumulate `n` frames we "compress" the data.
+/// - Our compression currently finds any pixels that haven't changed between two frames,
+///   and stores them using a singular combinator instead of two. The larger the compression size,
+///   the more frames we look over. Note that this drastically increases the number of combinators
+///   required, but can also greatly reduce the size of the blueprint.
+///
 /// # Arguments
 ///
 /// * `fps` - Effective frames per second.
@@ -633,9 +647,21 @@ pub fn generate_blueprint(
         return Err(JsValue::from_str("No sampled frames"));
     }
 
+    let n_comp_buf_frames = if args.temporal_compression_buffer_ms > 0 {
+        (args.temporal_compression_buffer_ms as u64).div_ceil(frame_data.fps() as u64) as usize
+    } else {
+        1
+    };
+    let n_comp_frames_per_chunk = if n_comp_buf_frames > 1 { 1 } else { 0 } as usize;
     let use_grayscale = args.grayscale_bits > 0;
     let n_frames = frame_data.total_frames();
-    let frames_per_combinator = if args.grayscale_bits > 0 {
+    let n_scaled_frames = frame_data.total_frames()
+        * if args.temporal_compression_buffer_ms > 0 {
+            2
+        } else {
+            1
+        };
+    let frames_per_comb = if args.grayscale_bits > 0 {
         32 / args.grayscale_bits
     } else {
         1
@@ -649,20 +675,15 @@ pub fn generate_blueprint(
             "Not enough signals for even one column of lamps!",
         ));
     }
-    let max_rows_per_group = (((n_frames as f64 * args.compression_level as f64
-        / ((max_columns_per_group as f64 / 2.0).floor()))
-    .ceil())
-        / frames_per_combinator as f64)
-        .ceil() as u32;
+    let max_rows_per_group =
+        (((n_scaled_frames as f64 / ((max_columns_per_group as f64 / 2.0).floor())).ceil())
+            / frames_per_comb as f64)
+            .ceil() as u32;
 
     let ticks_per_frame = (60.0 / frame_data.fps() as f64) as u32;
     let stop = n_frames * ticks_per_frame;
-    let (timer_entities, timer_wires) = generate_timer(
-        stop,
-        args.grayscale_bits,
-        ticks_per_frame,
-        frames_per_combinator,
-    );
+    let (timer_entities, timer_wires) =
+        generate_timer(stop, args.grayscale_bits, ticks_per_frame, frames_per_comb);
 
     let mut all_entities = timer_entities;
     let mut all_wires: Vec<Wire> = timer_wires;
@@ -693,13 +714,12 @@ pub fn generate_blueprint(
 
     let substation_occupied_y: HashSet<i32> = occupied_cells.iter().map(|(_, y)| *y).collect();
     let mut previous_top_right_lamp: Option<u32> = None;
-    let mut all_data_combinator_entity_indexes: Vec<Vec<u32>> = Vec::new();
+    let mut all_data_comb_entity_indexes: Vec<Vec<u32>> = Vec::new();
 
     for group_index in 0..num_groups {
         let group_left = group_index * max_columns_per_group;
         let group_right = ((group_index + 1) * max_columns_per_group).min(full_width);
         let group_width = group_right - group_left;
-        let signals = signals.clone();
 
         let group_offset_x = group_index * max_columns_per_group;
         let first_connection_entity = if use_grayscale {
@@ -710,7 +730,7 @@ pub fn generate_blueprint(
 
         let (other_entities, data_combinators, mut group_comb_wires, new_next_entity) =
             generate_frame_combinators(
-                (n_frames * args.compression_level).div_ceil(frames_per_combinator),
+                (n_scaled_frames as u64).div_ceil(frames_per_comb as u64),
                 &substation_occupied_y,
                 next_entity,
                 group_offset_x as f64 + 0.5,
@@ -728,7 +748,7 @@ pub fn generate_blueprint(
         next_entity = new_next_entity;
 
         let (group_lamps, mut group_lamp_wires, new_next_entity, top_right_lamp) = generate_lamps(
-            signals.clone(),
+            &signals,
             group_width,
             full_height,
             &occupied_cells,
@@ -760,7 +780,7 @@ pub fn generate_blueprint(
         previous_top_right_lamp = Some(top_right_lamp);
 
         // Track the entity indexes of the data combinators for each group
-        all_data_combinator_entity_indexes
+        all_data_comb_entity_indexes
             .push(data_combinators.iter().map(|e| e.entity_number).collect());
 
         all_entities.extend(other_entities);
@@ -778,94 +798,41 @@ pub fn generate_blueprint(
     }
 
     struct GroupPatchState {
-        curr_chunk_idx: usize,  // which *chunk* we’re patching (not frame)
-        curr_entity_idx: usize, // which data combinator we’re patching
-        grayscale_buffer: Vec<image::DynamicImage>,
+        curr_chunk_idx: usize, // which *chunk* we’re patching (not frame)
+        grayscale_buf: Vec<image::DynamicImage>,
+        output_buf: Vec<Vec<i32>>,
     }
 
-    let ticks_per_group = ticks_per_frame * frames_per_combinator;
+    let ticks_per_group = ticks_per_frame * frames_per_comb;
 
     let mut patch_states: Vec<GroupPatchState> = (0..num_groups)
         .map(|_| GroupPatchState {
             curr_chunk_idx: 0,
-            curr_entity_idx: 0,
-            grayscale_buffer: Vec::with_capacity(frames_per_combinator as usize),
+            grayscale_buf: Vec::with_capacity(frames_per_comb as usize),
+            output_buf: Vec::with_capacity(n_comp_buf_frames),
         })
         .collect();
 
-    let mk_control_behaviour = |i: usize, outputs: Vec<CombinatorOutput>| -> ControlBehavior {
-        // Bounds e.g. 8-16, 16-24, etc.
-        let lower_bound = (i as u32 * ticks_per_group) as i32;
-        let upper_bound = ((i as u32 + 1) * ticks_per_group) as i32;
-
-        return ControlBehavior::Decider {
+    let mk_control_behaviour =
+        |range: (i32, i32), outputs: Vec<CombinatorOutput>| ControlBehavior::Decider {
             decider_conditions: DeciderConditions {
                 conditions: vec![
                     Condition {
                         first_signal: Signal::new_virtual(SIGNAL_T),
-                        constant: lower_bound,
+                        constant: range.0,
                         comparator: COMPARATOR_GE,
                         compare_type: None,
                     },
                     Condition {
                         first_signal: Signal::new_virtual(SIGNAL_T),
-                        constant: upper_bound,
+                        constant: range.1,
                         comparator: COMPARATOR_LT,
                         compare_type: Some(COMPARE_AND),
                     },
                 ],
-                outputs: outputs.clone(), // Cloning the outputs once per entity.
+                outputs,
             },
         };
-    };
-
-    for frame in frame_data.by_ref() {
-        let frame = frame?;
-
-        for group_i in 0..num_groups {
-            let state = &mut patch_states[group_i as usize];
-
-            let group_left = group_i * max_columns_per_group;
-            let group_right = ((group_i + 1) * max_columns_per_group).min(full_width);
-            let group_width = group_right - group_left;
-
-            let cropped = frame.crop_imm(group_left, 0, group_width, full_height);
-            let outputs: Vec<CombinatorOutput>;
-
-            if use_grayscale {
-                state.grayscale_buffer.push(cropped);
-
-                // wait until we have a full chunk for this group
-                if state.grayscale_buffer.len() < frames_per_combinator as usize {
-                    continue;
-                }
-
-                outputs = pack_grayscale_frames_to_outputs(
-                    &state.grayscale_buffer,
-                    signals.clone(),
-                    args.grayscale_bits,
-                )?;
-            } else {
-                outputs = frame_to_outputs(&cropped, signals.clone())?;
-            }
-
-            let target_entity_number = all_data_combinator_entity_indexes[(group_i) as usize]
-                [state.curr_chunk_idx * args.compression_level as usize];
-
-            // Increment entity index until we find the data combinator for this group
-            while all_entities[state.curr_entity_idx].entity_number < target_entity_number {
-                state.curr_entity_idx += 1;
-            }
-
-            // Update the data combinator. Note this uses the real frame index at all times.
-            all_entities[state.curr_entity_idx] = all_entities[state.curr_entity_idx]
-                .clone()
-                .with_control_behavior(mk_control_behaviour(state.curr_chunk_idx, outputs.clone()));
-
-            state.curr_chunk_idx += 1;
-            state.grayscale_buffer.clear();
-        }
-    }
 
     // Swap all wires if requested (default uses red wires, so swap all for green)
     if args.use_green_lamp_wires {
@@ -882,6 +849,138 @@ pub fn generate_blueprint(
         for w in all_wires.iter_mut() {
             w[1] = get_swap(w[1]);
             w[3] = get_swap(w[3]);
+        }
+    }
+
+    all_entities.sort_by_key(|entity| entity.entity_number);
+
+    for (frame_i, frame) in frame_data.by_ref().enumerate() {
+        let frame = frame?;
+        let is_last_frame = frame_i as u32 + 1 == n_frames;
+
+        for group_i in 0..num_groups as usize {
+            let state = &mut patch_states[group_i];
+            let outputs: Vec<i32>;
+
+            let group_left = group_i as u32 * max_columns_per_group;
+            let group_right = ((group_i as u32 + 1) * max_columns_per_group).min(full_width);
+            let group_width = group_right - group_left;
+
+            let cropped = frame.crop_imm(group_left, 0, group_width, full_height);
+            let expected_outputs_len = (cropped.width() * cropped.height()) as usize;
+
+            if use_grayscale {
+                state.grayscale_buf.push(cropped);
+                if state.grayscale_buf.len() < frames_per_comb as usize && !is_last_frame {
+                    continue; // wait until we have a full chunk for this group
+                }
+                outputs = grayscale_frames_to_outputs(&state.grayscale_buf, args.grayscale_bits)?;
+                state.grayscale_buf.clear();
+            } else {
+                outputs = color_frame_to_outputs(&cropped)?;
+            }
+
+            if outputs.len() != expected_outputs_len {
+                return Err(JsValue::from_str(&format!(
+                    "Outputs length ({}) does not match frame size ({}).",
+                    outputs.len(),
+                    expected_outputs_len
+                )));
+            }
+
+            state.output_buf.push(outputs);
+
+            if state.output_buf.len() < n_comp_buf_frames && !is_last_frame {
+                continue; // Accumulate until we have `compression_level` outputs,
+            }
+
+            fn find_entity_by_entity_number(
+                all_entities: &Vec<Entity>,
+                target_entity_number: u32,
+            ) -> usize {
+                all_entities
+                    .binary_search_by_key(&target_entity_number, |e| e.entity_number)
+                    .expect("target entity number not found")
+            }
+
+            let mut changed_mask: Vec<bool> = vec![false; expected_outputs_len];
+            let first_outputs = &state.output_buf[0];
+
+            if state.output_buf.len() > 1 {
+                for comb_outputs in state.output_buf[1..].iter() {
+                    for i in 0..expected_outputs_len {
+                        if !changed_mask[i] && (&comb_outputs[i] != &first_outputs[i]) {
+                            changed_mask[i] = true;
+                        }
+                    }
+                }
+            }
+
+            let base_chunk_i = state.curr_chunk_idx * n_comp_buf_frames;
+
+            // Update data for all non-static frames (frames with differing pixels)
+            for (comb_i, comb_outputs) in state.output_buf.iter().enumerate() {
+                let target_i = base_chunk_i + comb_i;
+                let target_entity_comb_i = state.curr_chunk_idx
+                    * (n_comp_buf_frames + n_comp_frames_per_chunk)
+                    + comb_i
+                    + n_comp_frames_per_chunk;
+                let curr_entity_idx = find_entity_by_entity_number(
+                    &all_entities,
+                    all_data_comb_entity_indexes[group_i][target_entity_comb_i],
+                );
+                let start_frame_i = (target_i as u32 * ticks_per_group) as i32;
+                let end_frame_i = ((target_i as u32 + 1) * ticks_per_group) as i32;
+
+                // Only contains non-changed pixels (i.e., the ones we want to store)
+                let mut target_comb_outputs = Vec::with_capacity(signals.len());
+
+                // Accumulate only the changed outputs
+                for (i, v) in comb_outputs.iter().enumerate() {
+                    if changed_mask[i] && *v != 0 {
+                        target_comb_outputs
+                            .push(CombinatorOutput::new(Arc::clone(&signals[i]), Some(*v)));
+                    }
+                }
+
+                // Update the data combinator. Note this uses the real frame index at all times.
+                all_entities[curr_entity_idx] =
+                    all_entities[curr_entity_idx].clone().with_control_behavior(
+                        mk_control_behaviour((start_frame_i, end_frame_i), target_comb_outputs),
+                    );
+            }
+
+            // Make unchanged pixels data combinators
+            if state.output_buf.len() > 1 {
+                let start_frame_i = (base_chunk_i as u32 * ticks_per_group) as i32;
+                let end_frame_i = ((base_chunk_i as u32 + state.output_buf.len() as u32)
+                    * ticks_per_group) as i32;
+                let mut target_comb_outputs = Vec::with_capacity(signals.len());
+
+                for i in 0..expected_outputs_len {
+                    if !changed_mask[i] && first_outputs[i] != 0 {
+                        target_comb_outputs.push(CombinatorOutput::new(
+                            Arc::clone(&signals[i]),
+                            Some(first_outputs[i]),
+                        ));
+                    }
+                }
+
+                let target_entity_comb_i =
+                    state.curr_chunk_idx * (n_comp_buf_frames + n_comp_frames_per_chunk);
+                let curr_entity_idx = find_entity_by_entity_number(
+                    &all_entities,
+                    all_data_comb_entity_indexes[group_i][target_entity_comb_i],
+                );
+
+                all_entities[curr_entity_idx] =
+                    all_entities[curr_entity_idx].clone().with_control_behavior(
+                        mk_control_behaviour((start_frame_i, end_frame_i), target_comb_outputs),
+                    );
+            }
+
+            state.curr_chunk_idx += 1;
+            state.output_buf.clear();
         }
     }
 
@@ -913,31 +1012,14 @@ pub fn generate_blueprint(
 /// # Returns
 ///
 /// A vector of CombinatorOutputs for the frame
-pub fn frame_to_outputs(
-    frame: &image::DynamicImage,
-    signals: Vec<Arc<Signal>>,
-) -> Result<Vec<CombinatorOutput>, JsValue> {
-    let (width, height) = frame.dimensions();
-    let num_pixels = (width * height) as usize;
-    if num_pixels > signals.len() {
-        return Err(JsValue::from_str(&format!(
-            "Frame pixel count ({}) exceeds available signals ({}).",
-            num_pixels,
-            signals.len()
-        )));
-    }
-    let rgb_image = frame.to_rgb8();
-    let pixels = rgb_image.into_raw();
-    let mut outputs = Vec::with_capacity(num_pixels);
-    for (i, chunk) in pixels.chunks(3).enumerate() {
+pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, JsValue> {
+    let mut outputs: Vec<i32> = Vec::with_capacity((frame.width() * frame.height()) as usize);
+    for chunk in frame.to_rgb8().into_raw().chunks(3) {
         if chunk.len() < 3 {
             continue;
         }
-        let value = rgb_to_int(chunk[0], chunk[1], chunk[2]) as i32;
-        let signal = Arc::clone(&signals[i]);
-        outputs.push(CombinatorOutput::new(signal, Some(value)));
+        outputs.push(rgb_to_int(chunk[0], chunk[1], chunk[2]) as i32);
     }
-
     Ok(outputs)
 }
 
@@ -952,51 +1034,32 @@ pub fn frame_to_outputs(
 /// # Returns
 ///
 /// A vector of JSON objects representing output filters.
-pub fn pack_grayscale_frames_to_outputs(
+pub fn grayscale_frames_to_outputs(
     frames: &[image::DynamicImage],
-    signals: Vec<Arc<Signal>>,
     grayscale_bits: u32,
-) -> Result<Vec<CombinatorOutput>, JsValue> {
+) -> Result<Vec<i32>, JsValue> {
     if frames.is_empty() {
         return Err(JsValue::from_str("No frames provided for packing"));
     }
-
-    let (width, height) = frames[0].dimensions();
-    let num_pixels = (width * height) as usize;
-
-    if num_pixels > signals.len() {
-        return Err(JsValue::from_str(&format!(
-            "Frame pixel count ({}) exceeds available signals ({}).",
-            num_pixels,
-            signals.len()
-        )));
-    }
-
-    let luma_images: Vec<_> = frames.iter().map(|frame| frame.to_luma8()).collect();
-    let mut outputs = Vec::with_capacity(num_pixels);
+    let num_pixels = (frames[0].width() * frames[0].height()) as usize;
+    let luma_images: Vec<_> = frames.iter().map(|x| x.to_luma8()).collect();
+    let mut outputs: Vec<i32> = Vec::with_capacity(num_pixels);
 
     for i in 0..num_pixels {
         let mut packed_value = 0u32;
 
         for (j, img) in luma_images.iter().enumerate() {
             let pixel_value = img.as_raw()[i];
-            let value = match grayscale_bits {
+            packed_value |= match grayscale_bits {
                 1 => (pixel_value >= GRAYSCALE_THRESHOLD) as u32,
                 4 => (pixel_value >> 4) as u32,
                 8 => pixel_value as u32,
                 _ => {
                     return Err(JsValue::from_str("Unsupported grayscale bit depth"));
                 }
-            };
-
-            packed_value |= value << (grayscale_bits * j as u32);
+            } << (grayscale_bits * j as u32);
         }
-
-        outputs.push(CombinatorOutput::new(
-            Arc::clone(&signals[i]),
-            Some(packed_value as i32),
-        ));
+        outputs.push(packed_value as i32);
     }
-
     Ok(outputs)
 }
