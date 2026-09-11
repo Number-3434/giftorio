@@ -648,8 +648,7 @@ pub fn generate_blueprint(
     }
 
     let n_comp_buf_frames = if args.temporal_compression_buffer_ms > 0 {
-        (args.temporal_compression_buffer_ms as u64 * 1000).div_ceil(60 * frame_data.fps() as u64)
-            as usize
+        (args.temporal_compression_buffer_ms as u64 * 60).div_ceil(frame_data.fps() as u64) as usize
     } else {
         1
     };
