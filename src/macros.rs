@@ -9,6 +9,8 @@ macro_rules! arithmetic_virtual {
         }
     };
 }
+
+#[allow(unused_macros)]
 macro_rules! log {
     ($($arg:tt)*) => {
         web_sys::console::log_1(&format!($($arg)*).into());
@@ -52,4 +54,6 @@ macro_rules! arithmetic_combinator_op {
 
 pub(crate) use arithmetic_combinator_op;
 pub(crate) use arithmetic_virtual;
+
+#[allow(unused_imports)]
 pub(crate) use log;

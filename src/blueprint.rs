@@ -197,9 +197,9 @@ pub fn generate_timer(
             )),
     );
 
-    wires.push([1, 2, 2, 2]);
-    wires.push([2, 2, 2, 4]);
-    wires.push([2, 2, 3, 2]);
+    wires.push([1, WIRE_R, 2, WIRE_R]);
+    wires.push([2, WIRE_R, 2, WIRE_OUT_R]);
+    wires.push([2, WIRE_R, 3, WIRE_R]);
 
     if grayscale_bits > 0 {
         entities.push(
@@ -227,10 +227,10 @@ pub fn generate_timer(
                 ),
         );
 
-        wires.push([3, 2, 4, 2]);
-        wires.push([4, 4, 5, 2]);
-        wires.push([5, 4, 6, 2]);
-        wires.push([6, 4, 3, 4]);
+        wires.push([3, WIRE_R, 4, WIRE_R]);
+        wires.push([4, WIRE_OUT_R, 5, WIRE_R]);
+        wires.push([5, WIRE_OUT_R, 6, WIRE_R]);
+        wires.push([6, WIRE_OUT_R, 3, WIRE_OUT_R]);
     }
 
     return (entities, wires);
@@ -310,13 +310,13 @@ pub fn generate_substations(
             if i > 0 {
                 substation_wires.push([
                     current_entity,
-                    5,
+                    WIRE_C,
                     current_entity - num_substations_width,
-                    5,
+                    WIRE_C,
                 ]);
             }
             if j > 0 {
-                substation_wires.push([current_entity, 5, current_entity - 1, 5]);
+                substation_wires.push([current_entity, WIRE_C, current_entity - 1, WIRE_C]);
             }
             current_entity += 1;
         }
@@ -361,10 +361,38 @@ pub fn generate_frame_combinators(
     let mut new_entities = Vec::with_capacity(n_chunks as usize * 2); // data entities
     let mut wires = Vec::with_capacity(n_chunks as usize * 3 + 4);
 
-    if grayscale_bits > 0 {
-        let shifter1_x = base_decider_x;
-        let shifter2_x = shifter1_x + 2.0;
+    let comp1_x = base_decider_x;
+    let shifter1_x = base_decider_x + (1 as f64) * 2.0;
+    let shifter2_x = base_decider_x + (2 as f64) * 2.0;
 
+    // if true {
+    //     other_entities.push(
+    //         Entity::new(
+    //             curr_entity_idx,
+    //             DECIDER_COMB,
+    //             Position::new(comp1_x, base_y + 1.0),
+    //         )
+    //         .with_direction(DIR_R)
+    //         .with_control_behavior(ControlBehavior::from_decider_conditions(
+    //             DeciderConditions {
+    //                 conditions: vec![Condition {
+    //                     first_signal: Signal::new_virtual(SIG_EACH),
+    //                     constant: 0,
+    //                     comparator: COMP_NE,
+    //                     compare_type: None,
+    //                 }],
+    //                 outputs: vec![CombinatorOutput::new(
+    //                     Arc::from(Signal::new_virtual(SIG_EACH)),
+    //                     None,
+    //                 )],
+    //             },
+    //         ))
+    //         .with_description("test_x"),
+    //     );
+    //     curr_entity_idx += 1;
+    // }
+
+    if grayscale_bits > 0 {
         other_entities.push(
             Entity::new(
                 curr_entity_idx,
@@ -390,8 +418,8 @@ pub fn generate_frame_combinators(
             } else {
                 3
             };
-        wires.push([curr_entity_idx, 2, first_decider_id, 2]);
-        wires.push([curr_entity_idx, 1, first_decider_id, 3]);
+        wires.push([curr_entity_idx, WIRE_R, first_decider_id, WIRE_R]);
+        wires.push([curr_entity_idx, WIRE_G, first_decider_id, WIRE_OUT_G]);
         curr_entity_idx += 1;
 
         other_entities.push(
@@ -410,7 +438,8 @@ pub fn generate_frame_combinators(
             ))
             .with_description("shifter2_x"),
         );
-        wires.push([curr_entity_idx - 1, 4, curr_entity_idx, 2]);
+
+        wires.push([curr_entity_idx - 1, WIRE_OUT_R, curr_entity_idx, WIRE_R]);
         curr_entity_idx += 1;
         if grayscale_bits == 1 || grayscale_bits == 4 {
             other_entities.push(
@@ -424,7 +453,7 @@ pub fn generate_frame_combinators(
                     arithmetic_virtual!(SIG_EACH * if grayscale_bits == 1 { 255 } else { 17 } => SIG_EACH),
                 )),
             );
-            wires.push([curr_entity_idx - 1, 4, curr_entity_idx, 2]);
+            wires.push([curr_entity_idx - 1, WIRE_OUT_R, curr_entity_idx, WIRE_R]);
             curr_entity_idx += 1;
         }
     }
@@ -455,12 +484,12 @@ pub fn generate_frame_combinators(
         if !first_decider {
             // Wire to previous decider
             let prev_decider_id = decider_num - 2;
-            wires.push([prev_decider_id, 2, decider_num, 2]);
-            wires.push([prev_decider_id, 3, decider_num, 3]);
+            wires.push([prev_decider_id, WIRE_R, decider_num, WIRE_R]);
+            wires.push([prev_decider_id, WIRE_OUT_G, decider_num, WIRE_OUT_G]);
         } else {
             if let Some(prev) = prev_first_decider {
-                wires.push([prev, 2, decider_num, 2]);
-                wires.push([prev, 3, decider_num, 3]);
+                wires.push([prev, WIRE_R, decider_num, WIRE_R]);
+                wires.push([prev, WIRE_OUT_G, decider_num, WIRE_OUT_G]);
             }
             prev_first_decider = Some(decider_num);
         }
@@ -546,12 +575,12 @@ pub fn generate_lamps(
             lamp_entities.push(lamp);
 
             if r == 0 && c > 0 {
-                lamp_wires.push([current_entity, 1, current_entity - 1, 1]);
-                lamp_wires.push([current_entity, 2, current_entity - 1, 2]);
+                lamp_wires.push([current_entity, WIRE_G, current_entity - 1, WIRE_G]);
+                lamp_wires.push([current_entity, WIRE_R, current_entity - 1, WIRE_R]);
                 top_right_lamp = current_entity;
             } else if use_horizontal_lamp_wires {
                 if let Some(prev) = previous_entity {
-                    lamp_wires.push([current_entity, 1, prev, 1]);
+                    lamp_wires.push([current_entity, WIRE_G, prev, WIRE_G]);
                 }
                 previous_entity = Some(current_entity);
             }
@@ -559,7 +588,7 @@ pub fn generate_lamps(
             if r > 0 {
                 if !use_horizontal_lamp_wires || (c + 1 == grid_width as i32) {
                     if let Some(&prev_entity) = previous_entities.get(&x) {
-                        lamp_wires.push([current_entity, 1, prev_entity, 1]);
+                        lamp_wires.push([current_entity, WIRE_G, prev_entity, WIRE_G]);
                     }
                 }
             }
@@ -706,7 +735,7 @@ pub fn generate_blueprint(
                 args.grayscale_bits,
             );
         if group_index == 0 {
-            group_comb_wires.push([3, 4, first_connection_entity, 2]);
+            group_comb_wires.push([3, WIRE_OUT_R, first_connection_entity, WIRE_R]);
         }
         next_entity = new_next_entity;
 
@@ -725,20 +754,25 @@ pub fn generate_blueprint(
 
         let first_lamp_entity = group_lamps[0].entity_number;
         if use_grayscale {
-            group_comb_wires.push([first_lamp_entity, 2, first_connection_entity, 2]);
+            group_comb_wires.push([first_lamp_entity, WIRE_R, first_connection_entity, WIRE_R]);
             let last_shifter = if args.grayscale_bits == 1 || args.grayscale_bits == 4 {
                 first_connection_entity + 2
             } else {
                 first_connection_entity + 1
             };
-            group_comb_wires.push([first_lamp_entity, 1, last_shifter, 3]);
+            group_comb_wires.push([first_lamp_entity, 1, last_shifter, WIRE_OUT_G]);
         } else {
-            group_comb_wires.push([first_lamp_entity, 1, first_connection_entity, 3]);
-            group_comb_wires.push([first_lamp_entity, 2, first_connection_entity, 2]);
+            group_comb_wires.push([
+                first_lamp_entity,
+                WIRE_G,
+                first_connection_entity,
+                WIRE_OUT_G,
+            ]);
+            group_comb_wires.push([first_lamp_entity, WIRE_R, first_connection_entity, WIRE_R]);
         }
 
         if let Some(prev) = previous_top_right_lamp {
-            group_lamp_wires.push([group_lamps[0].entity_number, 2, prev, 2]);
+            group_lamp_wires.push([group_lamps[0].entity_number, WIRE_R, prev, WIRE_R]);
         }
         previous_top_right_lamp = Some(top_right_lamp);
 

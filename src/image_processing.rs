@@ -25,6 +25,7 @@ pub struct FrameData<'a> {
     output_frames: VecDeque<DynamicImage>,
     target_fps: u32,
 }
+#[allow(dead_code)]
 impl FrameData<'_> {
     /// Returns the dimensions of the output frames.
     ///
