@@ -2,25 +2,25 @@
 pub const DEFAULT_FRAME_DELAY_MS: u32 = 100;
 
 /// Number of milliseconds per second.
-pub const MS_PER_SECOND: f64 = 1000.0;
+pub const MS_PER_S: f64 = 1000.0;
 
 /// Timer entity positions.
-pub const TIMER_ENTITY1_POSITION: (f64, f64) = (-2.5, -3.0);
-pub const TIMER_ENTITY2_POSITION: (f64, f64) = (-1.5, -3.0);
-pub const TIMER_ENTITY3_POSITION: (f64, f64) = (-1.5, -4.0);
-pub const TIMER_ENTITY4_POSITION: (f64, f64) = (-1.5, -5.0);
-pub const TIMER_ENTITY5_POSITION: (f64, f64) = (-2.5, -5.5);
-pub const TIMER_ENTITY6_POSITION: (f64, f64) = (-1.5, -6.0);
+pub const TIMER1_POS: (f64, f64) = (-2.5, -3.0);
+pub const TIMER2_POS: (f64, f64) = (-1.5, -3.0);
+pub const TIMER3_POS: (f64, f64) = (-1.5, -4.0);
+pub const TIMER4_POS: (f64, f64) = (-1.5, -5.0);
+pub const TIMER5_POS: (f64, f64) = (-2.5, -5.5);
+pub const TIMER6_POS: (f64, f64) = (-1.5, -6.0);
 
 /// Direction constants.
-pub const DIR_RIGHT: u32 = 4;
-pub const DIR_LEFT: u32 = 12;
+pub const DIR_R: u32 = 4;
+pub const DIR_L: u32 = 12;
 
 /// Blueprint version constant.
 pub const BLUEPRINT_VERSION: u64 = 562949955518464;
 
-/// Threshold used for binary grayscale conversion.
-pub const GRAYSCALE_THRESHOLD: u8 = 128;
+/// Threshold used for binary grayscale conversion. (out of 256)
+pub const GRAYSCALE_THRESH: u8 = 128;
 
 /// Quality constants.
 pub const QUAL_NORMAL: &str = "normal";
@@ -40,26 +40,31 @@ pub const LAMP: &'static str = "small-lamp";
 pub const BLUEPRINT: &'static str = "blueprint";
 
 /// Signal types
-pub const SIGNAL_TYPE_VIRTUAL: &'static str = "virtual";
+pub const SIG_TYPE_VIRTUAL: &'static str = "virtual";
 
 /// Signals
-pub const SIGNAL_F: &'static str = "signal-F";
-pub const SIGNAL_S: &'static str = "signal-S";
-pub const SIGNAL_T: &'static str = "signal-T";
-pub const SIGNAL_EACH: &'static str = "signal-each";
+pub const SIG_F: &'static str = "signal-F";
+pub const SIG_S: &'static str = "signal-S";
+pub const SIG_T: &'static str = "signal-T";
+pub const SIG_EACH: &'static str = "signal-each";
 
 /// Comparators
-pub const COMPARATOR_EQ: &'static str = "=";
-pub const COMPARATOR_GE: &'static str = ">=";
-pub const COMPARATOR_LT: &'static str = "<";
+pub const COMP_EQ: &'static str = "=";
+pub const COMP_GE: &'static str = ">=";
+pub const COMP_LT: &'static str = "<";
 
 /// Operations
-pub const OPERATION_MOD: &'static str = "%";
-pub const OPERATION_MUL: &'static str = "*";
-pub const OPERATION_DIV: &'static str = "/";
-pub const OPERATION_SUB: &'static str = "-";
-pub const OPERATION_SHIFT_R: &'static str = ">>";
-pub const OPERATION_AND: &'static str = "AND";
+pub const OP_MUL: &'static str = "*";
+pub const OP_DIV: &'static str = "/";
+pub const OP_ADD: &'static str = "+";
+pub const OP_SUB: &'static str = "-";
+pub const OP_MOD: &'static str = "%";
+pub const OP_POW: &'static str = "^";
+pub const OP_LSHIFT: &'static str = "<<";
+pub const OP_RSHIFT: &'static str = ">>";
+pub const OP_AND: &'static str = "AND";
+pub const OP_OR: &'static str = "OR";
+pub const OP_XOR: &'static str = "XOR";
 
 /// Compare types
-pub const COMPARE_AND: &'static str = "and";
+pub const COMP_AND: &'static str = "and";

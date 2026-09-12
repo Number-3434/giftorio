@@ -1,5 +1,6 @@
 use crate::constants::*;
 use crate::image_processing::{rgb_to_int, FrameData};
+use crate::macros::*;
 use crate::models::*;
 use crate::progress::{report_progress, set_progress};
 use crate::signals::get_signals_with_quality;
@@ -8,11 +9,7 @@ use std::sync::Arc;
 use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 100;
-macro_rules! log {
-    ($($arg:tt)*) => {
-        web_sys::console::log_1(&format!($($arg)*).into());
-    };
-}
+
 #[derive(serde::Deserialize)]
 pub struct BlueprintArgs {
     pub name: String,
@@ -153,18 +150,18 @@ pub fn generate_timer(
     let mut wires = Vec::new();
 
     entities.push(
-        Entity::new(1, CONSTANT_COMB, Position::from(TIMER_ENTITY1_POSITION))
-            .with_direction(DIR_RIGHT)
+        Entity::new(1, CONSTANT_COMB, Position::from(TIMER1_POS))
+            .with_direction(DIR_R)
             .with_control_behavior(ControlBehavior::Constant {
                 sections: Sections {
                     sections: vec![Section {
                         index: 1,
                         filters: vec![Filter {
                             index: 1,
-                            type_: SIGNAL_TYPE_VIRTUAL,
-                            name: SIGNAL_T,
+                            type_: SIG_TYPE_VIRTUAL,
+                            name: SIG_T,
                             quality: Some(QUAL_NORMAL),
-                            comparator: Some(COMPARATOR_EQ),
+                            comparator: Some(COMP_EQ),
                             count: Some(1),
                         }],
                     }],
@@ -173,18 +170,18 @@ pub fn generate_timer(
     );
 
     entities.push(
-        Entity::new(2, DECIDER_COMB, Position::from(TIMER_ENTITY2_POSITION))
-            .with_direction(DIR_RIGHT)
+        Entity::new(2, DECIDER_COMB, Position::from(TIMER2_POS))
+            .with_direction(DIR_R)
             .with_control_behavior(ControlBehavior::Decider {
                 decider_conditions: DeciderConditions {
                     conditions: vec![Condition {
-                        first_signal: Signal::new_virtual(SIGNAL_T),
+                        first_signal: Signal::new_virtual(SIG_T),
                         constant: stop as i32,
-                        comparator: COMPARATOR_LT,
+                        comparator: COMP_LT,
                         compare_type: None,
                     }],
                     outputs: vec![CombinatorOutput::new(
-                        Arc::from(Signal::new_virtual(SIGNAL_T)),
+                        Arc::from(Signal::new_virtual(SIG_T)),
                         None,
                     )],
                 },
@@ -193,17 +190,11 @@ pub fn generate_timer(
     );
 
     entities.push(
-        Entity::new(3, ARITHMETIC_COMB, Position::from(TIMER_ENTITY3_POSITION))
-            .with_direction(DIR_RIGHT)
-            .with_control_behavior(ControlBehavior::Arithmetic {
-                arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal::new_virtual(SIGNAL_T),
-                    second_signal: None,
-                    second_constant: Some(1),
-                    operation: OPERATION_SUB,
-                    output_signal: Signal::new_virtual(SIGNAL_T),
-                },
-            }),
+        Entity::new(3, ARITHMETIC_COMB, Position::from(TIMER3_POS))
+            .with_direction(DIR_R)
+            .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
+                arithmetic_virtual!(SIG_T - 1 => SIG_T),
+            )),
     );
 
     wires.push([1, 2, 2, 2]);
@@ -212,44 +203,25 @@ pub fn generate_timer(
 
     if grayscale_bits > 0 {
         entities.push(
-            Entity::new(4, ARITHMETIC_COMB, Position::from(TIMER_ENTITY4_POSITION))
-                .with_direction(DIR_LEFT)
-                .with_control_behavior(ControlBehavior::Arithmetic {
-                    arithmetic_conditions: ArithmeticConditions {
-                        first_signal: Signal::new_virtual(SIGNAL_T),
-                        second_signal: None,
-                        second_constant: Some((ticks_per_frame * frames_per_combinator) as i32),
-                        operation: OPERATION_MOD,
-                        output_signal: Signal::new_virtual(SIGNAL_S),
-                    },
-                }),
+            Entity::new(4, ARITHMETIC_COMB, Position::from(TIMER4_POS))
+                .with_direction(DIR_L)
+                .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
+                    arithmetic_virtual!(SIG_T % (ticks_per_frame * frames_per_combinator) => SIG_S),
+                )),
         );
-
         entities.push(
-            Entity::new(5, ARITHMETIC_COMB, Position::from(TIMER_ENTITY5_POSITION))
-                .with_control_behavior(ControlBehavior::Arithmetic {
-                    arithmetic_conditions: ArithmeticConditions {
-                        first_signal: Signal::new_virtual(SIGNAL_S),
-                        second_signal: None,
-                        second_constant: Some(ticks_per_frame as i32),
-                        operation: OPERATION_DIV,
-                        output_signal: Signal::new_virtual(SIGNAL_F),
-                    },
-                }),
+            Entity::new(5, ARITHMETIC_COMB, Position::from(TIMER5_POS)).with_control_behavior(
+                ControlBehavior::from_arithmetic_conditions(
+                    arithmetic_virtual!(SIG_S / ticks_per_frame => SIG_F),
+                ),
+            ),
         );
-
         entities.push(
-            Entity::new(6, ARITHMETIC_COMB, Position::from(TIMER_ENTITY6_POSITION))
-                .with_direction(DIR_RIGHT)
-                .with_control_behavior(ControlBehavior::Arithmetic {
-                    arithmetic_conditions: ArithmeticConditions {
-                        first_signal: Signal::new_virtual(SIGNAL_EACH),
-                        second_signal: None,
-                        second_constant: Some(grayscale_bits as i32),
-                        operation: OPERATION_MUL,
-                        output_signal: Signal::new_virtual(SIGNAL_EACH),
-                    },
-                })
+            Entity::new(6, ARITHMETIC_COMB, Position::from(TIMER6_POS))
+                .with_direction(DIR_R)
+                .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
+                    arithmetic_virtual!(SIG_EACH * grayscale_bits => SIG_EACH),
+                ))
                 .with_description(
                     "Calculates the bit shift necessary for the frame we should be rendering.",
                 ),
@@ -399,14 +371,14 @@ pub fn generate_frame_combinators(
                 ARITHMETIC_COMB,
                 Position::new(shifter1_x, base_y + 1.0),
             )
-            .with_direction(DIR_RIGHT)
+            .with_direction(DIR_R)
             .with_control_behavior(ControlBehavior::Arithmetic {
                 arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal::new_virtual(SIGNAL_EACH),
-                    second_signal: Some(Signal::new_virtual(SIGNAL_F)),
+                    first_signal: Signal::new_virtual(SIG_EACH),
+                    second_signal: Some(Signal::new_virtual(SIG_F)),
                     second_constant: None,
-                    operation: OPERATION_SHIFT_R,
-                    output_signal: Signal::new_virtual(SIGNAL_EACH),
+                    operation: OP_RSHIFT,
+                    output_signal: Signal::new_virtual(SIG_EACH),
                 },
             }),
         );
@@ -427,18 +399,18 @@ pub fn generate_frame_combinators(
                 ARITHMETIC_COMB,
                 Position::new(shifter2_x, base_y + 1.0),
             )
-            .with_direction(DIR_RIGHT)
+            .with_direction(DIR_R)
             .with_control_behavior(ControlBehavior::Arithmetic {
                 arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal::new_virtual(SIGNAL_EACH),
+                    first_signal: Signal::new_virtual(SIG_EACH),
                     second_signal: None,
                     second_constant: Some(match grayscale_bits {
                         1 => 1,
                         4 => 15,
                         _ => 255,
                     }),
-                    operation: OPERATION_AND,
-                    output_signal: Signal::new_virtual(SIGNAL_EACH),
+                    operation: OP_AND,
+                    output_signal: Signal::new_virtual(SIG_EACH),
                 },
             }),
         );
@@ -451,14 +423,14 @@ pub fn generate_frame_combinators(
                     ARITHMETIC_COMB,
                     Position::new(shifter2_x + 1.0, base_y + 2.0),
                 )
-                .with_direction(DIR_LEFT)
+                .with_direction(DIR_L)
                 .with_control_behavior(ControlBehavior::Arithmetic {
                     arithmetic_conditions: ArithmeticConditions {
-                        first_signal: Signal::new_virtual(SIGNAL_EACH),
+                        first_signal: Signal::new_virtual(SIG_EACH),
                         second_signal: None,
                         second_constant: Some(if grayscale_bits == 1 { 255 } else { 17 }),
-                        operation: OPERATION_MUL,
-                        output_signal: Signal::new_virtual(SIGNAL_EACH),
+                        operation: OP_MUL,
+                        output_signal: Signal::new_virtual(SIG_EACH),
                     },
                 }),
             );
@@ -487,7 +459,7 @@ pub fn generate_frame_combinators(
                 DECIDER_COMB,
                 Position::new(base_decider_x + x_offset, curr_y),
             )
-            .with_direction(DIR_RIGHT),
+            .with_direction(DIR_R),
         );
 
         if !first_decider {
@@ -819,16 +791,16 @@ pub fn generate_blueprint(
             decider_conditions: DeciderConditions {
                 conditions: vec![
                     Condition {
-                        first_signal: Signal::new_virtual(SIGNAL_T),
+                        first_signal: Signal::new_virtual(SIG_T),
                         constant: range.0,
-                        comparator: COMPARATOR_GE,
+                        comparator: COMP_GE,
                         compare_type: None,
                     },
                     Condition {
-                        first_signal: Signal::new_virtual(SIGNAL_T),
+                        first_signal: Signal::new_virtual(SIG_T),
                         constant: range.1,
-                        comparator: COMPARATOR_LT,
-                        compare_type: Some(COMPARE_AND),
+                        comparator: COMP_LT,
+                        compare_type: Some(COMP_AND),
                     },
                 ],
                 outputs,
@@ -853,11 +825,17 @@ pub fn generate_blueprint(
         }
     }
 
+    let mut frame = frame_data.next().unwrap()?;
+    let mut next_frame: Option<image::DynamicImage>;
+
     all_entities.sort_by_key(|entity| entity.entity_number);
 
-    for (frame_i, frame) in frame_data.by_ref().enumerate() {
-        let frame = frame?;
-        let is_last_frame = frame_i as u32 + 1 == n_frames;
+    loop {
+        next_frame = match frame_data.next() {
+            Some(frame) => Some(frame?),
+            None => None,
+        };
+        let is_last_frame = next_frame.is_none();
 
         for group_i in 0..num_groups as usize {
             let state = &mut patch_states[group_i];
@@ -914,6 +892,10 @@ pub fn generate_blueprint(
                             changed_mask[i] = true;
                         }
                     }
+                }
+            } else {
+                for i in 0..expected_outputs_len {
+                    changed_mask[i] = true;
                 }
             }
 
@@ -983,6 +965,11 @@ pub fn generate_blueprint(
             state.curr_chunk_idx += 1;
             state.output_buf.clear();
         }
+
+        if next_frame.is_none() {
+            break;
+        }
+        frame = next_frame.take().unwrap();
     }
 
     let blueprint = Blueprint {
@@ -1052,7 +1039,7 @@ pub fn grayscale_frames_to_outputs(
         for (j, img) in luma_images.iter().enumerate() {
             let pixel_value = img.as_raw()[i];
             packed_value |= match grayscale_bits {
-                1 => (pixel_value >= GRAYSCALE_THRESHOLD) as u32,
+                1 => (pixel_value >= GRAYSCALE_THRESH) as u32,
                 4 => (pixel_value >> 4) as u32,
                 8 => pixel_value as u32,
                 _ => {

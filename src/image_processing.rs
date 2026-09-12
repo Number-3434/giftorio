@@ -1,5 +1,5 @@
 use crate::blueprint::BlueprintArgs;
-use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_SECOND};
+use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
 use crate::progress::set_progress;
 use image::imageops::FilterType;
@@ -8,11 +8,7 @@ use std::collections::VecDeque;
 use std::io::Cursor;
 use std::time::Duration;
 use wasm_bindgen::prelude::*;
-macro_rules! log {
-    ($($arg:tt)*) => {
-        web_sys::console::log_1(&format!($($arg)*).into());
-    };
-}
+
 pub struct FrameData<'a> {
     buf: Vec<(DynamicImage, u32)>,
     curr_frame_idx: u32,
@@ -183,8 +179,7 @@ impl Iterator for FrameData<'_> {
             let mut sample_ms: u32;
 
             while {
-                sample_ms =
-                    (self.next_samp_idx as f64 * MS_PER_SECOND / self.target_fps as f64) as u32;
+                sample_ms = (self.next_samp_idx as f64 * MS_PER_S / self.target_fps as f64) as u32;
 
                 sample_ms < self.curr_n_ms
                     && (self.include_last_frame || self.next_samp_idx < self.out_n_frames)

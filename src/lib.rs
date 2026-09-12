@@ -4,6 +4,7 @@ mod blueprint;
 mod constants;
 mod image_processing;
 mod image_utils;
+mod macros;
 mod models;
 mod progress;
 mod signals;

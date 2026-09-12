@@ -36,8 +36,7 @@ pub fn get_signals_with_quality(use_dlc: bool) -> Vec<Arc<Signal>> {
 
                 // Skip the common signal of F, S, T as they're used internally
                 if signal_type == "virtual" && *quality == QUAL_NORMAL {
-                    if signal_name == SIGNAL_F || signal_name == SIGNAL_S || signal_name == SIGNAL_T
-                    {
+                    if signal_name == SIG_F || signal_name == SIG_S || signal_name == SIG_T {
                         continue;
                     }
                 }

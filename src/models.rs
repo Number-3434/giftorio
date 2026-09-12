@@ -34,7 +34,7 @@ pub struct Signal {
 impl Signal {
     pub fn new_virtual(name: &str) -> Self {
         Self {
-            type_: Arc::new(SIGNAL_TYPE_VIRTUAL.to_string()),
+            type_: Arc::new(SIG_TYPE_VIRTUAL.to_string()),
             name: Arc::new(name.to_string()),
             quality: None,
         }
@@ -143,6 +143,18 @@ pub enum ControlBehavior {
         green_signal: Arc<Signal>,
         blue_signal: Arc<Signal>,
     },
+}
+impl ControlBehavior {
+    pub fn from_arithmetic_conditions(arithmetic: ArithmeticConditions) -> Self {
+        Self::Arithmetic {
+            arithmetic_conditions: arithmetic,
+        }
+    }
+    pub fn from_decider_conditions(decider: DeciderConditions) -> Self {
+        Self::Decider {
+            decider_conditions: decider,
+        }
+    }
 }
 
 #[derive(Clone, Serialize)]
