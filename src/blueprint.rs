@@ -647,13 +647,6 @@ pub fn generate_blueprint(
         return Err(JsValue::from_str("No sampled frames"));
     }
 
-    let n_comp_buf_frames = if args.temporal_compression_buffer_ms > 0 {
-        (args.temporal_compression_buffer_ms as u64 * frame_data.fps() as u64).div_ceil(1000)
-            as usize
-    } else {
-        1
-    };
-    let n_comp_frames_per_chunk = if n_comp_buf_frames > 1 { 1 } else { 0 } as usize;
     let use_grayscale = args.grayscale_bits > 0;
     let n_frames = frame_data.total_frames();
     let n_scaled_frames = frame_data.total_frames()
@@ -667,6 +660,13 @@ pub fn generate_blueprint(
     } else {
         1
     };
+    let n_comp_buf_frames = if args.temporal_compression_buffer_ms > 0 {
+        (args.temporal_compression_buffer_ms as u64 * frame_data.fps() as u64)
+            .div_ceil(1000 * frames_per_comb as u64) as usize
+    } else {
+        1
+    };
+    let n_comp_frames_per_chunk = if n_comp_buf_frames > 1 { 1 } else { 0 } as usize;
     let (full_width, full_height) = frame_data.dimensions();
     let max_columns_per_group = ((signals.len() as u32) / full_height).min(full_width);
     let num_groups = (full_width as f64 / max_columns_per_group as f64).ceil() as u32;
