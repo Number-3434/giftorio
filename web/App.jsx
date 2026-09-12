@@ -1,4 +1,5 @@
 import { createSignal, onMount, createEffect } from "solid-js";
+import { animationInfo as getAnimationInfo } from "./imageUtils";
 import { createStore } from "solid-js/store";
 import Background from "./Background";
 import infoIcon from "./assets/img/info.png";
@@ -50,6 +51,45 @@ const INITIAL_VALUES = (() => {
 	}
 })();
 const FORM_ELEMENTS = {
+	temporalCompressionBufferMs: {
+		name: "Compression Window (ms)",
+		type: "number",
+		tooltip: [
+			"If set to a non-zero value, the blueprint will be compressed using",
+			"temporal compression by comparing frames on a fixed window.",
+			"\n\nTemporal compression is a <strong>non-volatile</strong> compression method",
+			"(i.e. the video can be seeked to any point in time safely without corruption),",
+			"but is not as effective as .",
+			"\n\nThe current implementation scans all the pixels every",
+			"<strong>Temporal Compression Window (ms)</strong>. It then finds all the pixels that have not",
+			"changed in the last <strong>Temporal Compression Window (ms)</strong> and stores them in a single",
+			"combinator. The other pixels (that changed) are stored in per-frame combinators.",
+			"\n\nThis setting should be fine-tuned based on the amount of movement in the GIF.",
+			"Higher sampling windows can give greter compression, but if large portions of the GIF are moving",
+			"the compression value is reduced in comparison to shorter sampling times.",
+			"\n\nThis setting changes the window size (in ms) of the scan time for changed pixels.",
+			"Any pixels that remain the same within this time are compresed into a single combinator.",
+			"\n\n<strong>TL;DR; This feature increases the total number of combinators required,",
+			"but can dramatically reduce the overall size of the blueprint.</strong>",
+		].join(" "),
+		min: 0,
+		max: 5000,
+		step: 100,
+	},
+	targetFps: {
+		name: "Framerate",
+		type: "number",
+		tooltip: [
+			"Maximum framerate of the output blueprint.",
+			"\n\nThe blueprint will not exceed the original framerate of the GIF.",
+			"Higher framerates require more frames to be generated, increasing the size of the blueprint.",
+			"\n\nThis can also impact UPS (game performance; may cause stutters),",
+			"although Factorio will attempt to continue rendering at 1:1 time.",
+		].join(" "),
+		min: 1,
+		max: 1000,
+		step: 1,
+	},
 	useDLC: {
 		name: "Use Space Age DLC?",
 		type: "checkbox",
@@ -148,9 +188,26 @@ const FORM_ELEMENTS = {
 	},
 };
 
+function formatDuration(ms) {
+	const totalSeconds = Math.floor(ms / 1000);
+
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	const milliseconds = ms % 1000;
+
+	return (
+		`${String(hours).padStart(2, "0")}:` +
+		`${String(minutes).padStart(2, "0")}:` +
+		`${String(seconds).padStart(2, "0")}.` +
+		`${String(milliseconds).padStart(3, "0")}`
+	);
+}
+
 function App({ worker }) {
 	// State
 	const [formData, setFormData] = createStore({ ...INITIAL_VALUES });
+	const [animationInfo, setAnimationInfo] = createSignal(null);
 	const [isGenerating, setIsGenerating] = createSignal(false);
 	const [progress, setProgress] = createSignal({ percentage: 0.0, status: "Starting..." });
 	const [blueprintData, setBlueprintData] = createSignal({ idx: 0, total: 0, content: "" });
@@ -404,16 +461,27 @@ function App({ worker }) {
 										type="file"
 										id="gifInput"
 										required
-										onChange={(e) => setFormData("file", e.target.files[0])}
+										onChange={(e) => {
+											const file = e.target.files[0];
+											setFormData("file", file);
+
+											file.arrayBuffer().then((buffer) => {
+												setAnimationInfo(getAnimationInfo(new Uint8Array(buffer)));
+											});
+										}}
 										accept="image/gif,image/webp"
 									/>
 								</div>
-
-								{/* <div>
-									<div class="text-gray-400">asd</div>
-									<div class="text-gray-400">asd</div>
-								</div> */}
 							</div>
+
+							{animationInfo() && (
+								<div>
+									<div class="text-gray-300 font-semibold">
+										{formatDuration(animationInfo().duration)} ({animationInfo().frames} Frames, ~
+										{Math.round((10 * (animationInfo().frames * 1000)) / animationInfo().duration) / 10} FPS)
+									</div>
+								</div>
+							)}
 
 							{/* Max Size Input */}
 							<div class="mb-4 flex items-center justify-between">
@@ -468,80 +536,6 @@ function App({ worker }) {
 						</div>
 
 						<div class="panel-inset-light p-3 shadow-md w-full max-w-md">
-							{/* Framerate Input */}
-							<div class="mb-1 flex items-center justify-between">
-								<label className="block text-white-500 mb-2" htmlFor="framerate">
-									Framerate
-									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<span className="tooltip">
-										Maximum framerate of the output blueprint.
-										<br />
-										<br />
-										The blueprint will not exceed the original framerate of the GIF. Higher framerates require more
-										frames to be generated, increasing the size of the blueprint.
-										<br />
-										<br />
-										This can also impact UPS (game performance; may cause stutters), although Factorio will attempt to
-										continue rendering at 1:1 time.
-									</span>
-								</label>
-
-								<div class="flex items-center gap-3 w-20">
-									<input
-										ref={(el) => (formRefs.framerate = el)}
-										class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
-										type="number"
-										id="framerate"
-										value={formData.targetFps}
-										onChange={(e) => setFormData("targetFps", e.target.value)}
-										placeholder="Enter max framerate (won't exceed original)"
-									/>
-								</div>
-							</div>
-
-							{/* Compression Level */}
-							<div class="mb-1 flex items-center justify-between">
-								<label className="block text-white-500 mb-2" htmlFor="temporalCompressionBufferMs">
-									Temporal Compression Window (ms)
-									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<span className="tooltip">
-										If set to a non-zero value, the blueprint will be compressed using temporal compression between two
-										frames. This can dramatically reduce file size at the cost of using twice the number of decider
-										combinators for data storage.
-										<br />
-										<br />
-										The current implementation scans all the pixels every{" "}
-										<strong>Temporal Compression Window (ms)</strong>. It then finds all the pixels that have not
-										changed in the last <strong>Temporal Compression Window (ms)</strong> and stores them in a single
-										combinator. The other pixels (that changed) are stored in per-frame combinators.
-										<br />
-										<br />
-										This setting should be fine-tuned based on the amount of movement in the GIF. Higher sampling
-										windows can give greter compression, but if large portions of the GIF are moving the compression
-										value is reduced in comparison to shorter sampling times.
-										<br />
-										<br />
-										This setting changes the window size (in ms) of the scan time for changed pixels. Any pixels that
-										remain the same within this time are compresed into a single combinator. This feature is
-										experimental and is subject to change.
-									</span>
-								</label>
-
-								<div class="flex items-center gap-3">
-									<input
-										ref={(el) => (formRefs.temporalCompressionBufferMs = el)}
-										class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
-										type="number"
-										id="temporalCompressionBufferMs"
-										min="0"
-										max="5000"
-										step="100"
-										value={formData.temporalCompressionBufferMs}
-										onChange={(e) => setFormData("temporalCompressionBufferMs", e.target.value)}
-										placeholder="0-5000"
-									/>
-								</div>
-							</div>
 							{/* Substation Quality Select */}
 							<div class="mb-1 flex items-center justify-between">
 								<label class="block text-white-500 mb-2" for="substationQuality">
@@ -568,12 +562,7 @@ function App({ worker }) {
 								</select>
 							</div>
 							{Object.entries(FORM_ELEMENTS).map(([k, v]) =>
-								makeFormElement({
-									formData,
-									formRefs,
-									setFormData,
-									obj: { [k]: v },
-								}),
+								makeFormElement({ formData, formRefs, setFormData, obj: { [k]: v } }),
 							)}
 						</div>
 					</div>
@@ -726,6 +715,29 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 						<option value={k}>{v}</option>
 					))}
 				</select>
+			</div>
+		);
+	} else if (type === "number") {
+		return (
+			<div class="mb-1 flex items-center justify-between">
+				<label className="block text-white-500 mb-2" htmlFor={k}>
+					{name}
+					{mkTooltip(tooltip)}
+				</label>
+				<div class="flex items-center gap-3">
+					<input
+						ref={(e) => (formRefs[k] = e)}
+						class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
+						type="number"
+						id={k}
+						value={formData[k]}
+						min={v.min}
+						max={v.max}
+						step={v.step}
+						onChange={(e) => setFormData(k, e.target.value)}
+						placeholder={`${v.min}-${v.max}`}
+					/>
+				</div>
 			</div>
 		);
 	}

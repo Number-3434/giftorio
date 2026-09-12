@@ -372,15 +372,16 @@ pub fn generate_frame_combinators(
                 Position::new(shifter1_x, base_y + 1.0),
             )
             .with_direction(DIR_R)
-            .with_control_behavior(ControlBehavior::Arithmetic {
-                arithmetic_conditions: ArithmeticConditions {
+            .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
+                ArithmeticConditions {
                     first_signal: Signal::new_virtual(SIG_EACH),
                     second_signal: Some(Signal::new_virtual(SIG_F)),
                     second_constant: None,
                     operation: OP_RSHIFT,
                     output_signal: Signal::new_virtual(SIG_EACH),
                 },
-            }),
+            ))
+            .with_description("shifter1_x"),
         );
 
         let first_decider_id = curr_entity_idx
@@ -406,7 +407,8 @@ pub fn generate_frame_combinators(
                     4 => 15,
                     _ => 255,
                 } => SIG_EACH),
-            )),
+            ))
+            .with_description("shifter2_x"),
         );
         wires.push([curr_entity_idx - 1, 4, curr_entity_idx, 2]);
         curr_entity_idx += 1;
