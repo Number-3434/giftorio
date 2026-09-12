@@ -400,19 +400,13 @@ pub fn generate_frame_combinators(
                 Position::new(shifter2_x, base_y + 1.0),
             )
             .with_direction(DIR_R)
-            .with_control_behavior(ControlBehavior::Arithmetic {
-                arithmetic_conditions: ArithmeticConditions {
-                    first_signal: Signal::new_virtual(SIG_EACH),
-                    second_signal: None,
-                    second_constant: Some(match grayscale_bits {
-                        1 => 1,
-                        4 => 15,
-                        _ => 255,
-                    }),
-                    operation: OP_AND,
-                    output_signal: Signal::new_virtual(SIG_EACH),
-                },
-            }),
+            .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
+                arithmetic_virtual!(SIG_EACH AND match grayscale_bits {
+                    1 => 1,
+                    4 => 15,
+                    _ => 255,
+                } => SIG_EACH),
+            )),
         );
         wires.push([curr_entity_idx - 1, 4, curr_entity_idx, 2]);
         curr_entity_idx += 1;
@@ -424,15 +418,9 @@ pub fn generate_frame_combinators(
                     Position::new(shifter2_x + 1.0, base_y + 2.0),
                 )
                 .with_direction(DIR_L)
-                .with_control_behavior(ControlBehavior::Arithmetic {
-                    arithmetic_conditions: ArithmeticConditions {
-                        first_signal: Signal::new_virtual(SIG_EACH),
-                        second_signal: None,
-                        second_constant: Some(if grayscale_bits == 1 { 255 } else { 17 }),
-                        operation: OP_MUL,
-                        output_signal: Signal::new_virtual(SIG_EACH),
-                    },
-                }),
+                .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
+                    arithmetic_virtual!(SIG_EACH * if grayscale_bits == 1 { 255 } else { 17 } => SIG_EACH),
+                )),
             );
             wires.push([curr_entity_idx - 1, 4, curr_entity_idx, 2]);
             curr_entity_idx += 1;
