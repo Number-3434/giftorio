@@ -124,6 +124,17 @@ h3 {
         0px 0px 4px 0px #000;
 }
 
+.button[disabled] {
+    background-color: #444444;
+    color: #999999;
+    box-shadow: inset 8px 0px 4px -8px #000,
+        inset -8px 0px 4px -8px #000,
+        inset 0px 10px 2px -8px #000,
+        inset 0px 10px 2px -8px #282828,
+        inset 0px -9px 2px -8px #000,
+        0px 0px 4px 0px #000;
+}
+
 .button-green {
     @apply bg-green-500;
     box-shadow: inset 8px 0px 4px -8px #000,
@@ -181,6 +192,11 @@ select {
     padding-top: 0.25rem;
     padding-bottom: 0.25rem;
     letter-spacing: -0.25px;
+}
+
+select option {
+    background: #333;
+    color: white;
 }
 
 .factorio-select-container {

@@ -470,11 +470,10 @@ pub fn generate_frame_combinators(
             y_offset += 2.0;
             curr_y -= 2.0;
         }
-        let decider_num = curr_entity_idx + 1;
 
         new_entities.push(
             Entity::new(
-                decider_num,
+                curr_entity_idx,
                 DECIDER_COMB,
                 Position::new(base_decider_x + x_offset, curr_y),
             )
@@ -483,19 +482,19 @@ pub fn generate_frame_combinators(
 
         if !first_decider {
             // Wire to previous decider
-            let prev_decider_id = decider_num - 2;
-            wires.push([prev_decider_id, WIRE_R, decider_num, WIRE_R]);
-            wires.push([prev_decider_id, WIRE_OUT_G, decider_num, WIRE_OUT_G]);
+            let prev_decider_id = curr_entity_idx - 1;
+            wires.push([prev_decider_id, WIRE_R, curr_entity_idx, WIRE_R]);
+            wires.push([prev_decider_id, WIRE_OUT_G, curr_entity_idx, WIRE_OUT_G]);
         } else {
             if let Some(prev) = prev_first_decider {
-                wires.push([prev, WIRE_R, decider_num, WIRE_R]);
-                wires.push([prev, WIRE_OUT_G, decider_num, WIRE_OUT_G]);
+                wires.push([prev, WIRE_R, curr_entity_idx, WIRE_R]);
+                wires.push([prev, WIRE_OUT_G, curr_entity_idx, WIRE_OUT_G]);
             }
-            prev_first_decider = Some(decider_num);
+            prev_first_decider = Some(curr_entity_idx);
         }
 
         first_decider = false;
-        curr_entity_idx += 2;
+        curr_entity_idx += 1;
         row_in_this_column += 1;
 
         if row_in_this_column >= max_rows_per_group {

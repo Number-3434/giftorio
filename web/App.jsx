@@ -1,10 +1,12 @@
-import { createSignal, onMount, createEffect } from "solid-js";
-import { animationInfo as getAnimationInfo } from "./imageUtils";
+import { createEffect, createSignal, onMount } from "solid-js";
 import { createStore } from "solid-js/store";
 import Background from "./Background";
 import infoIcon from "./assets/img/info.png";
+import { loadFileDB, saveFileDB } from "./fileUtils";
+import { animationInfo as getAnimationInfo } from "./imageUtils";
 
 // Constants
+const LAST_FILE_KEY = "last-file-user-uploaded";
 const FORM_DATA_KEY = "giftorio-form-data";
 const _INITIAL_VALUES = {
 	file: null,
@@ -288,14 +290,14 @@ function App({ worker }) {
 			setIsGenerating(false);
 			formRefs.submitButton.disabled = false;
 			return;
-		}
-
-		if (formData.file.type !== "image/gif" && formData.file.type !== "image/webp") {
+		} else if (formData.file.type !== "image/gif" && formData.file.type !== "image/webp") {
 			setToast({ show: true, message: "Please select a GIF/WebP file", isError: true });
 			setTimeout(() => setToast({ show: false, message: "", isError: false }), 3000);
 			setIsGenerating(false);
 			formRefs.submitButton.disabled = false;
 			return;
+		} else {
+			saveFileDB(formData.file, LAST_FILE_KEY);
 		}
 
 		try {
@@ -370,9 +372,7 @@ function App({ worker }) {
 	});
 
 	createEffect(() => {
-		const triggers = document.querySelectorAll(".tooltip-trigger");
-
-		triggers.forEach((trigger) => {
+		document.querySelectorAll(".tooltip-trigger").forEach((trigger) => {
 			trigger.addEventListener("mousemove", (e) => {
 				const tooltip = trigger.nextElementSibling;
 				const rect = trigger.getBoundingClientRect();
@@ -398,6 +398,24 @@ function App({ worker }) {
 				tooltip.style.top = `${y}px`;
 			});
 		});
+	});
+
+	onMount(() => {
+		loadFileDB(LAST_FILE_KEY)
+			.then((file) => {
+				if (file) {
+					const dataTransfer = new DataTransfer();
+					dataTransfer.items.add(file);
+
+					formRefs.fileInput.files = dataTransfer.files;
+					setFormData("file", file);
+				}
+			})
+			.catch((err) => {
+				console.error("Failed to load file:", err);
+				console.error("Failed to load file:", err);
+				setToast({ show: true, message: "Failed to load file", isError: true });
+			});
 	});
 
 	return (
@@ -456,7 +474,7 @@ function App({ worker }) {
 								{/* File Input */}
 								<div class="">
 									<input
-										ref={(el) => (formRefs.gifInput = el)}
+										ref={(el) => (formRefs.fileInput = el)}
 										class="text-white-500 w-full focus:outline-none focus:ring"
 										type="file"
 										id="gifInput"
@@ -513,18 +531,28 @@ function App({ worker }) {
 							</div>
 
 							{/* Advanced Settings and Submit Buttons */}
-							<div class="flex items-center justify-between">
-								<button class="button bg-gray-100 px-4" type="button" onClick={() => setShowAdvanced(!showAdvanced())}>
-									Advanced Options
-								</button>
-								<button
-									class="button button-green-right"
-									ref={(el) => (formRefs.submitButton = el)}
-									id="submit"
-									type="submit"
+							<div>
+								<div class="flex items-center justify-between">
+									<button class="button bg-gray-100 px-4" type="button" onClick={() => setShowAdvanced(!showAdvanced())}>
+										Advanced Options
+									</button>
+									<button
+										class="button button-green-right"
+										ref={(el) => (formRefs.submitButton = el)}
+										id="submit"
+										type="submit"
+									>
+										Generate
+									</button>
+								</div>
+								{/* <button
+									disabled
+									class="button mt-2 bg-gray-100 px-4 w-full"
+									type="button"
+									onClick={() => setShowAdvanced(!showAdvanced())}
 								>
-									Generate
-								</button>
+									Remember this file
+								</button> */}
 							</div>
 						</form>
 					</div>

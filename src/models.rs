@@ -203,6 +203,8 @@ pub struct CombinatorOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub constant: Option<i32>,
     pub signal: Arc<Signal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub networks: Option<CombinatorOutputNetworks>,
 }
 impl CombinatorOutput {
     pub fn new(signal: Arc<Signal>, constant: Option<i32>) -> Self {
@@ -210,8 +212,15 @@ impl CombinatorOutput {
             copy_count_from_input: constant.is_none(),
             constant,
             signal,
+            networks: None,
         }
     }
+}
+
+#[derive(Clone, Serialize)]
+pub struct CombinatorOutputNetworks {
+    pub red: bool,
+    pub green: bool,
 }
 
 #[derive(Clone, Serialize)]

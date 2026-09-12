@@ -1,11 +1,11 @@
-import { onMount, For, createSignal } from "solid-js";
-import nyanMp4 from "./assets/img/nyan.mp4";
-import nyanWebm from "./assets/img/nyan.webm";
-import nyanGif from "./assets/img/nyan.gif";
-import rickMp4 from "./assets/img/rick.mp4";
-import rickWebm from "./assets/img/rick.webm";
+import { For, createSignal, onMount } from "solid-js";
 import gumpMp4 from "./assets/img/gump.mp4";
 import gumpWebm from "./assets/img/gump.webm";
+import nyanGif from "./assets/img/nyan.gif";
+import nyanMp4 from "./assets/img/nyan.mp4";
+import nyanWebm from "./assets/img/nyan.webm";
+import rickMp4 from "./assets/img/rick.mp4";
+import rickWebm from "./assets/img/rick.webm";
 
 const MEDIA = [
 	{ mp4: nyanMp4, webm: nyanWebm, fallback: nyanGif },
