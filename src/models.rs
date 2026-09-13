@@ -65,6 +65,8 @@ pub struct Entity {
     pub quality: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub always_on: Option<bool>,
+    #[serde(skip)]
+    pub custom_tag: Option<&'static str>,
 }
 
 impl Entity {
@@ -79,7 +81,12 @@ impl Entity {
             player_description: None,
             quality: None,
             always_on: None,
+            custom_tag: None,
         }
+    }
+
+    pub fn has_tag(&self, tag: &'static str) -> bool {
+        self.custom_tag == Some(tag)
     }
 
     pub fn with_direction(mut self, direction: u32) -> Self {
@@ -99,6 +106,14 @@ impl Entity {
 
     pub fn with_always_on(mut self, always_on: bool) -> Self {
         self.always_on = Some(always_on);
+        self
+    }
+
+    /// Custom tag for the entity. This does not get serialized.
+    ///
+    /// Utility to help identify entities for wire connections.
+    pub fn with_tag(mut self, tag: &'static str) -> Self {
+        self.custom_tag = Some(tag);
         self
     }
 }
@@ -195,6 +210,7 @@ pub struct Condition {
     pub comparator: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compare_type: Option<&'static str>,
+    pub first_signal_networks: Option<NetworkFilters>,
 }
 
 #[derive(Clone, Serialize)]
@@ -204,7 +220,7 @@ pub struct CombinatorOutput {
     pub constant: Option<i32>,
     pub signal: Arc<Signal>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub networks: Option<CombinatorOutputNetworks>,
+    pub networks: Option<NetworkFilters>,
 }
 impl CombinatorOutput {
     pub fn new(signal: Arc<Signal>, constant: Option<i32>) -> Self {
@@ -218,7 +234,7 @@ impl CombinatorOutput {
 }
 
 #[derive(Clone, Serialize)]
-pub struct CombinatorOutputNetworks {
+pub struct NetworkFilters {
     pub red: bool,
     pub green: bool,
 }

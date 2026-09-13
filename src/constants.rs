@@ -74,8 +74,8 @@ pub const OP_XOR: &'static str = "XOR";
 /// Compare types
 pub const COMP_AND: &'static str = "and";
 
-pub const WIRE_G: u32 = 1;
-pub const WIRE_R: u32 = 2;
-pub const WIRE_OUT_G: u32 = 3;
-pub const WIRE_OUT_R: u32 = 4;
+pub const WIRE_R: u32 = 1;
+pub const WIRE_G: u32 = 2;
+pub const WIRE_OUT_R: u32 = 3;
+pub const WIRE_OUT_G: u32 = 4;
 pub const WIRE_C: u32 = 5;

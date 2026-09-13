@@ -251,6 +251,13 @@ function App({ worker }) {
 		}
 	};
 
+	function setInputFile(file) {
+		setFormData("file", file);
+		file.arrayBuffer().then((buffer) => {
+			setAnimationInfo(getAnimationInfo(new Uint8Array(buffer)));
+		});
+	}
+
 	// Event handlers
 	async function downloadBlueprint() {
 		try {
@@ -408,7 +415,7 @@ function App({ worker }) {
 					dataTransfer.items.add(file);
 
 					formRefs.fileInput.files = dataTransfer.files;
-					setFormData("file", file);
+					setInputFile(file);
 				}
 			})
 			.catch((err) => {
@@ -479,14 +486,7 @@ function App({ worker }) {
 										type="file"
 										id="gifInput"
 										required
-										onChange={(e) => {
-											const file = e.target.files[0];
-											setFormData("file", file);
-
-											file.arrayBuffer().then((buffer) => {
-												setAnimationInfo(getAnimationInfo(new Uint8Array(buffer)));
-											});
-										}}
+										onChange={(e) => setInputFile(e.target.files[0])}
 										accept="image/gif,image/webp"
 									/>
 								</div>
