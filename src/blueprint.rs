@@ -9,7 +9,6 @@ use std::sync::Arc;
 use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 100;
-const use_delta_compression: bool = true;
 
 /// High-level utility macro for making wire connections.
 macro_rules! get_wires {
@@ -64,6 +63,8 @@ pub struct BlueprintArgs {
     pub use_green_lamp_wires: bool,
     #[serde(rename = "useHorizontalLampWires")]
     pub use_horizontal_lamp_wires: bool,
+    #[serde(rename = "useDeltaCompression")]
+    pub use_delta_compression: bool,
 }
 
 pub struct BlueprintEncoder {
@@ -388,6 +389,7 @@ pub fn generate_frame_combinators(
     max_rows_per_group: u32,
     grayscale_bits: u32,
     use_green_lamp_wires: bool,
+    use_delta_compression: bool,
 ) -> (Vec<Entity>, Vec<Entity>, Vec<Wire>, (u32, u32, u32)) {
     let mut first_connection_entity: Option<u32> = None;
     let mut curr_entity_idx = base_entity_number;
@@ -597,6 +599,13 @@ pub fn generate_frame_combinators(
                     WIRE_OUT_G,
                     entity_idx_by_tag!(other_entities, "memory comb")
                         .expect("No memory combinator!"),
+                    WIRE_G,
+                ]);
+            } else if grayscale_bits > 0 {
+                wires.push([
+                    curr_entity_idx,
+                    WIRE_OUT_G,
+                    entity_idx_by_tag!(other_entities, ">> comb").expect("No bitshift combinator!"),
                     WIRE_G,
                 ]);
             }
@@ -868,6 +877,7 @@ pub fn generate_blueprint(
             max_rows_per_group,
             args.grayscale_bits,
             args.use_green_lamp_wires,
+            args.use_delta_compression,
         );
         if group_index == 0 {
             group_comb_wires.push([3, WIRE_OUT_R, comb_in_entity_idx, WIRE_R]);
@@ -997,7 +1007,8 @@ pub fn generate_blueprint(
             let cropped = frame.crop_imm(group_left, 0, group_width, full_height);
             let expected_outputs_len = (cropped.width() * cropped.height()) as usize;
 
-            if use_delta_compression && group_i == 0 {
+            if args.use_delta_compression && group_i == 0 {
+                // Pre-populate first frame with zeros
                 state.output_buf.push(vec![0i32; expected_outputs_len]);
             }
 
@@ -1011,7 +1022,6 @@ pub fn generate_blueprint(
             } else {
                 outputs = color_frame_to_outputs(&cropped)?;
             }
-
             if outputs.len() != expected_outputs_len {
                 return Err(JsValue::from_str(&format!(
                     "Outputs length ({}) does not match frame size ({}).",
@@ -1020,14 +1030,16 @@ pub fn generate_blueprint(
                 )));
             }
 
-            if !use_delta_compression {
+            if !args.use_delta_compression {
+                // If we're using delta compression we only compare aginst the previous frame
                 state.output_buf.push(outputs.clone());
             }
-
             if state.output_buf.len() < n_comp_buf_frames && !is_last_frame {
                 continue; // Accumulate until we have `compression_level` outputs,
             }
 
+            // Utility to help us find the target entity number so we can populate the data
+            // combinator with the correct data. (Data combinators already placed, but no data)
             fn find_entity_by_entity_number(
                 all_entities: &Vec<Entity>,
                 target_entity_number: u32,
@@ -1037,7 +1049,9 @@ pub fn generate_blueprint(
                     .expect("target entity number not found")
             }
 
-            if use_delta_compression {
+            // If using delta compression, only store the difference between the current frame
+            // and the previous frame
+            if args.use_delta_compression {
                 let prev_outputs = &state.output_buf[0];
                 let mut target_comb_outputs = Vec::with_capacity(expected_outputs_len);
 
@@ -1057,7 +1071,7 @@ pub fn generate_blueprint(
                     all_data_comb_entity_indexes[group_i][target_entity_comb_i],
                 );
                 let start_frame_i = 1 + ((target_entity_comb_i as u32) * ticks_per_group) as i32;
-                let end_frame_i = 1 + ((target_entity_comb_i as u32 + 1) * ticks_per_group) as i32;
+                let end_frame_i = 2 + ((target_entity_comb_i as u32) * ticks_per_group) as i32;
 
                 // Update the data combinator. Note this uses the real frame index at all times.
                 all_entities[curr_entity_idx] =
@@ -1199,7 +1213,7 @@ pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, J
 /// # Arguments
 ///
 /// * `frames` - A slice of grayscale image frames.
-/// * `signals` - The signals to map to each pixel.
+/// * `prev_outputs` - Previous output values, for delta compression.
 /// * `grayscale_bits` - Number of bits for grayscale conversion.
 ///
 /// # Returns
@@ -1218,13 +1232,11 @@ pub fn grayscale_frames_to_outputs(
 
     for i in 0..num_pixels {
         let mut packed_value = 0u32;
-
         for (j, img) in luma_images.iter().enumerate() {
-            let pixel_value = img.as_raw()[i];
             packed_value |= match grayscale_bits {
-                1 => (pixel_value >= GRAYSCALE_THRESH) as u32,
-                4 => (pixel_value >> 4) as u32,
-                8 => pixel_value as u32,
+                1 => (img.as_raw()[i] >= GRAYSCALE_THRESH) as u32,
+                4 => (img.as_raw()[i] >> 4) as u32,
+                8 => img.as_raw()[i] as u32,
                 _ => {
                     return Err(JsValue::from_str("Unsupported grayscale bit depth"));
                 }

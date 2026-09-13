@@ -20,6 +20,7 @@ const _INITIAL_VALUES = {
 	wireColor: "green",
 	connectionDirection: "horizontal",
 	temporalCompressionBufferMs: 500,
+	useDeltaCompression: false,
 };
 const FILTER_TYPES = ["catrom", "gaussian", "lanczos3", "nearest", "triangle"];
 const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
@@ -111,6 +112,17 @@ const FORM_ELEMENTS = {
 			"\n\nThis option will interfere with GIF looping as it will always an extra frame at the end.",
 			"For example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames, one at the start, and one at the end.",
 			"\n\nWith this option disabled, the output GIF will only have 1 frame.",
+		].join(" "),
+	},
+	useDeltaCompression: {
+		name: "Use Delta Compression",
+		type: "checkbox",
+		tooltip: [
+			"If enabled, significantly reduces the size of the blueprint by storing the difference between",
+			"each frame instead of the full frame data per-frame.",
+			"\n\nNote that this comes at the cost of not being able to seek to a specific frame in the GIF.",
+			"Addtionally, the GIF currently cannot be paused, and must be left to loop from start to finish",
+			"fully otherwise the pixels will become corrupted.",
 		].join(" "),
 	},
 	grayscaleBits: {
@@ -325,6 +337,7 @@ function App({ worker }) {
 						useGreenLampWires: formData.wireColor === "green",
 						useHorizontalLampWires: formData.connectionDirection === "horizontal",
 						temporalCompressionBufferMs: +formData.temporalCompressionBufferMs,
+						useDeltaCompression: !!formData.useDeltaCompression,
 					},
 				},
 			});
