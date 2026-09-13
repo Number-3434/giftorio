@@ -134,8 +134,8 @@ impl Iterator for FrameData<'_> {
             // % of prime number cuz i like seeing it go through every number :D
             if self.curr_frame_idx % 3 == 0 {
                 set_progress(
-                    0.0,
-                    0.50,
+                    0.00,
+                    0.75,
                     self.curr_frame_idx as f64 / self.in_n_frames as f64,
                     &format!(
                         "Streaming frame {} /{} ({})",

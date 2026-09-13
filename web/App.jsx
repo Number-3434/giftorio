@@ -21,6 +21,7 @@ const _INITIAL_VALUES = {
 	connectionDirection: "horizontal",
 	temporalCompressionBufferMs: 500,
 	useDeltaCompression: false,
+	sortSignals: false,
 };
 const FILTER_TYPES = ["catrom", "gaussian", "lanczos3", "nearest", "triangle"];
 const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
@@ -123,6 +124,13 @@ const FORM_ELEMENTS = {
 			"\n\nNote that this comes at the cost of not being able to seek to a specific frame in the GIF.",
 			"Addtionally, the GIF currently cannot be paused, and must be left to loop from start to finish",
 			"fully otherwise the pixels will become corrupted.",
+		].join(" "),
+	},
+	sortSignals: {
+		name: "Sort Signals",
+		type: "checkbox",
+		tooltip: [
+			"If enabled, the signals will be sorted by their type and name. This helps reduce the size of the blueprint for small GIFs.",
 		].join(" "),
 	},
 	grayscaleBits: {
@@ -338,6 +346,7 @@ function App({ worker }) {
 						useHorizontalLampWires: formData.connectionDirection === "horizontal",
 						temporalCompressionBufferMs: +formData.temporalCompressionBufferMs,
 						useDeltaCompression: !!formData.useDeltaCompression,
+						sortSignals: !!formData.sortSignals,
 					},
 				},
 			});

@@ -13,8 +13,15 @@ use std::sync::Arc;
 /// # Returns
 ///
 /// A new vector of signal JSON objects with added quality attributes.
-pub fn get_signals_with_quality(use_dlc: bool) -> Vec<Arc<Signal>> {
-    get_signal_list(use_dlc)
+pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
+    let mut all_signals = get_signal_list(use_dlc);
+
+    if sort {
+        // Sort by total length of the type + name (so use the smallest ids first)
+        all_signals
+            .sort_by_key(|s| s["type"].as_str().unwrap().len() + s["name"].as_str().unwrap().len());
+    }
+    all_signals
         .into_iter()
         .flat_map(|signal| {
             let mut signals_vec = Vec::new();
@@ -31,8 +38,8 @@ pub fn get_signals_with_quality(use_dlc: bool) -> Vec<Arc<Signal>> {
                 vec![QUAL_NORMAL, QUAL_UNKNOWN]
             };
             for quality in qualities.iter() {
-                let signal_name = signal["name"].as_str().unwrap();
                 let signal_type = signal["type"].as_str().unwrap();
+                let signal_name = signal["name"].as_str().unwrap();
 
                 // Skip the common signal of F, S, T as they're used internally
                 if signal_type == "virtual" && *quality == QUAL_NORMAL {
@@ -42,8 +49,8 @@ pub fn get_signals_with_quality(use_dlc: bool) -> Vec<Arc<Signal>> {
                 }
 
                 let signal = Arc::from(Signal {
-                    type_: Arc::new(signal["type"].as_str().unwrap().to_string()),
-                    name: Arc::new(signal["name"].as_str().unwrap().to_string()),
+                    type_: Arc::new(signal_type.to_string()),
+                    name: Arc::new(signal_name.to_string()),
                     quality: Some(quality),
                 });
                 signals_vec.push(signal);

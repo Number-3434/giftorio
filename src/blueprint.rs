@@ -65,6 +65,8 @@ pub struct BlueprintArgs {
     pub use_horizontal_lamp_wires: bool,
     #[serde(rename = "useDeltaCompression")]
     pub use_delta_compression: bool,
+    #[serde(rename = "sortSignals")]
+    pub sort_signals: bool,
 }
 
 pub struct BlueprintEncoder {
@@ -100,8 +102,6 @@ impl BlueprintEncoder {
         let wires = &self.blueprint.blueprint.wires;
         let entity_chunk_count = entities.len().div_ceil(ENCODE_CHUNK_SIZE);
 
-        report_progress(0.50, "Encoding blueprint...");
-
         match self.state {
             BlueprintEncoderState::Start => {
                 buf.extend_from_slice(b"{\"blueprint\":");
@@ -115,8 +115,8 @@ impl BlueprintEncoder {
                 let global_index = i * chunk.len();
 
                 set_progress(
-                    0.50,
-                    0.95,
+                    0.75,
+                    0.98,
                     global_index as f64 / entities.len() as f64,
                     &format!("Converting to JSON {}/{}...", global_index, entities.len()),
                 );
@@ -773,10 +773,8 @@ pub fn generate_blueprint(
     frame_data: &mut FrameData,
     args: &BlueprintArgs,
 ) -> Result<Blueprint, JsValue> {
-    report_progress(0, "Starting blueprint update");
-
     // Get signals internally.
-    let signals: Vec<Arc<Signal>> = get_signals_with_quality(args.use_dlc);
+    let signals: &[Arc<Signal>] = &get_signals_with_quality(args.use_dlc, args.sort_signals);
 
     if frame_data.total_frames() == 0 {
         return Err(JsValue::from_str("No sampled frames"));
@@ -907,13 +905,6 @@ pub fn generate_blueprint(
         all_ent.extend(grp_lamps);
         all_wires.extend(grp_comb_wires);
         all_wires.extend(grp_lamp_wires);
-
-        set_progress(
-            0.30,
-            0.40,
-            group_i as f64 / n_groups as f64,
-            &format!("Processed chunk {}/{}", group_i, n_groups),
-        );
     }
 
     struct GroupPatchState {
@@ -955,14 +946,15 @@ pub fn generate_blueprint(
 
     // Swap all wires if requested (default uses red wires, so swap all for green).
     // Circuit network filters are already handled.
-    if args.use_green_lamp_wires {
+    if !args.use_green_lamp_wires {
+        #[inline(always)]
         fn get_swap(x: u32) -> u32 {
             match x {
-                1 => 2, // circuit_green / combinator_input_green -> circuit_red / combinator_input_red
-                2 => 1, // circuit_red / combinator_input_red -> circuit_green / combinator_input_green
-                3 => 4, // combinator_output_green -> combinator_output_red
-                4 => 3, // combinator_output_red -> combinator_output_green
-                _ => x, // usually just copper
+                1 => 2,
+                2 => 1,
+                3 => 4,
+                4 => 3,
+                _ => x,
             }
         }
 
