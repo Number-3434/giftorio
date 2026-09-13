@@ -477,8 +477,6 @@ pub fn generate_frame_combinators(
             .with_description(desc),
         );
 
-        log!("me: {curr_entity_idx}");
-
         // Self connection for memory
         wires.push([curr_entity_idx, WIRE_G, curr_entity_idx, WIRE_OUT_G]);
         wires.push(get_wires!(R other_entities; OUT "delay comb" => IN "memory comb"));
@@ -568,8 +566,6 @@ pub fn generate_frame_combinators(
         entity_idx_by_tag!(other_entities, "memory comb")
             .unwrap_or((curr_entity_idx - 1).max(base_entity_number))
     };
-
-    log!("comb out entity: {comb_out_entity_idx}");
 
     let mut first_decider = true;
     let (mut x_offset, mut y_offset) = (0.0, 0.0);
@@ -895,11 +891,8 @@ pub fn generate_blueprint(
             use_grayscale,
             args.use_horizontal_lamp_wires,
         );
-
         let first_lamp_entity = group_lamps[0].entity_number;
-        log!("first lamp entity: {first_lamp_entity}");
-        log!("Connecting to comb in: {comb_in_entity_idx}");
-        log!("Connecting to comb out: {comb_out_entity_idx}");
+
         group_comb_wires.push([first_lamp_entity, WIRE_R, comb_in_entity_idx, WIRE_R]);
         group_comb_wires.push([first_lamp_entity, WIRE_G, comb_out_entity_idx, WIRE_OUT_G]);
 
@@ -1007,7 +1000,7 @@ pub fn generate_blueprint(
             let cropped = frame.crop_imm(group_left, 0, group_width, full_height);
             let expected_outputs_len = (cropped.width() * cropped.height()) as usize;
 
-            if args.use_delta_compression && group_i == 0 {
+            if args.use_delta_compression && state.output_buf.len() == 0 {
                 // Pre-populate first frame with zeros
                 state.output_buf.push(vec![0i32; expected_outputs_len]);
             }
@@ -1197,6 +1190,7 @@ pub fn generate_blueprint(
 /// # Returns
 ///
 /// A vector of CombinatorOutputs for the frame
+#[inline(always)]
 pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, JsValue> {
     let mut outputs: Vec<i32> = Vec::with_capacity((frame.width() * frame.height()) as usize);
     for chunk in frame.to_rgb8().into_raw().chunks(3) {
@@ -1219,6 +1213,7 @@ pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, J
 /// # Returns
 ///
 /// A vector of JSON objects representing output filters.
+#[inline(always)]
 pub fn grayscale_frames_to_outputs(
     frames: &[image::DynamicImage],
     grayscale_bits: u32,

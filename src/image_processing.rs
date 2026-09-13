@@ -181,7 +181,6 @@ impl Iterator for FrameData<'_> {
 
             while {
                 sample_ms = (self.next_samp_idx as f64 * MS_PER_S / self.target_fps as f64) as u32;
-
                 sample_ms < self.curr_n_ms
                     && (self.include_last_frame || self.next_samp_idx < self.out_n_frames)
             } {
@@ -208,7 +207,6 @@ impl Iterator for FrameData<'_> {
 
 fn format_duration(ms: u64) -> String {
     let total_seconds = ms / 1000;
-
     let hours = total_seconds / 3600;
     let minutes = (total_seconds % 3600) / 60;
     let seconds = total_seconds % 60;
@@ -251,34 +249,29 @@ pub fn get_frames<'a>(
     let cursor = Cursor::new(image_data);
     let info: AnimationInfo;
     let dimensions: (u32, u32);
-    let frames = match image_type {
-        "gif" => {
-            let decoder = image::codecs::gif::GifDecoder::new(cursor)
-                .map_err(|e| JsValue::from_str(&format!("GIF decode error: {}", e)))?;
-            dimensions = decoder.dimensions();
-            info = animation_info(&image_data)?;
-
-            decoder.into_frames()
-        }
-
-        "webp" => {
-            let decoder = image::codecs::webp::WebPDecoder::new(cursor)
-                .map_err(|e| JsValue::from_str(&format!("WebP decode error: {}", e)))?;
-            dimensions = decoder.dimensions();
-            info = animation_info(&image_data)?;
-
-            decoder.into_frames()
-        }
-
-        _ => {
-            return Err(JsValue::from_str(
-                "Unsupported image type. Only 'gif' and 'webp' are allowed.",
-            ))
-        }
-    };
 
     Ok(ImageFrameData {
-        frames,
+        frames: match image_type {
+            "gif" => {
+                let decoder = image::codecs::gif::GifDecoder::new(cursor)
+                    .map_err(|e| JsValue::from_str(&format!("GIF decode error: {}", e)))?;
+                dimensions = decoder.dimensions();
+                info = animation_info(&image_data)?;
+                decoder.into_frames()
+            }
+            "webp" => {
+                let decoder = image::codecs::webp::WebPDecoder::new(cursor)
+                    .map_err(|e| JsValue::from_str(&format!("WebP decode error: {}", e)))?;
+                dimensions = decoder.dimensions();
+                info = animation_info(&image_data)?;
+                decoder.into_frames()
+            }
+            _ => {
+                return Err(JsValue::from_str(
+                    "Unsupported image type. Only 'gif' and 'webp' are allowed.",
+                ))
+            }
+        },
         dimensions,
         n_frames: info.frames,
         total_duration_ms: info.duration,
