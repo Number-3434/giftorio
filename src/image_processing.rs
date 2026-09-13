@@ -85,7 +85,7 @@ impl<'a> FrameData<'a> {
             buf: Vec::new(),
             curr_frame_idx: 0,
             curr_n_ms: 0,
-            filter_type: match args.resampling_filter.as_str() {
+            filter_type: match args.samp_filter.as_str() {
                 "catrom" => FilterType::CatmullRom,
                 "gaussian" => FilterType::Gaussian,
                 "lanczos3" => FilterType::Lanczos3,
@@ -94,16 +94,16 @@ impl<'a> FrameData<'a> {
                 _ => return Err(JsValue::from_str("Invalid resampling filter type")),
             },
             frames: frame_data.frames,
-            grayscale_bits: args.grayscale_bits,
+            grayscale_bits: args.gray_bits,
             in_dim,
             in_n_frames: n_frames,
-            include_last_frame: args.include_last_frame,
+            include_last_frame: args.last_frame,
             next_samp_idx: 0,
             out_dim_raw: ((w * scale_factor), (h * scale_factor)),
             out_n_frames: expected_output_frames(
                 frame_data.total_duration_ms.as_millis() as u32,
                 args.target_fps.max(1),
-                args.include_last_frame,
+                args.last_frame,
             ),
             output_frames: VecDeque::new(),
             target_fps: args.target_fps.max(1),

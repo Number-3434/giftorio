@@ -196,7 +196,29 @@ pub struct Filter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<u32>,
 }
+pub trait NetworkSwapper {
+    fn swap_networks(&mut self);
+}
 
+impl NetworkSwapper for DeciderConditions {
+    fn swap_networks(&mut self) {
+        for c in self.conditions.iter_mut() {
+            if let Some(n) = &mut c.first_signal_networks {
+                n.red ^= true;
+                n.green ^= true;
+            }
+        }
+        self.outputs.iter_mut().for_each(|o| o.swap_networks());
+    }
+}
+impl NetworkSwapper for CombinatorOutput {
+    fn swap_networks(&mut self) {
+        if let Some(n) = &mut self.networks {
+            n.red ^= true;
+            n.green ^= true;
+        }
+    }
+}
 #[derive(Clone, Serialize)]
 pub struct DeciderConditions {
     pub conditions: Vec<Condition>,
@@ -231,12 +253,43 @@ impl CombinatorOutput {
             networks: None,
         }
     }
+
+    pub fn with_networks(mut self, networks: NetworkFilters) -> Self {
+        self.networks = Some(networks);
+        self
+    }
 }
 
 #[derive(Clone, Serialize)]
 pub struct NetworkFilters {
     pub red: bool,
     pub green: bool,
+}
+impl NetworkFilters {
+    pub fn all() -> Self {
+        Self {
+            red: true,
+            green: true,
+        }
+    }
+    pub fn green() -> Self {
+        Self {
+            red: false,
+            green: true,
+        }
+    }
+    pub fn none() -> Self {
+        Self {
+            red: false,
+            green: false,
+        }
+    }
+    pub fn red() -> Self {
+        Self {
+            red: true,
+            green: false,
+        }
+    }
 }
 
 #[derive(Clone, Serialize)]

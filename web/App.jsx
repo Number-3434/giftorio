@@ -173,7 +173,7 @@ const FORM_ELEMENTS = {
 		},
 	},
 	wireColor: {
-		name: "Wire Colour",
+		name: "Preferred Wire Colour",
 		type: "select",
 		tooltip: [
 			"The colour of the wires used to connect the lamps.",
