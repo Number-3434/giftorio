@@ -4,6 +4,7 @@ import Background from "./Background";
 import infoIcon from "./assets/img/info.png";
 import { loadFileDB, saveFileDB } from "./fileUtils";
 import { animationInfo as getAnimationInfo } from "./imageUtils";
+import { Slider } from "./slider";
 
 // Constants
 const LAST_FILE_KEY = "last-file-user-uploaded";
@@ -91,7 +92,7 @@ const FORM_ELEMENTS = {
 			"although Factorio will attempt to continue rendering at 1:1 time.",
 		].join(" "),
 		min: 1,
-		max: 1000,
+		max: 60,
 		step: 1,
 	},
 	useDLC: {
@@ -466,7 +467,7 @@ function App({ worker }) {
 					{toast().message}
 				</div>
 
-				<div ref={form} class="panel-container flex">
+				<div ref={form} class="panel-container flex z-1">
 					<div classList={{ hidden: isGenerating() }} class="panel form flex-shrink-0">
 						<div class="flex items-center justify-between">
 							<h2 class="text-tan-500">Convert GIF (or WebP) to Blueprint</h2>
@@ -524,7 +525,7 @@ function App({ worker }) {
 							)}
 
 							{/* Max Size Input */}
-							<div class="mb-4 flex items-center justify-between">
+							<div class="mt-5 mb-4 flex items-center justify-between">
 								<label class="text-white-500" for="maxsize">
 									Max Size
 									<img src={infoIcon} class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
@@ -579,7 +580,7 @@ function App({ worker }) {
 						</form>
 					</div>
 
-					<div class="panel w-110" classList={{ hidden: !showAdvanced() || isGenerating() }}>
+					<div class="panel w-110 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
 						<div class="flex items-center justify-between">
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
@@ -769,13 +770,21 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 		);
 	} else if (type === "number") {
 		return (
-			<div class="mb-1 flex items-center justify-between">
+			<div class="mb-1">
 				<label className="block text-white-500 mb-2" htmlFor={k}>
 					{name}
 					{mkTooltip(tooltip)}
 				</label>
 				<div class="flex items-center gap-3">
-					<input
+					<Slider
+						ref={(e) => (formRefs[k] = e)}
+						value={formData[k]}
+						min={v.min}
+						max={v.max}
+						step={v.step}
+						onChange={(v) => setFormData(k, v)}
+					/>
+					{/* <input
 						ref={(e) => (formRefs[k] = e)}
 						class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
 						type="number"
@@ -786,7 +795,7 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 						step={v.step}
 						onChange={(e) => setFormData(k, e.target.value)}
 						placeholder={`${v.min}-${v.max}`}
-					/>
+					/> */}
 				</div>
 			</div>
 		);

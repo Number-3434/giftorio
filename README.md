@@ -19,12 +19,12 @@ vanilla Factorio version 2.0 and the Space Age DLC.
 
 ### Temporal Compression
 
-Temporal compression samples frames at a fixed rate, storing pixels that did't
-change this sample in a **single** combinator for the sampe (instead of being
-duplicated across multiple combinators for each frme).
+Temporal compression samples frames at a fixed rate, storing pixels that didn't
+change this sample in a **single** combinator for the sample (instead of being
+duplicated across multiple combinators for each frame).
 
-> [!NOTE] Temporal compression increases the total number of combinators
-> required in the blueprint.
+_N.B.: Temporal compression increases the total number of combinators required
+in the blueprint._
 
 Works better on longer videos with less movement. Size reduction varies from 1x
 to 4x depending on the nature of the source video.
@@ -42,17 +42,13 @@ Temporal compression is a static compression technique, so it is possible to
 seek to any frame at any point in time. This can greatly reduce blueprint sizes
 (around x4), depending on the source GIF.
 
-> TODO: Add built-in optimisation to automatically and dynamically set the best
-> window size for compression.
-
 ### Delta Compression
 
 Delta compression stores the difference in raw pixel values between frames,
 instead of the real frame data.
 
-> [!IMPORTANT] Delta compression is volatile. Blueprints generated with delta
-> compression cannot be safely seeked, and must always be played from the
-> beginning.
+_N.B. Delta compression is volatile. Blueprints generated with delta compression
+cannot be safely seeked, and must always be played from the beginning._
 
 - Delta compression greatly reduces sizes (up to x10 smaller than uncompressed).
 - Instead of storing the raw values of each frame, delta compression has each
@@ -93,12 +89,12 @@ frame GIFs and a longest side up to 1,000 lamps.
 - Video frames are streamed instead of accumulated into a single buffer, greatly
   reducing memory pressure. Note that for now, parallel processing is disabled.
 - The output blueprint string is chunked and streamed directly to disk, instead
-  of being serialized in one.
+  of being serialised in one.
 - JSON serialisation is chunked into groups of 1,000 entities, reducing memory
   pressure.
 - Updated to use 13,341 available signals from Space Age (+80% more than old
-  version, 3 signals reserved for internal calulations). Some signals don't show
-  up at all in the Factorio GUI, but otherwise functon as regular signals.
+  version, 3 signals reserved for internal calculations). Some signals don't
+  show up at all in the Factorio GUI, but otherwise function as regular signals.
 
 ### Other
 
@@ -178,10 +174,7 @@ The application:
 - Higher resolution images will require more in-game entities and may impact
   performance
 - Browser must support WebAssembly
-- Longer GIFs can take a really long time to process and may cause the game to
-  lag. We recommend trying keep gifs to only a few seconds. If you have a really
-  long gif, consider using the grayscale option, as it can signficantly reduce
-  blueprint size.
+- Longer GIFs at high resolutions can be very large (5GB+).
 
 ## Contributing
 
