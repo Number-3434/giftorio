@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Default delay in milliseconds when a frame’s delay is zero.
 pub const DEFAULT_FRAME_DELAY_MS: u32 = 100;
 
@@ -49,9 +51,12 @@ pub const SIG_T: &'static str = "signal-T";
 pub const SIG_EACH: &'static str = "signal-each";
 
 /// Comparators
+pub const COMP_GT: &'static str = ">";
+pub const COMP_LT: &'static str = "<";
 pub const COMP_EQ: &'static str = "=";
 pub const COMP_GE: &'static str = ">=";
-pub const COMP_LT: &'static str = "<";
+pub const COMP_LE: &'static str = "<=";
+pub const COMP_NE: &'static str = "!=";
 
 /// Operations
 pub const OP_MUL: &'static str = "*";
@@ -68,3 +73,9 @@ pub const OP_XOR: &'static str = "XOR";
 
 /// Compare types
 pub const COMP_AND: &'static str = "and";
+
+pub const WIRE_R: u32 = 1;
+pub const WIRE_G: u32 = 2;
+pub const WIRE_OUT_R: u32 = 3;
+pub const WIRE_OUT_G: u32 = 4;
+pub const WIRE_C: u32 = 5;

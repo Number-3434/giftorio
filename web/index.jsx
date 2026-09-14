@@ -10,12 +10,10 @@ const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "modu
 worker.addEventListener("message", async (event) => {
 	if (event.data.type === "start") {
 		const { filename } = event.data;
-
 		const stream = streamSaver.createWriteStream(filename);
 		writer = stream.getWriter();
 	} else if (event.data.chunk) {
 		const { id, data } = event.data.chunk;
-
 		try {
 			await writer.write(data);
 			worker.postMessage({ type: "chunkWritten", id });
@@ -29,5 +27,4 @@ worker.addEventListener("message", async (event) => {
 });
 
 const root = document.getElementById("root");
-
 render(() => <App worker={worker} />, root);

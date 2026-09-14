@@ -1,9 +1,12 @@
-import { createSignal, onMount, createEffect } from "solid-js";
+import { createEffect, createSignal, onMount } from "solid-js";
 import { createStore } from "solid-js/store";
 import Background from "./Background";
 import infoIcon from "./assets/img/info.png";
+import { loadFileDB, saveFileDB } from "./fileUtils";
+import { animationInfo as getAnimationInfo } from "./imageUtils";
 
 // Constants
+const LAST_FILE_KEY = "last-file-user-uploaded";
 const FORM_DATA_KEY = "giftorio-form-data";
 const _INITIAL_VALUES = {
 	file: null,
@@ -17,6 +20,8 @@ const _INITIAL_VALUES = {
 	wireColor: "green",
 	connectionDirection: "horizontal",
 	temporalCompressionBufferMs: 500,
+	useDeltaCompression: false,
+	sortSignals: false,
 };
 const FILTER_TYPES = ["catrom", "gaussian", "lanczos3", "nearest", "triangle"];
 const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
@@ -50,6 +55,45 @@ const INITIAL_VALUES = (() => {
 	}
 })();
 const FORM_ELEMENTS = {
+	temporalCompressionBufferMs: {
+		name: "Compression Window (ms)",
+		type: "number",
+		tooltip: [
+			"If set to a non-zero value, the blueprint will be compressed using",
+			"temporal compression by comparing frames on a fixed window.",
+			"\n\nTemporal compression is a <strong>non-volatile</strong> compression method",
+			"(i.e. the video can be seeked to any point in time safely without corruption),",
+			"but is not as effective as .",
+			"\n\nThe current implementation scans all the pixels every",
+			"<strong>Temporal Compression Window (ms)</strong>. It then finds all the pixels that have not",
+			"changed in the last <strong>Temporal Compression Window (ms)</strong> and stores them in a single",
+			"combinator. The other pixels (that changed) are stored in per-frame combinators.",
+			"\n\nThis setting should be fine-tuned based on the amount of movement in the GIF.",
+			"Higher sampling windows can give greter compression, but if large portions of the GIF are moving",
+			"the compression value is reduced in comparison to shorter sampling times.",
+			"\n\nThis setting changes the window size (in ms) of the scan time for changed pixels.",
+			"Any pixels that remain the same within this time are compresed into a single combinator.",
+			"\n\n<strong>TL;DR; This feature increases the total number of combinators required,",
+			"but can dramatically reduce the overall size of the blueprint.</strong>",
+		].join(" "),
+		min: 0,
+		max: 5000,
+		step: 100,
+	},
+	targetFps: {
+		name: "Framerate",
+		type: "number",
+		tooltip: [
+			"Maximum framerate of the output blueprint.",
+			"\n\nThe blueprint will not exceed the original framerate of the GIF.",
+			"Higher framerates require more frames to be generated, increasing the size of the blueprint.",
+			"\n\nThis can also impact UPS (game performance; may cause stutters),",
+			"although Factorio will attempt to continue rendering at 1:1 time.",
+		].join(" "),
+		min: 1,
+		max: 1000,
+		step: 1,
+	},
 	useDLC: {
 		name: "Use Space Age DLC?",
 		type: "checkbox",
@@ -69,6 +113,24 @@ const FORM_ELEMENTS = {
 			"\n\nThis option will interfere with GIF looping as it will always an extra frame at the end.",
 			"For example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames, one at the start, and one at the end.",
 			"\n\nWith this option disabled, the output GIF will only have 1 frame.",
+		].join(" "),
+	},
+	useDeltaCompression: {
+		name: "Use Delta Compression",
+		type: "checkbox",
+		tooltip: [
+			"If enabled, significantly reduces the size of the blueprint by storing the difference between",
+			"each frame instead of the full frame data per-frame.",
+			"\n\nNote that this comes at the cost of not being able to seek to a specific frame in the GIF.",
+			"Addtionally, the GIF currently cannot be paused, and must be left to loop from start to finish",
+			"fully otherwise the pixels will become corrupted.",
+		].join(" "),
+	},
+	sortSignals: {
+		name: "Sort Signals",
+		type: "checkbox",
+		tooltip: [
+			"If enabled, the signals will be sorted by their type and name. This helps reduce the size of the blueprint for small GIFs.",
 		].join(" "),
 	},
 	grayscaleBits: {
@@ -111,7 +173,7 @@ const FORM_ELEMENTS = {
 		},
 	},
 	wireColor: {
-		name: "Wire Colour",
+		name: "Preferred Wire Colour",
 		type: "select",
 		tooltip: [
 			"The colour of the wires used to connect the lamps.",
@@ -148,9 +210,26 @@ const FORM_ELEMENTS = {
 	},
 };
 
+function formatDuration(ms) {
+	const totalSeconds = Math.floor(ms / 1000);
+
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
+	const milliseconds = ms % 1000;
+
+	return (
+		`${String(hours).padStart(2, "0")}:` +
+		`${String(minutes).padStart(2, "0")}:` +
+		`${String(seconds).padStart(2, "0")}.` +
+		`${String(milliseconds).padStart(3, "0")}`
+	);
+}
+
 function App({ worker }) {
 	// State
 	const [formData, setFormData] = createStore({ ...INITIAL_VALUES });
+	const [animationInfo, setAnimationInfo] = createSignal(null);
 	const [isGenerating, setIsGenerating] = createSignal(false);
 	const [progress, setProgress] = createSignal({ percentage: 0.0, status: "Starting..." });
 	const [blueprintData, setBlueprintData] = createSignal({ idx: 0, total: 0, content: "" });
@@ -192,6 +271,13 @@ function App({ worker }) {
 		}
 	};
 
+	function setInputFile(file) {
+		setFormData("file", file);
+		file.arrayBuffer().then((buffer) => {
+			setAnimationInfo(getAnimationInfo(new Uint8Array(buffer)));
+		});
+	}
+
 	// Event handlers
 	async function downloadBlueprint() {
 		try {
@@ -231,14 +317,14 @@ function App({ worker }) {
 			setIsGenerating(false);
 			formRefs.submitButton.disabled = false;
 			return;
-		}
-
-		if (formData.file.type !== "image/gif" && formData.file.type !== "image/webp") {
+		} else if (formData.file.type !== "image/gif" && formData.file.type !== "image/webp") {
 			setToast({ show: true, message: "Please select a GIF/WebP file", isError: true });
 			setTimeout(() => setToast({ show: false, message: "", isError: false }), 3000);
 			setIsGenerating(false);
 			formRefs.submitButton.disabled = false;
 			return;
+		} else {
+			saveFileDB(formData.file, LAST_FILE_KEY);
 		}
 
 		try {
@@ -259,6 +345,8 @@ function App({ worker }) {
 						useGreenLampWires: formData.wireColor === "green",
 						useHorizontalLampWires: formData.connectionDirection === "horizontal",
 						temporalCompressionBufferMs: +formData.temporalCompressionBufferMs,
+						useDeltaCompression: !!formData.useDeltaCompression,
+						sortSignals: !!formData.sortSignals,
 					},
 				},
 			});
@@ -313,9 +401,7 @@ function App({ worker }) {
 	});
 
 	createEffect(() => {
-		const triggers = document.querySelectorAll(".tooltip-trigger");
-
-		triggers.forEach((trigger) => {
+		document.querySelectorAll(".tooltip-trigger").forEach((trigger) => {
 			trigger.addEventListener("mousemove", (e) => {
 				const tooltip = trigger.nextElementSibling;
 				const rect = trigger.getBoundingClientRect();
@@ -341,6 +427,24 @@ function App({ worker }) {
 				tooltip.style.top = `${y}px`;
 			});
 		});
+	});
+
+	onMount(() => {
+		loadFileDB(LAST_FILE_KEY)
+			.then((file) => {
+				if (file) {
+					const dataTransfer = new DataTransfer();
+					dataTransfer.items.add(file);
+
+					formRefs.fileInput.files = dataTransfer.files;
+					setInputFile(file);
+				}
+			})
+			.catch((err) => {
+				console.error("Failed to load file:", err);
+				console.error("Failed to load file:", err);
+				setToast({ show: true, message: "Failed to load file", isError: true });
+			});
 	});
 
 	return (
@@ -399,21 +503,25 @@ function App({ worker }) {
 								{/* File Input */}
 								<div class="">
 									<input
-										ref={(el) => (formRefs.gifInput = el)}
+										ref={(el) => (formRefs.fileInput = el)}
 										class="text-white-500 w-full focus:outline-none focus:ring"
 										type="file"
 										id="gifInput"
 										required
-										onChange={(e) => setFormData("file", e.target.files[0])}
+										onChange={(e) => setInputFile(e.target.files[0])}
 										accept="image/gif,image/webp"
 									/>
 								</div>
-
-								{/* <div>
-									<div class="text-gray-400">asd</div>
-									<div class="text-gray-400">asd</div>
-								</div> */}
 							</div>
+
+							{animationInfo() && (
+								<div>
+									<div class="text-gray-300 font-semibold">
+										{formatDuration(animationInfo().duration)} ({animationInfo().frames} Frames, ~
+										{Math.round((10 * (animationInfo().frames * 1000)) / animationInfo().duration) / 10} FPS)
+									</div>
+								</div>
+							)}
 
 							{/* Max Size Input */}
 							<div class="mb-4 flex items-center justify-between">
@@ -445,18 +553,28 @@ function App({ worker }) {
 							</div>
 
 							{/* Advanced Settings and Submit Buttons */}
-							<div class="flex items-center justify-between">
-								<button class="button bg-gray-100 px-4" type="button" onClick={() => setShowAdvanced(!showAdvanced())}>
-									Advanced Options
-								</button>
-								<button
-									class="button button-green-right"
-									ref={(el) => (formRefs.submitButton = el)}
-									id="submit"
-									type="submit"
+							<div>
+								<div class="flex items-center justify-between">
+									<button class="button bg-gray-100 px-4" type="button" onClick={() => setShowAdvanced(!showAdvanced())}>
+										Advanced Options
+									</button>
+									<button
+										class="button button-green-right"
+										ref={(el) => (formRefs.submitButton = el)}
+										id="submit"
+										type="submit"
+									>
+										Generate
+									</button>
+								</div>
+								{/* <button
+									disabled
+									class="button mt-2 bg-gray-100 px-4 w-full"
+									type="button"
+									onClick={() => setShowAdvanced(!showAdvanced())}
 								>
-									Generate
-								</button>
+									Remember this file
+								</button> */}
 							</div>
 						</form>
 					</div>
@@ -468,80 +586,6 @@ function App({ worker }) {
 						</div>
 
 						<div class="panel-inset-light p-3 shadow-md w-full max-w-md">
-							{/* Framerate Input */}
-							<div class="mb-1 flex items-center justify-between">
-								<label className="block text-white-500 mb-2" htmlFor="framerate">
-									Framerate
-									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<span className="tooltip">
-										Maximum framerate of the output blueprint.
-										<br />
-										<br />
-										The blueprint will not exceed the original framerate of the GIF. Higher framerates require more
-										frames to be generated, increasing the size of the blueprint.
-										<br />
-										<br />
-										This can also impact UPS (game performance; may cause stutters), although Factorio will attempt to
-										continue rendering at 1:1 time.
-									</span>
-								</label>
-
-								<div class="flex items-center gap-3 w-20">
-									<input
-										ref={(el) => (formRefs.framerate = el)}
-										class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
-										type="number"
-										id="framerate"
-										value={formData.targetFps}
-										onChange={(e) => setFormData("targetFps", e.target.value)}
-										placeholder="Enter max framerate (won't exceed original)"
-									/>
-								</div>
-							</div>
-
-							{/* Compression Level */}
-							<div class="mb-1 flex items-center justify-between">
-								<label className="block text-white-500 mb-2" htmlFor="temporalCompressionBufferMs">
-									Temporal Compression Window (ms)
-									<img src={infoIcon} className="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<span className="tooltip">
-										If set to a non-zero value, the blueprint will be compressed using temporal compression between two
-										frames. This can dramatically reduce file size at the cost of using twice the number of decider
-										combinators for data storage.
-										<br />
-										<br />
-										The current implementation scans all the pixels every{" "}
-										<strong>Temporal Compression Window (ms)</strong>. It then finds all the pixels that have not
-										changed in the last <strong>Temporal Compression Window (ms)</strong> and stores them in a single
-										combinator. The other pixels (that changed) are stored in per-frame combinators.
-										<br />
-										<br />
-										This setting should be fine-tuned based on the amount of movement in the GIF. Higher sampling
-										windows can give greter compression, but if large portions of the GIF are moving the compression
-										value is reduced in comparison to shorter sampling times.
-										<br />
-										<br />
-										This setting changes the window size (in ms) of the scan time for changed pixels. Any pixels that
-										remain the same within this time are compresed into a single combinator. This feature is
-										experimental and is subject to change.
-									</span>
-								</label>
-
-								<div class="flex items-center gap-3">
-									<input
-										ref={(el) => (formRefs.temporalCompressionBufferMs = el)}
-										class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
-										type="number"
-										id="temporalCompressionBufferMs"
-										min="0"
-										max="5000"
-										step="100"
-										value={formData.temporalCompressionBufferMs}
-										onChange={(e) => setFormData("temporalCompressionBufferMs", e.target.value)}
-										placeholder="0-5000"
-									/>
-								</div>
-							</div>
 							{/* Substation Quality Select */}
 							<div class="mb-1 flex items-center justify-between">
 								<label class="block text-white-500 mb-2" for="substationQuality">
@@ -568,12 +612,7 @@ function App({ worker }) {
 								</select>
 							</div>
 							{Object.entries(FORM_ELEMENTS).map(([k, v]) =>
-								makeFormElement({
-									formData,
-									formRefs,
-									setFormData,
-									obj: { [k]: v },
-								}),
+								makeFormElement({ formData, formRefs, setFormData, obj: { [k]: v } }),
 							)}
 						</div>
 					</div>
@@ -726,6 +765,29 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 						<option value={k}>{v}</option>
 					))}
 				</select>
+			</div>
+		);
+	} else if (type === "number") {
+		return (
+			<div class="mb-1 flex items-center justify-between">
+				<label className="block text-white-500 mb-2" htmlFor={k}>
+					{name}
+					{mkTooltip(tooltip)}
+				</label>
+				<div class="flex items-center gap-3">
+					<input
+						ref={(e) => (formRefs[k] = e)}
+						class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
+						type="number"
+						id={k}
+						value={formData[k]}
+						min={v.min}
+						max={v.max}
+						step={v.step}
+						onChange={(e) => setFormData(k, e.target.value)}
+						placeholder={`${v.min}-${v.max}`}
+					/>
+				</div>
 			</div>
 		);
 	}

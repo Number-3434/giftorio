@@ -25,6 +25,7 @@ pub struct FrameData<'a> {
     output_frames: VecDeque<DynamicImage>,
     target_fps: u32,
 }
+#[allow(dead_code)]
 impl FrameData<'_> {
     /// Returns the dimensions of the output frames.
     ///
@@ -84,7 +85,7 @@ impl<'a> FrameData<'a> {
             buf: Vec::new(),
             curr_frame_idx: 0,
             curr_n_ms: 0,
-            filter_type: match args.resampling_filter.as_str() {
+            filter_type: match args.samp_filter.as_str() {
                 "catrom" => FilterType::CatmullRom,
                 "gaussian" => FilterType::Gaussian,
                 "lanczos3" => FilterType::Lanczos3,
@@ -93,16 +94,16 @@ impl<'a> FrameData<'a> {
                 _ => return Err(JsValue::from_str("Invalid resampling filter type")),
             },
             frames: frame_data.frames,
-            grayscale_bits: args.grayscale_bits,
+            grayscale_bits: args.gray_bits,
             in_dim,
             in_n_frames: n_frames,
-            include_last_frame: args.include_last_frame,
+            include_last_frame: args.last_frame,
             next_samp_idx: 0,
             out_dim_raw: ((w * scale_factor), (h * scale_factor)),
             out_n_frames: expected_output_frames(
                 frame_data.total_duration_ms.as_millis() as u32,
                 args.target_fps.max(1),
-                args.include_last_frame,
+                args.last_frame,
             ),
             output_frames: VecDeque::new(),
             target_fps: args.target_fps.max(1),
@@ -133,8 +134,8 @@ impl Iterator for FrameData<'_> {
             // % of prime number cuz i like seeing it go through every number :D
             if self.curr_frame_idx % 3 == 0 {
                 set_progress(
-                    0.0,
-                    0.50,
+                    0.00,
+                    0.75,
                     self.curr_frame_idx as f64 / self.in_n_frames as f64,
                     &format!(
                         "Streaming frame {} /{} ({})",
@@ -180,7 +181,6 @@ impl Iterator for FrameData<'_> {
 
             while {
                 sample_ms = (self.next_samp_idx as f64 * MS_PER_S / self.target_fps as f64) as u32;
-
                 sample_ms < self.curr_n_ms
                     && (self.include_last_frame || self.next_samp_idx < self.out_n_frames)
             } {
@@ -207,7 +207,6 @@ impl Iterator for FrameData<'_> {
 
 fn format_duration(ms: u64) -> String {
     let total_seconds = ms / 1000;
-
     let hours = total_seconds / 3600;
     let minutes = (total_seconds % 3600) / 60;
     let seconds = total_seconds % 60;
@@ -250,34 +249,29 @@ pub fn get_frames<'a>(
     let cursor = Cursor::new(image_data);
     let info: AnimationInfo;
     let dimensions: (u32, u32);
-    let frames = match image_type {
-        "gif" => {
-            let decoder = image::codecs::gif::GifDecoder::new(cursor)
-                .map_err(|e| JsValue::from_str(&format!("GIF decode error: {}", e)))?;
-            dimensions = decoder.dimensions();
-            info = animation_info(&image_data)?;
-
-            decoder.into_frames()
-        }
-
-        "webp" => {
-            let decoder = image::codecs::webp::WebPDecoder::new(cursor)
-                .map_err(|e| JsValue::from_str(&format!("WebP decode error: {}", e)))?;
-            dimensions = decoder.dimensions();
-            info = animation_info(&image_data)?;
-
-            decoder.into_frames()
-        }
-
-        _ => {
-            return Err(JsValue::from_str(
-                "Unsupported image type. Only 'gif' and 'webp' are allowed.",
-            ))
-        }
-    };
 
     Ok(ImageFrameData {
-        frames,
+        frames: match image_type {
+            "gif" => {
+                let decoder = image::codecs::gif::GifDecoder::new(cursor)
+                    .map_err(|e| JsValue::from_str(&format!("GIF decode error: {}", e)))?;
+                dimensions = decoder.dimensions();
+                info = animation_info(&image_data)?;
+                decoder.into_frames()
+            }
+            "webp" => {
+                let decoder = image::codecs::webp::WebPDecoder::new(cursor)
+                    .map_err(|e| JsValue::from_str(&format!("WebP decode error: {}", e)))?;
+                dimensions = decoder.dimensions();
+                info = animation_info(&image_data)?;
+                decoder.into_frames()
+            }
+            _ => {
+                return Err(JsValue::from_str(
+                    "Unsupported image type. Only 'gif' and 'webp' are allowed.",
+                ))
+            }
+        },
         dimensions,
         n_frames: info.frames,
         total_duration_ms: info.duration,

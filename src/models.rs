@@ -65,6 +65,8 @@ pub struct Entity {
     pub quality: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub always_on: Option<bool>,
+    #[serde(skip)]
+    pub custom_tag: Option<&'static str>,
 }
 
 impl Entity {
@@ -79,7 +81,12 @@ impl Entity {
             player_description: None,
             quality: None,
             always_on: None,
+            custom_tag: None,
         }
+    }
+
+    pub fn has_tag(&self, tag: &'static str) -> bool {
+        self.custom_tag == Some(tag)
     }
 
     pub fn with_direction(mut self, direction: u32) -> Self {
@@ -99,6 +106,14 @@ impl Entity {
 
     pub fn with_always_on(mut self, always_on: bool) -> Self {
         self.always_on = Some(always_on);
+        self
+    }
+
+    /// Custom tag for the entity. This does not get serialized.
+    ///
+    /// Utility to help identify entities for wire connections.
+    pub fn with_tag(mut self, tag: &'static str) -> Self {
+        self.custom_tag = Some(tag);
         self
     }
 }
@@ -181,7 +196,29 @@ pub struct Filter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<u32>,
 }
+pub trait NetworkSwapper {
+    fn swap_networks(&mut self);
+}
 
+impl NetworkSwapper for DeciderConditions {
+    fn swap_networks(&mut self) {
+        for c in self.conditions.iter_mut() {
+            if let Some(n) = &mut c.first_signal_networks {
+                n.red ^= true;
+                n.green ^= true;
+            }
+        }
+        self.outputs.iter_mut().for_each(|o| o.swap_networks());
+    }
+}
+impl NetworkSwapper for CombinatorOutput {
+    fn swap_networks(&mut self) {
+        if let Some(n) = &mut self.networks {
+            n.red ^= true;
+            n.green ^= true;
+        }
+    }
+}
 #[derive(Clone, Serialize)]
 pub struct DeciderConditions {
     pub conditions: Vec<Condition>,
@@ -195,6 +232,7 @@ pub struct Condition {
     pub comparator: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compare_type: Option<&'static str>,
+    pub first_signal_networks: Option<NetworkFilters>,
 }
 
 #[derive(Clone, Serialize)]
@@ -203,6 +241,8 @@ pub struct CombinatorOutput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub constant: Option<i32>,
     pub signal: Arc<Signal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub networks: Option<NetworkFilters>,
 }
 impl CombinatorOutput {
     pub fn new(signal: Arc<Signal>, constant: Option<i32>) -> Self {
@@ -210,6 +250,44 @@ impl CombinatorOutput {
             copy_count_from_input: constant.is_none(),
             constant,
             signal,
+            networks: None,
+        }
+    }
+
+    pub fn with_networks(mut self, networks: NetworkFilters) -> Self {
+        self.networks = Some(networks);
+        self
+    }
+}
+
+#[derive(Clone, Serialize)]
+pub struct NetworkFilters {
+    pub red: bool,
+    pub green: bool,
+}
+impl NetworkFilters {
+    pub fn all() -> Self {
+        Self {
+            red: true,
+            green: true,
+        }
+    }
+    pub fn green() -> Self {
+        Self {
+            red: false,
+            green: true,
+        }
+    }
+    pub fn none() -> Self {
+        Self {
+            red: false,
+            green: false,
+        }
+    }
+    pub fn red() -> Self {
+        Self {
+            red: true,
+            green: false,
         }
     }
 }

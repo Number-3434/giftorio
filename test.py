@@ -10,7 +10,7 @@ except ImportError:
     print("Install simdjson with `pip install pysimdjson`")
     exit(1)
 
-import base64, zlib
+import base64, zlib, json
 from pathlib import Path
 
 TEST_PATH = Path("~/Downloads/giftorio-blueprint.bp").expanduser()
@@ -43,7 +43,8 @@ def validate_streaming(fp):
         return False
 
 
-# print(json.dumps(decode_blueprint(pyperclip.paste()), indent=4))
+print(json.dumps(json.loads(decode_blueprint(pyperclip.paste())), indent=2))
+exit()
 
 # raw = decode_blueprint(TEST_PATH.read_text())
 # JSON_PATH.write_text(raw.decode())

@@ -1,8 +1,10 @@
 # GIFtorio
 
-[GIFtorio](https://giftor.io) is a web application that converts animated GIFs into Factorio blueprints. The resulting blueprint creates an
-animated display using the game's circuit network and lamps. It requires absolutely no mods - works on vanilla Factorio version 2.0 and the
-Space Age DLC. ![example nyan gif](https://github.com/colinchilds/giftorio/blob/main/web/assets/img/nyan.gif?raw=true)
+[GIFtorio](https://giftor.io) is a web application that converts animated GIFs
+into Factorio blueprints. The resulting blueprint creates an animated display
+using the game's circuit network and lamps. It requires no mods - works on
+vanilla Factorio version 2.0 and the Space Age DLC.
+![example nyan gif](https://github.com/colinchilds/giftorio/blob/main/web/assets/img/nyan.gif?raw=true)
 
 ## Features
 
@@ -13,19 +15,104 @@ Space Age DLC. ![example nyan gif](https://github.com/colinchilds/giftorio/blob/
 - Attempts to maintain animation timing similar to the original GIF
 - Supports different substation qualities when using the Space Age DLC
 
-## Additional Features (in this fork)
+## Additional Features (in 2.0)
 
-- TODO: Add blueprint insertion to save files, Factorio doesn't seem to like 500 MB+ blueprint strings.
-- Optimised for memory performance on longer videos. Tested with a 13,000+ frame GIF rendering at 270 max width.
-- Uses chunked streaming of video frames to reduce memory pressure. (The old version had multiple buffers of the entire video which can
-  destroy RAM especially on longer videos.) Uses a single streaming video pass. (As opposed to accumulating all frames into a buffer then
-  processing in parallel).
-- Uses 13,341 available signals from Space Age (+80% more than old version, 3 signals reserved for internal calulations)
-- Max size (longest side) increased to 1,080 - so big the entire screen cannot fit in min zoom in Editor mode
-- Added support for filters (nearest, triangle, catrom, lanczos3, gaussian), increasing the quality of resolution of the output.
-- Remembers last settings and settings are remembered between page reloads (local storage).
-- Changed clipboard copy to file download mechanic for huge blueprints (>50 MB). (Factorio 2.0.25: a file containing the blueprint text can
-  be dragged into the game and Factorio will import it as a blueprint). Added progress updates.
+### Temporal Compression
+
+Temporal compression samples frames at a fixed rate, storing pixels that did't
+change this sample in a **single** combinator for the sampe (instead of being
+duplicated across multiple combinators for each frme).
+
+> [!NOTE] Temporal compression increases the total number of combinators
+> required in the blueprint.
+
+Works better on longer videos with less movement. Size reduction varies from 1x
+to 4x depending on the nature of the source video.
+
+- For example, a sample window of 250 ms at 60fps will scan 15 frames at a time,
+  storing any pixels that remained the same throughout those 15 frames in a
+  single combinator.
+- Window sizes (ms) can be tweaked for optimal compression.
+- Longer windows could cache compress more pixels into a single combinator, but
+  decreases the chances of finding such pixels that don't change.
+- Smaller sizes increases the chances of finding non-changing pixels at a cost
+  of reduced compression.
+
+Temporal compression is a static compression technique, so it is possible to
+seek to any frame at any point in time. This can greatly reduce blueprint sizes
+(around x4), depending on the source GIF.
+
+> TODO: Add built-in optimisation to automatically and dynamically set the best
+> window size for compression.
+
+### Delta Compression
+
+Delta compression stores the difference in raw pixel values between frames,
+instead of the real frame data.
+
+> [!IMPORTANT] Delta compression is volatile. Blueprints generated with delta
+> compression cannot be safely seeked, and must always be played from the
+> beginning.
+
+- Delta compression greatly reduces sizes (up to x10 smaller than uncompressed).
+- Instead of storing the raw values of each frame, delta compression has each
+  combinator store the difference required to obtain the desired pixel value.
+- This means any pixels that don't change can be excluded entirely. This can
+  give massive compression gains at a cost of not being able to seek safely, as
+  a frame depends on state from all previous frames.
+
+### Signal Sorting
+
+In Factorio, signals come with a `type` and a `name` field. GIFtorio uses a
+pre-compiled list of all available signals to store the pixel data.
+
+However, some signals take up more space in JSON as their `type` and `name`
+field values are longer. E.g. `{ "type": "entity", "name": "red-chest" }` is
+much shorter than
+`{ "type": "entity", "name": "small-demolisher-expanding-ash-cloud-29" }`.
+
+Because of this, we can sort the signals by the length of their `type` and
+`name` fields, and prioritise signals with shorter names and types first.
+Splitting the video segments reduces the total number of unique signals
+required, allowing us to use lots of e.g. 300 small-length signals instead of
+1000 long ones.
+
+### Wire Settings
+
+Lamp wires can be configured to use red or green wires. Their connection
+direction can also be configured (horizontal or vertical).
+
+### Server-Side Optimisations
+
+Most content is streamed from the source instead of being accumulated into one
+buffer. This allows processing larger GIFs. GIFtorio can now support 13,000+
+frame GIFs and a longest side up to 1,000 lamps.
+
+- Includes a utility script that scans the byte-level frame data of the GIF /
+  WebP, and can efficiently extract the total frame count and total duration.
+- Video frames are streamed instead of accumulated into a single buffer, greatly
+  reducing memory pressure. Note that for now, parallel processing is disabled.
+- The output blueprint string is chunked and streamed directly to disk, instead
+  of being serialized in one.
+- JSON serialisation is chunked into groups of 1,000 entities, reducing memory
+  pressure.
+- Updated to use 13,341 available signals from Space Age (+80% more than old
+  version, 3 signals reserved for internal calulations). Some signals don't show
+  up at all in the Factorio GUI, but otherwise functon as regular signals.
+
+### Other
+
+- Max size (longest side) increased to 1,080 - so big the entire screen cannot
+  fit in min zoom in Editor mode
+- Added support for resampling (`nearest`, `triangle`, `catrom`, `lanczos3`,
+  `gaussian`).
+- Settings are remembered between page reloads (using local storage).
+- Automatically remembers the last uploaded file, and pre-populates the file
+  upload. (Useful as a dev tool).
+- Added direct JSON download mechanic for huge blueprints (>50 MB). Factorio has
+  issues importing compressed blueprint strings if their sizes are very large,
+  but can safely import JSON file (by dragging the file directly into Factorio;
+  requires Factorio 2.0.25 or later).
 
 ## Prerequisites
 
@@ -73,7 +160,8 @@ npm start
 
 The application:
 
-1. Uses WebAssembly (compiled from Rust) to process GIFs efficiently in the browser
+1. Uses WebAssembly (compiled from Rust) to process GIFs efficiently in the
+   browser
 2. Loads and downscales the input GIF to a manageable size
 3. Converts each frame into a series of circuit network signals
 4. Creates a blueprint containing:
@@ -85,11 +173,15 @@ The application:
 
 ## Limitations
 
-- Maximum image size is limited by available signals, but more realistically by in-game performance.
-- Higher resolution images will require more in-game entities and may impact performance
+- Maximum image size is limited by available signals, but more realistically by
+  in-game performance.
+- Higher resolution images will require more in-game entities and may impact
+  performance
 - Browser must support WebAssembly
-- Longer GIFs can take a really long time to process and may cause the game to lag. We recommend trying keep gifs to only a few seconds. If
-  you have a really long gif, consider using the grayscale option, as it can signficantly reduce blueprint size.
+- Longer GIFs can take a really long time to process and may cause the game to
+  lag. We recommend trying keep gifs to only a few seconds. If you have a really
+  long gif, consider using the grayscale option, as it can signficantly reduce
+  blueprint size.
 
 ## Contributing
 
@@ -97,7 +189,8 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Credits
 
-- [@colinchilds](https://github.com/colinchilds) for the original [GIFtorio](https://github.com/colinchilds/giftorio) project
+- [@colinchilds](https://github.com/colinchilds) for the original
+  [GIFtorio](https://github.com/colinchilds/giftorio) project
 
 ## License
 
