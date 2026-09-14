@@ -14,52 +14,48 @@ const MEDIA = [
 ];
 
 function Background(props) {
-	const [currentMedia, setCurrentMedia] = createSignal(0);
-	const [useVideoBackground, setUseVideoBackground] = createSignal(true);
+	const [currMediaIdx, setCurrMediaIdx] = createSignal(0);
+	const [useVideoBg, setUseVideoBg] = createSignal(true);
 
 	onMount(() => {
 		// Check if video playback is supported
 		const video = document.createElement("video");
-		setUseVideoBackground(!!video.canPlayType);
+		setUseVideoBg(!!video.canPlayType);
 
-		setCurrentMedia(Math.floor(Math.random() * MEDIA.length));
+		setCurrMediaIdx(Math.floor(Math.random() * MEDIA.length));
 		const duration = props.interval || 10000;
-		setInterval(() => setCurrentMedia((currentMedia() + 1) % MEDIA.length), duration);
+		setInterval(() => setCurrMediaIdx((currMediaIdx() + 1) % MEDIA.length), duration);
 	});
 
 	return (
 		<div id="media-container" class="fixed top-0 left-0 w-full h-full" style="z-index: -1;">
 			<div class="absolute inset-0 bg-black"></div>
-			{useVideoBackground() ?
-				<For each={MEDIA}>
-					{(media, i) => (
-						<video
-							id={`bg-video-${i() + 1}`}
-							class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out pointer-events-none opacity-0"
-							classList={{ "opacity-100": i() === currentMedia() }}
-							autoplay
-							muted
-							loop
-							playsinline
-							style="z-index: 0;"
-						>
-							<source src={media.mp4} type="video/mp4" />
-							<source src={media.webm} type="video/webm" />
-							<img src={media.fallback} alt="" class="w-full h-full object-cover" />
-						</video>
-					)}
-				</For>
-			:	<For each={MEDIA}>
-					{(media, i) => (
-						<img
-							src={media.fallback}
-							alt=""
-							class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out opacity-0"
-							classList={{ "opacity-100": i() === currentMedia() }}
-							style="z-index: 0;"
-						/>
-					)}
-				</For>
+			{useVideoBg() ?
+				MEDIA.map((media, i) => (
+					<video
+						id={`bg-video-${i + 1}`}
+						class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out pointer-events-none opacity-0"
+						classList={{ "opacity-100": i === currMediaIdx() }}
+						autoplay
+						muted
+						loop
+						playsinline
+						style="z-index: 0;"
+					>
+						<source src={media.mp4} type="video/mp4" />
+						<source src={media.webm} type="video/webm" />
+						<img src={media.fallback} alt="" class="w-full h-full object-cover" />
+					</video>
+				))
+			:	MEDIA.map((media, i) => (
+					<img
+						src={media.fallback}
+						alt=""
+						class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out opacity-0"
+						classList={{ "opacity-100": i === currMediaIdx() }}
+						style="z-index: 0;"
+					/>
+				))
 			}
 		</div>
 	);

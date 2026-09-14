@@ -736,8 +736,6 @@ pub fn generate_blueprint(
     frame_data: &mut FrameData,
     args: &BlueprintArgs,
 ) -> Result<Blueprint, JsValue> {
-    report_progress(0.00, "Starting blueprint update");
-
     // Get signals internally.
     let signals: Vec<Arc<Signal>> = get_signals_with_quality(args.use_dlc, args.sort_signals);
 
@@ -760,8 +758,8 @@ pub fn generate_blueprint(
     };
     let n_comp_frames_per_chunk = if n_comp_buf_frames > 1 { 1 } else { 0 } as usize;
     let (full_width, full_height) = frame_data.dimensions();
-    let max_cols_per_group = ((signals.len() as u32) / full_height).min(full_width);
-    let n_groups = (full_width as f64 / max_cols_per_group as f64).ceil() as u32;
+    let max_cols_per_grp = ((signals.len() as u32) / full_height).min(full_width);
+    let n_groups = (full_width as f64 / max_cols_per_grp as f64).ceil() as u32;
     let max_cols_per_grp = full_width / n_groups;
     if max_cols_per_grp < 1 {
         return Err(JsValue::from_str(
