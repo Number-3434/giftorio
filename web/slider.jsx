@@ -14,14 +14,14 @@ export function Slider({ value, min, max, step, onChange, ref, ...props }) {
 	return (
 		<div class="flex items-center justify-between">
 			<div class="flex items-center gap-3">
-				<div class="factorio-slider-wrapper min-w-full">
+				<div aria-disabled={props.disabled} class="factorio-slider-wrapper min-w-full">
 					<div
 						class="factorio-slider-fill"
-						style={{
-							width: `${((currValue() - min) / (max - min)) * 100}%`,
-						}}
+						aria-disabled={props.disabled}
+						style={{ width: `${((currValue() - min) / (max - min)) * 100}%` }}
 					/>
 					<input
+						disabled={props.disabled}
 						ref={ref}
 						type="range"
 						id={props.id}
@@ -34,6 +34,7 @@ export function Slider({ value, min, max, step, onChange, ref, ...props }) {
 					/>
 				</div>
 				<input
+					disabled={props.disabled}
 					type="number"
 					class="bg-gray-100 focus:bg-tan-500 min-w-24 px-3 py-2 border rounded focus:outline-none focus:ring"
 					value={currValue()}

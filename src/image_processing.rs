@@ -1,4 +1,4 @@
-use crate::blueprint::BlueprintArgs;
+use crate::blueprint::{BlueprintArgs, BlueprintResamplingFilter};
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
 use crate::progress::set_progress;
@@ -85,16 +85,15 @@ impl<'a> FrameData<'a> {
             buf: Vec::new(),
             curr_frame_idx: 0,
             curr_n_ms: 0,
-            filter_type: match args.samp_filter.as_str() {
-                "catrom" => FilterType::CatmullRom,
-                "gaussian" => FilterType::Gaussian,
-                "lanczos3" => FilterType::Lanczos3,
-                "nearest" => FilterType::Nearest,
-                "triangle" => FilterType::Triangle,
-                _ => return Err(JsValue::from_str("Invalid resampling filter type")),
+            filter_type: match args.sampling_filter {
+                BlueprintResamplingFilter::Catrom => FilterType::CatmullRom,
+                BlueprintResamplingFilter::Gaussian => FilterType::Gaussian,
+                BlueprintResamplingFilter::Lanczos3 => FilterType::Lanczos3,
+                BlueprintResamplingFilter::Nearest => FilterType::Nearest,
+                BlueprintResamplingFilter::Triangle => FilterType::Triangle,
             },
             frames: frame_data.frames,
-            grayscale_bits: args.gray_bits,
+            grayscale_bits: args.grayscale_bits,
             in_dim,
             in_n_frames: n_frames,
             include_last_frame: args.last_frame,

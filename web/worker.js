@@ -3,9 +3,7 @@ import init, { run_blueprint, set_progress_callback } from "../pkg/giftorio_wasm
 async function run() {
 	await init();
 
-	set_progress_callback((percentage, status) => {
-		postMessage({ progress: { percentage, status } });
-	});
+	set_progress_callback((percentage, status) => postMessage({ progress: { percentage, status } }));
 
 	const pendingWrites = new Map();
 	let nextWriteId = 0;
@@ -19,20 +17,29 @@ async function run() {
 			event.data.error ? pending.reject(new Error(event.data.error)) : pending.resolve();
 		} else if (event.data.generate) {
 			const { imageData, args } = event.data.generate;
+			const { outputFormat } = args;
 
 			try {
-				postMessage({ type: "start", filename: "blueprint.json" });
-				await run_blueprint(
+				if (outputFormat === "blueprint") {
+					postMessage({ type: "start", filename: "blueprint.bp" });
+					// Add Factorio verson prefix
+					const id = nextWriteId++;
+					const chunk = new TextEncoder().encode("0");
+					postMessage({ chunk: { id, data: chunk } }, [chunk.buffer]);
+				} else {
+					postMessage({ type: "start", filename: "blueprint.json" });
+				}
+				const blueprintMetadata = await run_blueprint(
 					args,
 					imageData,
-					data => postMessage({ blueprint: data }),
-					chunk =>
+					data =>
 						new Promise((resolve, reject) => {
 							const id = nextWriteId++;
 							pendingWrites.set(id, { resolve, reject });
-							postMessage({ chunk: { id, data: chunk } }, [chunk.buffer]);
+							postMessage({ chunk: { id, data } }, [data.buffer]);
 						}),
 				);
+				postMessage({ blueprintMetadata });
 				postMessage({ type: "done" });
 			} catch (e) {
 				postMessage({ error: e?.toString() ?? String(e) });

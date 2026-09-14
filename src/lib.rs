@@ -1,6 +1,6 @@
-use crate::blueprint::BlueprintArgs;
 use wasm_bindgen::prelude::*;
 mod blueprint;
+mod blueprint_encoder;
 mod constants;
 mod image_processing;
 mod image_utils;
@@ -8,6 +8,7 @@ mod macros;
 mod models;
 mod progress;
 mod signals;
+mod streaming_writer;
 
 /// Public entry point for WebAssembly.
 ///
@@ -28,27 +29,21 @@ mod signals;
 pub async fn run_blueprint(
     options: JsValue,
     image_data: &[u8],
-    on_group_ready: &js_sys::Function,
     send_chunk: &js_sys::Function,
-) -> Result<(), JsValue> {
+) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 
-    let args: BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
+    let args: blueprint::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
 
     // Process the image to extract frames and determine the effective FPS.
     let mut frame_data = image_processing::FrameData::new(image_data, &args)?;
 
     let blueprint = blueprint::generate_blueprint(&mut frame_data, &args)?;
-    let mut encoder = blueprint::BlueprintEncoder::new(blueprint);
-    let mut buf = Vec::new();
+    let mut encoder = blueprint_encoder::BlueprintEncoder::new(blueprint, &args);
 
-    while !encoder.done() {
-        buf.clear();
-        encoder.next_chunk(&mut buf)?;
-
-        let chunk = js_sys::Uint8Array::from(&buf[..]);
-        let promise = send_chunk.call1(&JsValue::NULL, &chunk)?;
-
+    while let Some(chunk) = encoder.next_chunk()? {
+        let chunk = js_sys::Uint8Array::from(&chunk[..]);
+        let promise = send_chunk.call1(&JsValue::NULL, &JsValue::from(chunk))?;
         wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(promise)).await?;
     }
 
@@ -61,7 +56,5 @@ pub async fn run_blueprint(
         &JsValue::from_str(&args.name.to_string()),
     )?;
 
-    on_group_ready.call1(&JsValue::NULL, &obj)?;
-
-    Ok(())
+    Ok(JsValue::from(obj))
 }

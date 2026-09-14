@@ -20,55 +20,85 @@ const _INITIAL_VALUES = {
 	grayscaleBits: 0,
 	wireColor: "green",
 	connectionDirection: "horizontal",
-	temporalCompressionBufferMs: 500,
-	useDeltaCompression: false,
 	sortSignals: false,
+	combinatorCompressionType: "none",
+	temporalCompressionWindow: 300,
+	outputFormat: "blueprint",
 };
-const FILTER_TYPES = ["catrom", "gaussian", "lanczos3", "nearest", "triangle"];
-const SUBSTATION_QUALITIES = ["none", "normal", "uncommon", "rare", "epic", "legendary"];
-const WIRE_COLORS = ["green", "red"];
-
-function downloadTxt(text, filename = "file.txt") {
-	const blob = new Blob([text], { type: "text/plain" });
-	const url = URL.createObjectURL(blob);
-
-	const a = document.createElement("a");
-	a.href = url;
-	a.download = filename;
-	a.click();
-
-	URL.revokeObjectURL(url);
-}
 
 function setInitialValues(values) {
 	localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
 }
-
 const INITIAL_VALUES = (() => {
 	const prev = localStorage.getItem(FORM_DATA_KEY);
+	if (prev) return JSON.parse(prev);
 
-	if (prev) {
-		return JSON.parse(prev);
-	} else {
-		setInitialValues(_INITIAL_VALUES);
-
-		return { ..._INITIAL_VALUES };
-	}
+	setInitialValues(_INITIAL_VALUES);
+	return { ..._INITIAL_VALUES };
 })();
+
 const FORM_ELEMENTS = {
-	temporalCompressionBufferMs: {
+	useDLC: {
+		name: "Use Space Age DLC?",
+		type: "checkbox",
+		tooltip: [
+			"If enabled, dramatically increases the number of available signals,",
+			"reducing the number of combinators in the blueprint by ~15x.",
+			"It also allows for higher quality substations.",
+			"\n\nRequires the Space Age DLC (v0.2.77 or later).",
+		].join(" "),
+	},
+	substationQuality: {
+		name: "Substation Quality",
+		type: "select",
+		options: [
+			["normal", "Normal"],
+			["uncommon", "Uncommon"],
+			["rare", "Rare"],
+			["epic", "Epic"],
+			["legendary", "Legendary"],
+			["none", "None"],
+		],
+	},
+	combinatorCompressionType: {
+		name: "Combinator Compression",
+		type: "select",
+		tooltip: [
+			"Selects the compression method used for the combinators.",
+			"\n",
+			"\n<strong>Temporal Compression</strong>",
+			"\nTemporal compression compares frames on a fixed window, storing pixels that",
+			"didn't change in the last window using a single combinator.",
+			"Temporal compression can reduce file sizes up to 75% depending on the source video.",
+			"\n\nTemporal compression is <strong>non-volatile</strong>, and the resulting blueprint",
+			"can be seeked to any point in time safely without corruption.",
+			'\n\n<i><span style="color:gray;">Note: using temporal compression doubles the number of combinators used in the blueprint,',
+			`but the overall file size is reduced up to 75%.</span></i>`,
+			"\n",
+			"\n<strong>Delta Compression</strong>",
+			"\nDelta compression stores the difference of the pixels between frames, rather than",
+			"the full frame data on each combinator. This can give significantly better compression",
+			"than temporal compression, but at the cost of not being able to seek to a specific frame.",
+			"Delta compression can reduce file sizes up to 90% depending on the source video.",
+			'\n\n<i><span style="color:gray;">Note: delta compression is <strong>volatile</strong>, and the resulting blueprint',
+			`cannot be seeked / paused and must only be played from start to finish.</span></i>`,
+			"\n",
+			"\n<strong>None</strong> disables compression.",
+		].join(" "),
+		options: {
+			none: "None",
+			temporal: "Temporal (static)",
+			delta: "Delta (volatile)",
+		},
+	},
+	temporalCompressionWindow: {
 		name: "Compression Window (ms)",
 		type: "number",
 		tooltip: [
-			"If set to a non-zero value, the blueprint will be compressed using",
-			"temporal compression by comparing frames on a fixed window.",
-			"\n\nTemporal compression is a <strong>non-volatile</strong> compression method",
-			"(i.e. the video can be seeked to any point in time safely without corruption),",
-			"but is not as effective as .",
-			"\n\nThe current implementation scans all the pixels every",
-			"<strong>Temporal Compression Window (ms)</strong>. It then finds all the pixels that have not",
-			"changed in the last <strong>Temporal Compression Window (ms)</strong> and stores them in a single",
-			"combinator. The other pixels (that changed) are stored in per-frame combinators.",
+			"Scans all pixels every <strong>Window (ms)</strong> milliseconds,",
+			"finds all the pixels that did not change in the last scan,",
+			"and stores them in a single combinator.",
+			"The other pixels (that changed) are stored in per-frame combinators.",
 			"\n\nThis setting should be fine-tuned based on the amount of movement in the GIF.",
 			"Higher sampling windows can give greter compression, but if large portions of the GIF are moving",
 			"the compression value is reduced in comparison to shorter sampling times.",
@@ -77,7 +107,7 @@ const FORM_ELEMENTS = {
 			"\n\n<strong>TL;DR; This feature increases the total number of combinators required,",
 			"but can dramatically reduce the overall size of the blueprint.</strong>",
 		].join(" "),
-		min: 0,
+		min: 100,
 		max: 5000,
 		step: 100,
 	},
@@ -95,16 +125,6 @@ const FORM_ELEMENTS = {
 		max: 60,
 		step: 1,
 	},
-	useDLC: {
-		name: "Use Space Age DLC?",
-		type: "checkbox",
-		tooltip: [
-			"If enabled, dramatically increases the number of available signals,",
-			"reducing the number of combinators in the blueprint by ~15x.",
-			"It also allows for higher quality substations.",
-			"\n\nRequires the Space Age DLC (v0.2.77 or later).",
-		].join(" "),
-	},
 	includeLastFrame: {
 		name: "Always Include Last Frame",
 		type: "checkbox",
@@ -114,17 +134,6 @@ const FORM_ELEMENTS = {
 			"\n\nThis option will interfere with GIF looping as it will always an extra frame at the end.",
 			"For example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames, one at the start, and one at the end.",
 			"\n\nWith this option disabled, the output GIF will only have 1 frame.",
-		].join(" "),
-	},
-	useDeltaCompression: {
-		name: "Use Delta Compression",
-		type: "checkbox",
-		tooltip: [
-			"If enabled, significantly reduces the size of the blueprint by storing the difference between",
-			"each frame instead of the full frame data per-frame.",
-			"\n\nNote that this comes at the cost of not being able to seek to a specific frame in the GIF.",
-			"Addtionally, the GIF currently cannot be paused, and must be left to loop from start to finish",
-			"fully otherwise the pixels will become corrupted.",
 		].join(" "),
 	},
 	sortSignals: {
@@ -145,12 +154,12 @@ const FORM_ELEMENTS = {
 			"while 4-bit grayscale has 16 shades of gray and can reduce the blueprint size by up to 85%.",
 			"Full black and white is roughly 32x smaller than full color.",
 		].join(" "),
-		options: {
-			["0"]: "Full Color",
-			["8"]: "8-bit Grayscale (256 shades)",
-			["4"]: "4-bit Grayscale (16 shades)",
-			["1"]: "1-bit (black & white only)",
-		},
+		options: [
+			["0", "Full Color"],
+			["8", "8-bit Grayscale (256 shades)"],
+			["4", "4-bit Grayscale (16 shades)"],
+			["1", "1-bit (black & white only)"],
+		],
 	},
 	resamplingFilter: {
 		name: "Resampling Filter",
@@ -209,6 +218,26 @@ const FORM_ELEMENTS = {
 			vertical: "Vertical",
 		},
 	},
+	outputFormat: {
+		name: "Output Format",
+		type: "select",
+		tooltip: [
+			"Selects the format of the output file.",
+			"\n",
+			"\n<strong>Factorio Blueprint</strong> is a text file that can be copy-pasted",
+			"into the 'Import Blueprint String' dialog in the Factorio editor.",
+			"\n<strong>JSON</strong> is a JSON file containing the blueprint data.",
+			"From Factorio v2.0.25 onwards, JSON and text files can be imported directly",
+			"into the game via drag-and-drop.",
+			"\n",
+			"\n<strong>Note: If Factorio is having issues importing large blueprints,",
+			"try using the JSON format.</strong>",
+		].join(" "),
+		options: {
+			blueprint: "Blueprint",
+			json: "Raw JSON",
+		},
+	},
 };
 
 function formatDuration(ms) {
@@ -232,8 +261,8 @@ function App({ worker }) {
 	const [formData, setFormData] = createStore({ ...INITIAL_VALUES });
 	const [animationInfo, setAnimationInfo] = createSignal(null);
 	const [isGenerating, setIsGenerating] = createSignal(false);
+	const [needsTooltipUpdate, setNeedsTooltipUpdate] = createSignal(true);
 	const [progress, setProgress] = createSignal({ percentage: 0.0, status: "Starting..." });
-	const [blueprintData, setBlueprintData] = createSignal({ idx: 0, total: 0, content: "" });
 	const [toast, setToast] = createSignal({ show: false, message: "", isError: false });
 	const [isDragging, setIsDragging] = createSignal(false);
 	const [xOffset, setXOffset] = createSignal(0);
@@ -253,10 +282,15 @@ function App({ worker }) {
 			setProgress({ percentage, status });
 			formRefs.progressBar.style.width = `${percentage}%`;
 			formRefs.progressStatus.textContent = status;
-		} else if (event.data.blueprint) {
-			const { blueprint } = event.data;
+		} else if (event.data.blueprintMetadata) {
+			const { blueprintMetadata } = event.data;
 
-			setBlueprintData({ idx: blueprint.group_index, total: blueprint.num_groups, content: blueprint.blueprint });
+			setToast({
+				show: true,
+				message: "Blueprint downloaded! If you're having trouble importing the blueprint into Factorio, try using the JSON format.",
+				isError: false,
+			});
+			setTimeout(() => setToast({ show: false, message: "", isError: false }), 3000);
 
 			formRefs.progressContainer.classList.add("hidden");
 			formRefs.blueprintResult.classList.remove("hidden");
@@ -279,23 +313,6 @@ function App({ worker }) {
 		});
 	}
 
-	// Event handlers
-	async function downloadBlueprint() {
-		try {
-			downloadTxt(blueprintData().content, `giftorio-blueprint.bp`);
-			setToast({
-				show: true,
-				message: "Downloading blueprint. Drag-and-drop the file into Factorio (requires Factorio version <=2.0.25)",
-				isError: false,
-			});
-			setTimeout(() => setToast({ show: false, message: "", isError: false }), 2000);
-		} catch (err) {
-			console.error("Failed to copy blueprint:", err);
-			setToast({ show: true, message: "Failed to copy to clipboard", isError: true });
-			setTimeout(() => setToast({ show: false, message: "", isError: false }), 2000);
-		}
-	}
-
 	async function handleSubmit(event) {
 		event.preventDefault();
 		setIsGenerating(true);
@@ -303,7 +320,6 @@ function App({ worker }) {
 
 		// Reset UI state
 		formRefs.blueprintStatus.classList.remove("hidden");
-		setBlueprintData({ idx: 0, total: 0, content: "" });
 		formRefs.progressContainer.classList.remove("hidden");
 		formRefs.blueprintResult.classList.add("hidden");
 		setProgress({ percentage: 0, status: "Starting..." });
@@ -330,12 +346,25 @@ function App({ worker }) {
 
 		try {
 			const imageData = new Uint8Array(await formData.file.arrayBuffer());
+			let combinatorCompression = null;
+
+			if (formData.combinatorCompressionType === "delta") {
+				combinatorCompression = "delta";
+			} else if (formData.combinatorCompressionType === "temporal") {
+				combinatorCompression = {
+					temporal: {
+						window: +formData.temporalCompressionWindow,
+					},
+				};
+			}
+
 			worker.postMessage({
 				generate: {
 					imageData,
 					args: {
 						name: formData.file.name,
 						imageType: formData.file.type.substring(6 /* image/ */),
+						combinatorCompression,
 						targetFps: +formData.targetFps,
 						maxSize: +formData.maxSize,
 						useDLC: !!formData.useDLC,
@@ -345,9 +374,8 @@ function App({ worker }) {
 						resamplingFilter: formData.resamplingFilter,
 						useGreenLampWires: formData.wireColor === "green",
 						useHorizontalLampWires: formData.connectionDirection === "horizontal",
-						temporalCompressionBufferMs: +formData.temporalCompressionBufferMs,
-						useDeltaCompression: !!formData.useDeltaCompression,
 						sortSignals: !!formData.sortSignals,
+						outputFormat: formData.outputFormat,
 					},
 				},
 			});
@@ -402,6 +430,8 @@ function App({ worker }) {
 	});
 
 	createEffect(() => {
+		if (!needsTooltipUpdate()) return;
+
 		document.querySelectorAll(".tooltip-trigger").forEach((trigger) => {
 			trigger.addEventListener("mousemove", (e) => {
 				const tooltip = trigger.nextElementSibling;
@@ -428,6 +458,8 @@ function App({ worker }) {
 				tooltip.style.top = `${y}px`;
 			});
 		});
+
+		setNeedsTooltipUpdate(false);
 	});
 
 	onMount(() => {
@@ -446,6 +478,12 @@ function App({ worker }) {
 				console.error("Failed to load file:", err);
 				setToast({ show: true, message: "Failed to load file", isError: true });
 			});
+	});
+
+	createEffect(() => {
+		if (!formData.useDLC && !["none", "normal"].includes(formData.substationQuality)) {
+			setFormData("substationQuality", "normal");
+		}
 	});
 
 	return (
@@ -568,14 +606,6 @@ function App({ worker }) {
 										Generate
 									</button>
 								</div>
-								{/* <button
-									disabled
-									class="button mt-2 bg-gray-100 px-4 w-full"
-									type="button"
-									onClick={() => setShowAdvanced(!showAdvanced())}
-								>
-									Remember this file
-								</button> */}
 							</div>
 						</form>
 					</div>
@@ -587,34 +617,17 @@ function App({ worker }) {
 						</div>
 
 						<div class="panel-inset-light p-3 shadow-md w-full max-w-md">
-							{/* Substation Quality Select */}
-							<div class="mb-1 flex items-center justify-between">
-								<label class="block text-white-500 mb-2" for="substationQuality">
-									Substation Quality
-								</label>
-								<select
-									ref={(el) => (formRefs.substationQuality = el)}
-									id="substationQuality"
-									name="substationQuality"
-									class="bg-gray-100 w-30 px-4 py-1 font-semibold border focus:outline-none focus:ring"
-									value={formData.substationQuality}
-									onChange={(e) => setFormData("substationQuality", e.currentTarget.value)}
-								>
-									<option value="normal">Normal</option>
-									{formData.useDLC && (
-										<>
-											<option value="uncommon">Uncommon</option>
-											<option value="rare">Rare</option>
-											<option value="epic">Epic</option>
-											<option value="legendary">Legendary</option>
-										</>
-									)}
-									<option value="none">None</option>
-								</select>
-							</div>
-							{Object.entries(FORM_ELEMENTS).map(([k, v]) =>
-								makeFormElement({ formData, formRefs, setFormData, obj: { [k]: v } }),
-							)}
+							{Object.entries(FORM_ELEMENTS).map(([k, v]) => {
+								if (k === "substationQuality") {
+									let { options } = v;
+									options = formData.useDLC ? v.options : v.options.filter(([k, ..._]) => k === "none" || k === "normal");
+									v = { ...v, options };
+								} else if (k === "temporalCompressionWindow" && formData.combinatorCompressionType !== "temporal") {
+									v = { ...v, disabled: true };
+								}
+								setNeedsTooltipUpdate(true);
+								return makeFormElement({ formData, formRefs, setFormData, obj: { [k]: v } });
+							})}
 						</div>
 					</div>
 
@@ -649,9 +662,6 @@ function App({ worker }) {
 							<div class="flex items-center justify-between">
 								<button onClick={() => setIsGenerating(false)} id="backButton" class="button">
 									Back
-								</button>
-								<button onClick={downloadBlueprint} id="copyButton" class="button button-green">
-									Download
 								</button>
 							</div>
 							<div class="mt-6 text-center text-white-500">
@@ -708,7 +718,7 @@ function App({ worker }) {
 function makeFormElement({ formData, formRefs, setFormData, obj }) {
 	const k = Object.keys(obj)[0];
 	const v = obj[k];
-	const { name, tooltip = null, type } = v;
+	const { disabled = false, name, tooltip = null, type } = v;
 
 	function mkTooltip(text) {
 		if (!text) {
@@ -747,7 +757,6 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 		);
 	} else if (type === "select") {
 		const { options } = v;
-
 		return (
 			<div class="mt-1 mb-1 flex items-center justify-between factorio-select-container">
 				<label class="block text-white-500" for={k}>
@@ -762,7 +771,7 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 					value={formData[k]}
 					onChange={(e) => setFormData(k, e.currentTarget.value)}
 				>
-					{Object.entries(options).map(([k, v]) => (
+					{(Array.isArray(options) ? options : Object.entries(options)).map(([k, v]) => (
 						<option value={k}>{v}</option>
 					))}
 				</select>
@@ -777,6 +786,7 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 				</label>
 				<div class="flex items-center gap-3">
 					<Slider
+						disabled={disabled}
 						ref={(e) => (formRefs[k] = e)}
 						value={formData[k]}
 						min={v.min}
@@ -784,18 +794,6 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 						step={v.step}
 						onChange={(v) => setFormData(k, v)}
 					/>
-					{/* <input
-						ref={(e) => (formRefs[k] = e)}
-						class="bg-gray-100 focus:bg-tan-500 w-full px-4 py-1 border focus:outline-none focus:ring"
-						type="number"
-						id={k}
-						value={formData[k]}
-						min={v.min}
-						max={v.max}
-						step={v.step}
-						onChange={(e) => setFormData(k, e.target.value)}
-						placeholder={`${v.min}-${v.max}`}
-					/> */}
 				</div>
 			</div>
 		);

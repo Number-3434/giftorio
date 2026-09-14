@@ -71,11 +71,11 @@ pub struct Entity {
 
 impl Entity {
     /// Create a new entity with default None values for optional fields
-    pub fn new(entity_number: u32, name: &'static str, position: Position) -> Self {
+    pub fn new(entity_number: u32, name: &'static str, position: impl Into<Position>) -> Self {
         Entity {
             entity_number,
             name,
-            position,
+            position: position.into(),
             direction: None,
             control_behavior: None,
             player_description: None,
@@ -89,23 +89,20 @@ impl Entity {
         self.custom_tag == Some(tag)
     }
 
-    pub fn with_direction(mut self, direction: u32) -> Self {
-        self.direction = Some(direction);
+    pub fn with_always_on(mut self, always_on: bool) -> Self {
+        self.always_on = Some(always_on);
         self
     }
-
     pub fn with_control_behavior(mut self, behavior: ControlBehavior) -> Self {
         self.control_behavior = Some(behavior);
         self
     }
-
     pub fn with_description(mut self, desc: &'static str) -> Self {
         self.player_description = Some(desc);
         self
     }
-
-    pub fn with_always_on(mut self, always_on: bool) -> Self {
-        self.always_on = Some(always_on);
+    pub fn with_direction(mut self, direction: u32) -> Self {
+        self.direction = Some(direction);
         self
     }
 
