@@ -1,4 +1,4 @@
-use crate::models::{Blueprint, BlueprintArgs, BlueprintOutputFormat};
+use crate::models::{Blueprint, BlueprintArgs, OutputFormat};
 use crate::progress::{report_progress, set_progress};
 use crate::streaming_writer::{ChunkQueue, StreamingWriter};
 use crate::JsValue;
@@ -15,6 +15,7 @@ const ENCODE_CHUNK_SIZE: usize = 100;
 pub struct BlueprintJsonEncoder {
     blueprint: Blueprint,
     curr_i: usize,
+    progress_format_str: &'static str,
     state: BlueprintEncoderState,
 }
 enum BlueprintEncoderState {
@@ -25,10 +26,11 @@ enum BlueprintEncoderState {
 }
 
 impl BlueprintJsonEncoder {
-    pub fn new(blueprint: Blueprint) -> Self {
+    pub fn new(blueprint: Blueprint, progress_format_str: &'static str) -> Self {
         Self {
             blueprint: blueprint,
             curr_i: 0,
+            progress_format_str,
             state: BlueprintEncoderState::Start,
         }
     }
@@ -62,10 +64,10 @@ impl BlueprintJsonEncoder {
                 let chunk = &ents[i..(i + ENCODE_CHUNK_SIZE).min(ents.len())];
 
                 set_progress(
-                    0.75,
+                    0.67,
                     0.98,
                     i as f64 / ents.len() as f64,
-                    &format!("Converting to JSON {}/{}...", i, ents.len()),
+                    &format!("{} {}/{}...", self.progress_format_str, i, ents.len()),
                 );
                 if i > 0 {
                     w(&mut writer, b",")?; // Delimiter
@@ -112,8 +114,13 @@ impl BlueprintEncoder {
         let chunks = Arc::new(Mutex::new(VecDeque::new()));
         let writer = StreamingWriter::new(Arc::clone(&chunks));
         let mut zlib: Option<ZlibEncoder<EncoderWriter<StreamingWriter>>> = None;
+        let format_str = if args.output_format == OutputFormat::Blueprint {
+            "Converting to Blueprint"
+        } else {
+            "Converting to JSON"
+        };
 
-        if args.output_format == BlueprintOutputFormat::Blueprint {
+        if args.output_format == OutputFormat::Blueprint {
             let b64 = EncoderWriter::new(writer, base64::STANDARD);
             zlib = Some(ZlibEncoder::new(b64, Compression::best()))
         }
@@ -121,7 +128,7 @@ impl BlueprintEncoder {
         Self {
             chunks,
             finished: false,
-            json_encoder: BlueprintJsonEncoder::new(blueprint),
+            json_encoder: BlueprintJsonEncoder::new(blueprint, format_str),
             zlib_encoder: zlib,
         }
     }

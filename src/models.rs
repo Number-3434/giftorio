@@ -6,12 +6,12 @@ use std::{fmt::Display, sync::Arc};
 pub struct BlueprintArgs {
     pub name: String,
 
-    #[serde(rename = "combinatorCompression")]
-    pub combinator_compression: Option<BlueprintCombinatorCompression>,
-    #[serde(rename = "combinatorPosition")]
-    pub combinator_position: BlueprintCombinatorPosition,
+    #[serde(rename = "flippedAxes")]
+    pub flipped_axes: FlippedAxes,
     #[serde(rename = "grayscaleBits")]
     pub grayscale_bits: u32,
+    #[serde(rename = "imageRotation")]
+    pub image_rotation: ImageRotation,
     #[serde(rename = "imageType")]
     pub image_type: String,
     #[serde(rename = "includeLastFrame")]
@@ -19,25 +19,27 @@ pub struct BlueprintArgs {
     #[serde(rename = "maxSize")]
     pub max_size: u32,
     #[serde(rename = "outputFormat")]
-    pub output_format: BlueprintOutputFormat,
+    pub output_format: OutputFormat,
     #[serde(rename = "useGreenLampWires")]
     pub prefer_green_wires: bool,
     #[serde(rename = "useHorizontalLampWires")]
     pub prefer_horizontal_wires: bool,
     #[serde(rename = "resamplingFilter")]
-    pub sampling_filter: BlueprintResamplingFilter,
+    pub sampling_filter: ResamplingFilter,
+    #[serde(rename = "signalCompression")]
+    pub signal_compression: Option<SignalCompression>,
     #[serde(rename = "sortSignals")]
     pub sort_signals: bool,
     #[serde(rename = "substationQuality")]
-    pub substation_quality: BlueprintSubstationQuality,
+    pub substation_quality: SubstationQuality,
     #[serde(rename = "targetFps")]
-    pub fps: u32,
+    pub target_fps: u32,
     #[serde(rename = "useDLC")]
     pub use_dlc: bool,
 }
 
 #[derive(serde::Deserialize, Clone, PartialEq, Eq)]
-pub enum BlueprintSubstationQuality {
+pub enum SubstationQuality {
     #[serde(rename = "none")]
     None,
     #[serde(rename = "normal")]
@@ -51,7 +53,7 @@ pub enum BlueprintSubstationQuality {
     #[serde(rename = "legendary")]
     Legendary,
 }
-impl Display for BlueprintSubstationQuality {
+impl Display for SubstationQuality {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::None => write!(f, "none"),
@@ -65,7 +67,31 @@ impl Display for BlueprintSubstationQuality {
 }
 
 #[derive(serde::Deserialize, Clone, PartialEq, Eq)]
-pub enum BlueprintResamplingFilter {
+pub enum ImageRotation {
+    #[serde(rename = "none")]
+    None = 0,
+    #[serde(rename = "deg90")]
+    Deg90 = 90,
+    #[serde(rename = "deg180")]
+    Deg180 = 180,
+    #[serde(rename = "deg270")]
+    Deg270 = 270,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+pub enum FlippedAxes {
+    #[serde(rename = "none")]
+    None = 0,
+    #[serde(rename = "x")]
+    X = 1,
+    #[serde(rename = "y")]
+    Y = 2,
+    #[serde(rename = "both")]
+    Both = 3,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+pub enum ResamplingFilter {
     #[serde(rename = "catrom")]
     Catrom,
     #[serde(rename = "gaussian")]
@@ -79,7 +105,7 @@ pub enum BlueprintResamplingFilter {
 }
 
 #[derive(serde::Deserialize, Clone, PartialEq)]
-pub enum BlueprintCombinatorCompression {
+pub enum SignalCompression {
     #[serde(rename = "temporal")]
     Temporal { window: u32 },
     #[serde(rename = "delta")]
@@ -87,23 +113,11 @@ pub enum BlueprintCombinatorCompression {
 }
 
 #[derive(serde::Deserialize, Clone, PartialEq)]
-pub enum BlueprintOutputFormat {
+pub enum OutputFormat {
     #[serde(rename = "blueprint")]
     Blueprint,
     #[serde(rename = "json")]
     Json,
-}
-
-#[derive(serde::Deserialize, Clone, PartialEq)]
-pub enum BlueprintCombinatorPosition {
-    #[serde(rename = "left")]
-    Left,
-    #[serde(rename = "right")]
-    Right,
-    #[serde(rename = "top")]
-    Top,
-    #[serde(rename = "bottom")]
-    Bottom,
 }
 
 #[derive(Serialize)]

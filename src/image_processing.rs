@@ -1,14 +1,14 @@
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
-use crate::models::{BlueprintArgs, BlueprintCombinatorPosition, BlueprintResamplingFilter};
+use crate::models::{BlueprintArgs, FlippedAxes, ImageRotation, ResamplingFilter};
 use crate::progress::set_progress;
-use image::{imageops::FilterType, AnimationDecoder, DynamicImage, ImageDecoder};
+use image::{imageops, AnimationDecoder, ImageDecoder};
 use std::{collections::VecDeque, io::Cursor, time::Duration};
 use wasm_bindgen::prelude::*;
 
 pub struct FrameData<'a> {
     args: BlueprintArgs,
-    buf: Vec<(DynamicImage, u32)>,
+    buf: Vec<(image::Frame, u32)>,
     curr_frame_idx: u32,
     curr_n_ms: u32,
     frames: image::Frames<'a>,
@@ -17,7 +17,7 @@ pub struct FrameData<'a> {
     next_samp_idx: u32,
     out_dim_raw: (f64, f64),
     out_n_frames: u32,
-    output_frames: VecDeque<DynamicImage>,
+    output_frames: VecDeque<image::Frame>,
 }
 
 impl FrameData<'_> {
@@ -25,20 +25,13 @@ impl FrameData<'_> {
     ///
     /// Note: This is truncated from the raw dimensions instead of rounded.
     pub fn dimensions(&mut self) -> (u32, u32) {
-        let (w, h) = resize_dimensions(
+        resize_dimensions(
             self.in_dim.0,
             self.in_dim.1,
             self.out_dim_raw.0.round() as u32,
             self.out_dim_raw.1.round() as u32,
             false,
-        );
-        if matches!(
-            self.args.combinator_position,
-            BlueprintCombinatorPosition::Left | BlueprintCombinatorPosition::Right
-        ) {
-            return (h, w);
-        }
-        return (w, h);
+        )
     }
     pub fn total_frames(&self) -> u32 {
         self.out_n_frames
@@ -63,7 +56,7 @@ impl<'a> FrameData<'a> {
         let obj = Self {
             out_n_frames: expected_output_frames(
                 frame_data.total_duration_ms.as_millis() as u32,
-                args.fps.max(1),
+                args.target_fps.max(1),
                 args.last_frame,
             ),
             args: args,
@@ -82,12 +75,45 @@ impl<'a> FrameData<'a> {
     }
 }
 impl Iterator for FrameData<'_> {
-    type Item = Result<DynamicImage, JsValue>;
+    type Item = Result<image::DynamicImage, JsValue>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             // Flush any remaining frames
-            if let Some(img) = self.output_frames.pop_front() {
+            if let Some(frame) = self.output_frames.pop_front() {
+                // Decode + resize
+                let mut img = image::DynamicImage::ImageRgba8(frame.into_buffer());
+                if self.args.grayscale_bits > 0 {
+                    img = image::DynamicImage::ImageLuma8(img.to_luma8());
+                }
+
+                // Use raw dims for max precision
+                img = img.resize(
+                    (self.out_dim_raw.0).round() as u32,
+                    (self.out_dim_raw.1).round() as u32,
+                    match self.args.sampling_filter {
+                        ResamplingFilter::Catrom => imageops::FilterType::CatmullRom,
+                        ResamplingFilter::Gaussian => imageops::FilterType::Gaussian,
+                        ResamplingFilter::Lanczos3 => imageops::FilterType::Lanczos3,
+                        ResamplingFilter::Nearest => imageops::FilterType::Nearest,
+                        ResamplingFilter::Triangle => imageops::FilterType::Triangle,
+                    },
+                );
+
+                // Flip before rotate
+                img = match self.args.flipped_axes {
+                    FlippedAxes::X => img.fliph(),
+                    FlippedAxes::Y => img.flipv(),
+                    FlippedAxes::Both => img.flipv().fliph(),
+                    _ => img,
+                };
+                img = match self.args.image_rotation {
+                    ImageRotation::Deg90 => img.rotate90(),
+                    ImageRotation::Deg180 => img.rotate180(),
+                    ImageRotation::Deg270 => img.rotate270(),
+                    _ => img,
+                };
+
                 return Some(Ok(img));
             }
 
@@ -104,7 +130,7 @@ impl Iterator for FrameData<'_> {
             if self.curr_frame_idx % 3 == 0 {
                 set_progress(
                     0.00,
-                    0.75,
+                    0.67,
                     self.curr_frame_idx as f64 / self.in_n_frames as f64,
                     &format!(
                         "Streaming frame {} /{} ({})",
@@ -118,32 +144,7 @@ impl Iterator for FrameData<'_> {
             let (ms, _) = frame.delay().numer_denom_ms();
             let delay = if ms == 0 { DEFAULT_FRAME_DELAY_MS } else { ms };
 
-            // Decode + resize
-            let mut img = DynamicImage::ImageRgba8(frame.into_buffer());
-            if self.args.grayscale_bits > 0 {
-                img = DynamicImage::ImageLuma8(img.to_luma8());
-            }
-
-            // Use raw dims for max precision
-            let mut img = img.resize(
-                (self.out_dim_raw.0).round() as u32,
-                (self.out_dim_raw.1).round() as u32,
-                match self.args.sampling_filter {
-                    BlueprintResamplingFilter::Catrom => FilterType::CatmullRom,
-                    BlueprintResamplingFilter::Gaussian => FilterType::Gaussian,
-                    BlueprintResamplingFilter::Lanczos3 => FilterType::Lanczos3,
-                    BlueprintResamplingFilter::Nearest => FilterType::Nearest,
-                    BlueprintResamplingFilter::Triangle => FilterType::Triangle,
-                },
-            );
-            img = match self.args.combinator_position {
-                BlueprintCombinatorPosition::Top => img,
-                BlueprintCombinatorPosition::Left => img.rotate90(),
-                BlueprintCombinatorPosition::Bottom => img.rotate180(),
-                BlueprintCombinatorPosition::Right => img.rotate270(),
-            };
-
-            self.buf.push((img, self.curr_n_ms)); // Add to rolling buffer
+            self.buf.push((frame, self.curr_n_ms)); // Add to rolling buffer
             self.curr_n_ms += delay; // Increment AFTER adding to buffer (we track start time, not end time)
 
             // Keep buffer bounded (e.g., last 0.5 seconds)
@@ -161,22 +162,23 @@ impl Iterator for FrameData<'_> {
             let mut sample_ms: u32;
 
             while {
-                sample_ms = (self.next_samp_idx as f64 * MS_PER_S / self.args.fps as f64) as u32;
+                sample_ms =
+                    (self.next_samp_idx as f64 * MS_PER_S / self.args.target_fps as f64) as u32;
                 sample_ms < self.curr_n_ms
                     && (self.args.last_frame || self.next_samp_idx < self.out_n_frames)
             } {
-                let mut best_img: Option<&DynamicImage> = None;
-                let mut best_dt = u32::MAX;
+                let mut best_frame: Option<&image::Frame> = None;
+                let mut best_delta = u32::MAX;
 
-                // Find the cloest frame to the current sample (forwards / backwards)
+                // Find the closest frame to the current sample (forwards / backwards)
                 for (img, t) in &self.buf {
                     let dt = sample_ms.abs_diff(*t);
-                    if dt < best_dt {
-                        best_dt = dt;
-                        best_img = Some(img);
+                    if dt < best_delta {
+                        best_delta = dt;
+                        best_frame = Some(img);
                     }
                 }
-                if let Some(img) = best_img {
+                if let Some(img) = best_frame {
                     self.output_frames.push_back(img.clone());
                 }
                 self.next_samp_idx += 1;

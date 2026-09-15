@@ -249,8 +249,8 @@ select {
     background-size: 12px;
     padding-left: 20px;
     padding-right: 30px;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
+    padding-top: 2px;
+    padding-bottom: 2px;
     letter-spacing: -0.25px;
 }
 

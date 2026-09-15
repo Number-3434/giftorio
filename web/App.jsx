@@ -12,15 +12,17 @@ const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60];
 const LAST_FILE_KEY = "last-file-user-uploaded";
 const FORM_DATA_KEY = "giftorio-form-data";
 const _INITIAL_VALUES = {
-	file: null,
-	combinatorCompressionType: "none",
-	combinatorPosition: "left",
 	connectionDirection: "horizontal",
+	file: null,
+	flippedAxes: "none",
 	grayscaleBits: 0,
+	imageRotation: "none",
 	includeLastFrame: false,
 	maxSize: 50,
 	outputFormat: "blueprint",
-	resamplingFilter: "catrom",
+	resamplingFilter: "triangle",
+	rotation: 0,
+	signalCompressionType: "none",
 	sortSignals: false,
 	substationQuality: "normal",
 	targetFps: 15,
@@ -44,12 +46,16 @@ const FORM_ELEMENTS = {
 	useDLC: {
 		name: "Use Space Age DLC?",
 		type: "checkbox",
-		tooltip: [
-			"If enabled, dramatically increases the number of available signals,",
-			"reducing the number of combinators in the blueprint by ~15x.",
-			"It also allows for higher quality substations.",
-			"\n\nRequires the Space Age DLC (v0.2.77 or later).",
-		].join(" "),
+		tooltip: `
+			If enabled, dramatically increases the number of available signals,
+			reducing the number of combinators in the blueprint by ~15x.
+			It also allows for higher quality substations.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Requires the Space Age DLC (v2.0.77 or later).
+			</span>
+		`,
 	},
 	substationQuality: {
 		name: "Substation Quality",
@@ -62,32 +68,51 @@ const FORM_ELEMENTS = {
 			["legendary", "Legendary"],
 			["none", "None"],
 		],
+		tooltip: `
+			The quality level of the substations.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Usable if <strong>Use Space Age DLC?</strong> is enabled.
+			</span>
+		`,
 	},
-	combinatorCompressionType: {
-		name: "Combinator Compression",
+	signalCompressionType: {
+		name: "Signal Compression",
 		type: "select",
-		tooltip: [
-			"Selects the compression method used for the combinators.",
-			"\n",
-			"\n<strong>Temporal Compression</strong>",
-			"\nTemporal compression compares frames on a fixed window, storing pixels that",
-			"didn't change in the last window using a single combinator.",
-			"Temporal compression can reduce file sizes up to 75% depending on the source video.",
-			"\n\nTemporal compression is <strong>non-volatile</strong>, and the resulting blueprint",
-			"can be seeked to any point in time safely without corruption.",
-			'\n\n<i><span style="color:gray;">Note: using temporal compression doubles the number of combinators used in the blueprint,',
-			`but the overall file size is reduced up to 75%.</span></i>`,
-			"\n",
-			"\n<strong>Delta Compression</strong>",
-			"\nDelta compression stores the difference of the pixels between frames, rather than",
-			"the full frame data on each combinator. This can give significantly better compression",
-			"than temporal compression, but at the cost of not being able to seek to a specific frame.",
-			"Delta compression can reduce file sizes up to 90% depending on the source video.",
-			'\n\n<i><span style="color:gray;">Note: delta compression is <strong>volatile</strong>, and the resulting blueprint',
-			`cannot be seeked / paused and must only be played from start to finish.</span></i>`,
-			"\n",
-			"\n<strong>None</strong> disables compression.",
-		].join(" "),
+		tooltip: `
+			Signal compression is a <strong>lossless</strong> compression method that reduces blueprint
+			size by storing unchanged pixels.
+			<br/>
+			<br/><strong>Temporal Compression</strong>
+			<br/>Reduces filesize up to 75% depending on the source video, but uses more combinators.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Temporal compression scans the frames on a fixed window and stores any non-changing
+				pixels within the last window using one combinator, instead of always storing every
+				pixel in a combinator per-frame.
+				Temporal compression is <strong>non-volatile</strong>, and the resulting blueprint can
+				be seeked to any point in time safely without corruption.
+			</span>
+			<br/>
+			<br/><strong>Delta Compression</strong>
+			<br/>Has better compression than temporal compression, BUT the resulting blueprint cannot be
+			seeked / paused and must only be played from start to finish. Delta signals are reset on the
+			first frame.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Delta compression uses a memory combinator to hold all signal values, allowing the data
+				combinators to only store the difference in pixel values between frames rather than the
+				real values. This means any non-changing pixels can be ommited from the output, but a
+				frame requires state from all previous frames to render, so the resulting blueprint
+				cannot be paused or seeked, and must only be played from start to finish.
+			</span>
+			<br/>
+			<br/><strong>None</strong>
+			<br/>No compression.
+		`,
 		options: {
 			none: "None",
 			temporal: "Temporal (static)",
@@ -97,123 +122,196 @@ const FORM_ELEMENTS = {
 	temporalCompressionWindow: {
 		name: "Compression Window (ms)",
 		type: "number",
-		tooltip: [
-			"Scans all pixels every <strong>Window (ms)</strong> milliseconds,",
-			"finds all the pixels that did not change in the last scan,",
-			"and stores them in a single combinator.",
-			"The other pixels (that changed) are stored in per-frame combinators.",
-			"\n\nThis setting should be fine-tuned based on the amount of movement in the GIF.",
-			"Higher sampling windows can give greter compression, but if large portions of the GIF are moving",
-			"the compression value is reduced in comparison to shorter sampling times.",
-			"\n\nThis setting changes the window size (in ms) of the scan time for changed pixels.",
-			"Any pixels that remain the same within this time are compresed into a single combinator.",
-			"\n\n<strong>TL;DR; This feature increases the total number of combinators required,",
-			"but can dramatically reduce the overall size of the blueprint.</strong>",
-		].join(" "),
+		tooltip: `
+			Scans all pixels every <strong>Window (ms)</strong> milliseconds, finds all the pixels that
+			did not change in the last scan, and stores them in a single combinator. The other pixels
+			(that changed) are stored in per-frame combinators.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				This setting should be fine-tuned to the amount of movement in the GIF. Larger windows
+				can give greater compression, but if large portions of the GIF are moving, less
+				compression is possible in comparison to using shorter sampling times.
+				<br/>
+				<br/>
+				Only applicable to <strong>Temporal Compression</strong>.
+			</span>
+		`,
 		min: 100,
 		max: 5000,
 		step: 100,
 	},
 	targetFps: {
-		name: "Framerate",
+		name: "Framerate (FPS)",
 		type: "number",
-		tooltip: [
-			"Maximum framerate of the output blueprint.",
-			"\n\nThe blueprint will not exceed the original framerate of the GIF.",
-			"Higher framerates require more frames to be generated, increasing the size of the blueprint.",
-			"\n\nThis can also impact UPS (game performance; may cause stutters),",
-			"although Factorio will attempt to continue rendering at 1:1 time.",
-		].join(" "),
+		tooltip: `
+			Maximum framerate of the output blueprint.
+			<br/>
+			<br/>
+			The blueprint will not exceed the original framerate of the GIF. Higher framerates require
+			more frames to be generated, increasing the size of the blueprint.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Must be a factor of <strong>60</strong> (to match Factorio's tick-rate).
+			</span>
+		`,
 		values: FACTORS_OF_60,
 	},
 	includeLastFrame: {
 		name: "Always Include Last Frame",
 		type: "checkbox",
-		tooltip: [
-			"If enabled, the last frame of the GIF will always be included.",
-			"Usually this should be disabled unless it is desirable to see the last frame of the GIF (and the GIF doesn't loop).",
-			"\n\nThis option will interfere with GIF looping as it will always an extra frame at the end.",
-			"For example, with this option enabled, a 1-frame GIF lasting 1 second at 1 fps will have 2 frames, one at the start, and one at the end.",
-			"\n\nWith this option disabled, the output GIF will only have 1 frame.",
-		].join(" "),
+		tooltip: `
+			If enabled, the last frame of the GIF will always be included. May cause the GIF to stutter
+			when looping.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Usually should be disabled unless it is desirable to see the last frame of the GIF.
+			</span>
+		`,
 	},
 	sortSignals: {
 		name: "Sort Signals",
 		type: "checkbox",
-		tooltip: [
-			"If enabled, the signals will be sorted by their type and name. This helps reduce the size of the blueprint for small GIFs.",
-		].join(" "),
+		tooltip: `
+			If enabled, sorts signals by the combined string length of their internal 'type' and 'name'
+			fields. This helps reduce the size of the blueprint for small group sizes.
+			<br/>
+			<br/>
+			If disabled, signals are sorted how their appear in Factorio.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Usually recommended, but note this setting also lamp signal ordering and may clash with
+				another display if the same display for multiple GIFs.
+			</span>
+		`,
 	},
 	grayscaleBits: {
-		name: "Color Mode",
+		name: "Colour Mode",
 		type: "select",
-		tooltip: [
-			"Full color will try to match the original GIF colors.",
-			"\n\nIf the blueprint is very large, using grayscale will greatly reduce the size.",
-			"Grayscale is also recommended (and has no visual difference compared to Full color) for black-and-white GIFs.",
-			"\n\n8-bit grayscale has 256 shades of gray and can reduce the blueprint size by 60-70%,",
-			"while 4-bit grayscale has 16 shades of gray and can reduce the blueprint size by up to 85%.",
-			"Full black and white is roughly 32x smaller than full color.",
-		].join(" "),
+		tooltip: `
+			Full colour will try to match the original GIF colours.
+			<br/>
+			<br/>
+			Greyscale reduces the size of the blueprint by 75-95%. Greyscale is also recommended for
+			black-and-white GIFs.
+			<br/>
+			<br/>
+			8-bit greyscale has 256 shades of grey and can reduce the blueprint size by 60-70%; 4-bit
+			greyscale has 16 shades of grey and can reduce the blueprint size by up to 85%. Full black
+			and white is ~32x smaller than full colour.
+		`,
 		options: [
-			["0", "Full Color"],
-			["8", "8-bit Grayscale (256 shades)"],
-			["4", "4-bit Grayscale (16 shades)"],
-			["1", "1-bit (black & white only)"],
+			["0", "Full Colour"],
+			["8", "8-bit Greyscale (256)"],
+			["4", "4-bit Greyscale (16)"],
+			["1", "Black & White"],
 		],
 	},
 	resamplingFilter: {
 		name: "Resampling Filter",
 		type: "select",
-		tooltip: [
-			"The filter used to resample the image.",
-			"\n",
-			"\n<strong>Catmull-Rom</strong> (the default) has good sharpness,",
-			"temporal stability, low ringing, low shimmer, and predictable behaviour across resolutions.",
-			"\n<strong>Lanczos3</strong> is the best high-quality, sharp filter but can shimmer.",
-			"\n<strong>Gaussian</strong> generates very smooth outputs but can blur pixel art.",
-			'\n<strong>Nearest</strong> generates crisp outputs but may look "blocky".',
-			"\n<strong>Triangle</strong> is a basic inexpensive, low-quality filter.",
-		].join(" "),
+		tooltip: `
+			The filter used to resample the image.
+			<br/>
+			<br/><strong>Triangle</strong>
+			<br/>Fast, CPU friendly filter. Great for most videos, but has lower quality than other
+			filters.
+			<br/>
+			<br/><strong>Catmull-Rom</strong>
+			<br/>Has good sharpness and stability, may slightly blur. Gives the most consistent
+			results.
+			<br/>
+			<br/><strong>Lanczos3</strong>
+			<br/>More detailed, sharper edges but can shimmer. Yields crisp images, but may have minor
+			aliasing.
+			<br/>
+			<br/><strong>Gaussian</strong>
+			<br/>Very smooth outputs, but can blur pixel art. Very stable, no aliasing.
+			<br/>
+			<br/><strong>Nearest</strong>
+			<br/>Generates risp outputs but looks "blocky". Great for pixel art, especially when the
+			dimensions are matched up.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Only used to resize the video to the blueprint's dimensions.
+			</span>
+		`,
 		options: {
+			triangle: "Triangle",
 			catrom: "Catmull-Rom",
 			gaussian: "Gaussian",
 			lanczos3: "Lanczos3",
 			nearest: "Nearest",
-			triangle: "Triangle",
 		},
 	},
-	combinatorPosition: {
-		name: "Combinator Position",
+	imageRotation: {
+		name: "Rotation",
 		type: "select",
-		tooltip: [
-			"The position of the data combinators. This affects the look of lamp seams.",
-			"\n",
-			"\n<strong>Left</strong> or <strong>Right</strong> is generally recommended, along with Horizontal",
-			"wiring, as the group seams run horizontally and are harder to see.",
-			"\n<strong>Bottom</strong> and <strong>Top</strong> are generally not recommended,",
-			"especially with Horizontal wire connection direction as the group seams are very noticeable.",
-		].join(" "),
+		tooltip: `
+			Rotates the GIF before processing it, whilst keeping data combinators in the same location.
+			Combinators will always appear in the top-left corner.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				This can be utilised to change the location of data combinators. E.g. to put combinators
+				on the left side instead of the right, set this to 90°, and then inside Factorio, rotate
+				the blueprint by -90° to match the original GIF.
+				<br/>
+				<br/>
+				<strong>Wire Connection Direction</strong> is honored.
+			</span>
+		`,
 		options: {
-			left: "Left",
-			right: "Right",
-			top: "Top",
-			bottom: "Bottom",
+			none: "None",
+			deg90: "90° Clockwise",
+			deg180: "180° Clockwise",
+			deg270: "270° Clockwise",
+		},
+	},
+	flippedAxes: {
+		name: "Flip Axes",
+		type: "select",
+		tooltip: `
+			Mirrors the GIF before processing it, whilst keeping data combinators in the same location.
+			Combinators will always appear in the top-left corner.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				This can be utilised to change the location of data combinators. E.g. to put combinators
+				on the right of the top side instead of the right, set this to <strong>X</strong>, and
+				then inside Factorio, flip the blueprint horizontally to match the original GIF.
+			</span>
+		`,
+		options: {
+			none: "None",
+			x: "X",
+			y: "Y",
+			both: "Both",
 		},
 	},
 	wireColor: {
 		name: "Preferred Wire Colour",
 		type: "select",
-		tooltip: [
-			"The colour of the wires used to connect the lamps.",
-			"\n",
-			"\n<strong>Green</strong> is usually recommended as green wires connect horizontally in straight lines and take up the least space.",
-			"\n<strong>Red</strong> wires are darker and harder to see but take up more space as the wire does not connect straight.",
-			"\n",
-			"\nThe wire colour used will slightly tint the image the same colour.",
-			"Note that changing this setting will completely flip all wires (all red wires become green, all green wires become red, and vice versa).",
-			"There will always be a horizontal wire of the other colour connecting the lamps together at the top row.",
-		].join(" "),
+		tooltip: `
+			The colour of the wires used to connect the lamps.
+			<br/>
+			<br/> <strong>Green</strong> is usually recommended as green wires connect horizontally in
+			straight lines and take up the least space.
+			<br/><strong>Red</strong> wires are darker and harder to see but take up more screen space
+			as the wire does not connect straight, and may obscure the video more.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				The wire colour used will slightly tint the image the same colour. Note that changing
+				this setting will completely flip all wires (all red wires become green, all green wires
+				become red, and vice versa). There will always be a wire of the opposite colour
+				connecting the lamps together at the top row to transmit data.
+			</span>
+		`,
 		options: {
 			green: "Green",
 			red: "Red",
@@ -222,16 +320,29 @@ const FORM_ELEMENTS = {
 	connectionDirection: {
 		name: "Wire Connection Direction",
 		type: "select",
-		tooltip: [
-			"Whether the majority of wires on the lamps should connect horizontally to the next lamps or vertically.",
-			"\n",
-			"\n<strong>Horizontal</strong> connections are usually recommended as they take minimal screen space,",
-			"but require vertical connections between groups that may be quite visible.",
-			"\n<strong>Vertical</strong> connections are much more noticeable, but chunk seams are invisible.",
-			"\n",
-			"\nRed wires only connect straight vertically.",
-			"\nGreen wires connect straight both horizontally and vertically.",
-		].join(" "),
+		tooltip: `
+			Whether the majority of lamp wires should connect horizontally or vertically.
+			<br/>
+			<br/><strong>Horizontal</strong>
+			<br/>Recommended as they take minimal screen space, but require vertical connections between
+			groups that may be quite visible. Seams can be removed by rotating the blueprint 90°
+			clockwise.
+			<br/>
+			<br/><strong>Vertical</strong>
+			<br/>(Not recommended) Connections are much more noticeable.
+			<br/>
+			<br/>Red wires only connect straight vertically.
+			<br/>Green wires connect straight both horizontally and vertically.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				Horizontal wires are recommended for most GIFs as they are more obscure.
+				<br/>
+				<br/>
+				If <strong>Rotation</strong> is set, the wires will still connect in the same direction
+				relative to the original GIF's rotation.
+			</span>
+		`,
 		options: {
 			horizontal: "Horizontal",
 			vertical: "Vertical",
@@ -240,18 +351,26 @@ const FORM_ELEMENTS = {
 	outputFormat: {
 		name: "Output Format",
 		type: "select",
-		tooltip: [
-			"Selects the format of the output file.",
-			"\n",
-			"\n<strong>Factorio Blueprint</strong> is a text file that can be copy-pasted",
-			"into the 'Import Blueprint String' dialog in the Factorio editor.",
-			"\n<strong>JSON</strong> is a JSON file containing the blueprint data.",
-			"From Factorio v2.0.25 onwards, JSON and text files can be imported directly",
-			"into the game via drag-and-drop.",
-			"\n",
-			"\n<strong>Note: If Factorio is having issues importing large blueprints,",
-			"try using the JSON format.</strong>",
-		].join(" "),
+		tooltip: `
+			Selects the format of the output file.
+			<br/>
+			<br/><strong>Blueprint</strong>
+			<br/>The typical Factorio blueprint format. Can be copy-pasted into the 'Import Blueprint
+			String' dialog in the Factorio editor.
+			<br/>
+			<br/><strong>JSON</strong>
+			<br/>The raw JSON file containing the blueprint data. From Factorio v2.0.25 onwards, JSON
+			and blueprint files can be imported directly into the game via drag-and-drop.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.5;'>
+				<strong>
+					If Factorio has issues importing blueprint strings, try using the JSON format.
+				</strong>
+				<br/>
+				JSON format requires Factorio v2.0.25 or later.
+			</span>
+		`,
 		options: {
 			blueprint: "Blueprint",
 			json: "Raw JSON",
@@ -378,12 +497,12 @@ function App({ worker }) {
 
 		try {
 			const imageData = new Uint8Array(await formData.file.arrayBuffer());
-			let combinatorCompression = null;
+			let signalCompression = null;
 
-			if (formData.combinatorCompressionType === "delta") {
-				combinatorCompression = "delta";
-			} else if (formData.combinatorCompressionType === "temporal") {
-				combinatorCompression = {
+			if (formData.signalCompressionType === "delta") {
+				signalCompression = "delta";
+			} else if (formData.signalCompressionType === "temporal") {
+				signalCompression = {
 					temporal: {
 						window: +formData.temporalCompressionWindow,
 					},
@@ -394,21 +513,23 @@ function App({ worker }) {
 				generate: {
 					imageData,
 					args: {
-						name: formData.file.name,
-						imageType: formData.file.type.substring(6 /* image/ */),
-						combinatorCompression,
-						combinatorPosition: formData.combinatorPosition,
-						targetFps: +formData.targetFps,
-						maxSize: +formData.maxSize,
-						useDLC: !!formData.useDLC,
-						includeLastFrame: !!formData.includeLastFrame,
-						substationQuality: formData.substationQuality,
+						flippedAxes: `${formData.flippedAxes}`,
 						grayscaleBits: +formData.grayscaleBits,
-						resamplingFilter: formData.resamplingFilter,
-						useGreenLampWires: formData.wireColor === "green",
-						useHorizontalLampWires: formData.connectionDirection === "horizontal",
+						imageRotation: `${formData.imageRotation}`,
+						imageType: formData.file.type.substring(6 /* image/ */),
+						includeLastFrame: !!formData.includeLastFrame,
+						maxSize: +formData.maxSize,
+						name: `${formData.file.name}`,
+						outputFormat: `${formData.outputFormat}`,
+						resamplingFilter: `${formData.resamplingFilter}`,
+						rotation: +formData.rotation,
+						signalCompression,
 						sortSignals: !!formData.sortSignals,
-						outputFormat: formData.outputFormat,
+						substationQuality: `${formData.substationQuality}`,
+						targetFps: +formData.targetFps,
+						useDLC: !!formData.useDLC,
+						useGreenLampWires: !!(formData.wireColor === "green"),
+						useHorizontalLampWires: !!(formData.connectionDirection === "horizontal"),
 					},
 				},
 			});
@@ -644,7 +765,7 @@ function App({ worker }) {
 						</form>
 					</div>
 
-					<div class="panel w-110 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
+					<div class="panel w-100 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
 						<div class="flex items-center justify-between">
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
@@ -656,7 +777,7 @@ function App({ worker }) {
 									let { options } = v;
 									options = formData.useDLC ? v.options : v.options.filter(([k, ..._]) => k === "none" || k === "normal");
 									v = { ...v, options };
-								} else if (k === "temporalCompressionWindow" && formData.combinatorCompressionType !== "temporal") {
+								} else if (k === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") {
 									v = { ...v, disabled: true };
 								}
 								setNeedsTooltipUpdate(true);
@@ -761,7 +882,7 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 
 		const el = document.createElement("div");
 		el.classList.add("tooltip");
-		el.innerHTML = text.replaceAll("\n", "<br />");
+		el.innerHTML = text.replaceAll("\n", " ");
 
 		return (
 			<>

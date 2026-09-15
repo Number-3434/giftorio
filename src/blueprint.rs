@@ -118,15 +118,15 @@ pub fn generate_substations(
     base_ent_n: u32,
     args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Wire>, HashSet<(i32, i32)>, u32) {
-    if args.substation_quality == BlueprintSubstationQuality::None {
+    if args.substation_quality == SubstationQuality::None {
         return (Vec::new(), Vec::new(), HashSet::new(), base_ent_n);
     }
     let coverage = match args.substation_quality {
-        BlueprintSubstationQuality::Normal => 18.0,
-        BlueprintSubstationQuality::Uncommon => 20.0,
-        BlueprintSubstationQuality::Rare => 22.0,
-        BlueprintSubstationQuality::Epic => 24.0,
-        BlueprintSubstationQuality::Legendary => 28.0,
+        SubstationQuality::Normal => 18.0,
+        SubstationQuality::Uncommon => 20.0,
+        SubstationQuality::Rare => 22.0,
+        SubstationQuality::Epic => 24.0,
+        SubstationQuality::Legendary => 28.0,
         _ => 18.0,
     };
 
@@ -147,7 +147,7 @@ pub fn generate_substations(
             let x = start_x + (j as i32 * coverage as i32);
             let y = start_y + (i as i32 * coverage as i32);
             let mut ent = Entity::new(curr_ent_n, SUBSTATION, (x as f64, y as f64));
-            ent.quality = (args.substation_quality != BlueprintSubstationQuality::Normal)
+            ent.quality = (args.substation_quality != SubstationQuality::Normal)
                 .then_some(args.substation_quality.to_string());
             ents.push(ent);
 
@@ -203,9 +203,9 @@ pub fn mk_frame_combs(
     let mut new_ent = Vec::with_capacity(ticks_per_group as usize * 2); // data entities
     let mut wires = Vec::with_capacity(ticks_per_group as usize * 3 + 4);
     let use_delta_comp = args
-        .combinator_compression
+        .signal_compression
         .as_ref()
-        .is_some_and(|c| *c == BlueprintCombinatorCompression::Delta);
+        .is_some_and(|c| *c == SignalCompression::Delta);
 
     let gray_bits = args.grayscale_bits;
     let comp1_x = base_dc_x;
@@ -449,10 +449,10 @@ pub fn generate_lamps(
     let mut top_right_lamp: u32 = 0;
     let mut prev_ent_n: Option<u32>;
 
-    // We just rotate the entire blueprint based on the combinator position
-    let horizontal_wires = matches!(
-        args.combinator_position,
-        BlueprintCombinatorPosition::Left | BlueprintCombinatorPosition::Right
+    // Auto-rotate wires based on image rotation
+    let prefer_horizontal_wires = matches!(
+        args.image_rotation,
+        ImageRotation::Deg90 | ImageRotation::Deg270
     ) ^ args.prefer_horizontal_wires;
 
     for r in 0..grid_dim.1 as i32 {
@@ -489,7 +489,7 @@ pub fn generate_lamps(
                 wires.push([curr_ent_n, WIRE_G, curr_ent_n - 1, WIRE_G]);
                 wires.push([curr_ent_n, WIRE_R, curr_ent_n - 1, WIRE_R]);
                 top_right_lamp = curr_ent_n;
-            } else if horizontal_wires {
+            } else if prefer_horizontal_wires {
                 if let Some(prev) = prev_ent_n {
                     wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]);
                 }
@@ -497,7 +497,7 @@ pub fn generate_lamps(
             }
 
             if r > 0 {
-                if !horizontal_wires || (c + 1 == grid_dim.0 as i32) {
+                if !prefer_horizontal_wires || (c + 1 == grid_dim.0 as i32) {
                     if let Some(&prev_entity) = prev_ents.get(&x) {
                         wires.push([curr_ent_n, WIRE_G, prev_entity, WIRE_G]);
                     }
@@ -548,25 +548,32 @@ pub fn generate_blueprint(
     }
 
     let gray_bits = args.grayscale_bits;
-    let combinator_compression = args.combinator_compression.as_ref();
+    let combinator_compression = args.signal_compression.as_ref();
     let time_comp_win = combinator_compression
         .map(|c| match c {
-            BlueprintCombinatorCompression::Temporal { window } => *window,
+            SignalCompression::Temporal { window } => *window,
             _ => 0,
         })
         .unwrap_or(0);
-    let use_delta_comp =
-        combinator_compression.is_some_and(|c| *c == BlueprintCombinatorCompression::Delta);
+    let use_delta_comp = combinator_compression.is_some_and(|c| *c == SignalCompression::Delta);
     let n_frames = frame_data.total_frames();
     let n_scaled_frames = frame_data.total_frames() * if time_comp_win > 0 { 2 } else { 1 };
     let frames_per_cb = if gray_bits > 0 { 32 / gray_bits } else { 1 };
     let n_buf_frames = (if time_comp_win > 0 {
-        (time_comp_win * args.fps).div_ceil(1000 * frames_per_cb)
+        (time_comp_win * args.target_fps).div_ceil(1000 * frames_per_cb)
     } else {
         1
     }) as usize;
     let n_frames_per_chunk = if n_buf_frames > 1 { 1 } else { 0 } as usize;
-    let (full_width, full_height) = frame_data.dimensions();
+    let (mut full_width, mut full_height) = frame_data.dimensions();
+
+    if matches!(
+        args.image_rotation,
+        ImageRotation::Deg90 | ImageRotation::Deg270
+    ) {
+        (full_width, full_height) = (full_height, full_width);
+    }
+
     let max_cols_per_grp = ((signals.len() as u32) / full_height).min(full_width);
     let n_groups = (full_width as f64 / max_cols_per_grp as f64).ceil() as u32;
     let max_cols_per_grp = full_width / n_groups;
@@ -580,7 +587,7 @@ pub fn generate_blueprint(
         / frames_per_cb as f64)
         .ceil() as u32;
 
-    let ticks_per_frame = (60.0 / args.fps as f64) as u32;
+    let ticks_per_frame = (60.0 / args.target_fps as f64) as u32;
     let stop = n_frames * ticks_per_frame;
     let (timer_ent, timer_wires) = generate_timer(stop, ticks_per_frame, frames_per_cb, &args);
     let mut all_ents = timer_ent;
@@ -722,8 +729,8 @@ pub fn generate_blueprint(
             let grp_left = group_i as u32 * max_cols_per_grp;
             let grp_right = ((group_i as u32 + 1) * max_cols_per_grp).min(full_width);
 
-            let cropped = frame.crop_imm(grp_left, 0, grp_right - grp_left, full_height);
-            let target_outputs_len = (cropped.width() * cropped.height()) as usize;
+            let img = frame.crop_imm(grp_left, 0, grp_right - grp_left, full_height);
+            let target_outputs_len = (img.width() * img.height()) as usize;
 
             if use_delta_comp && state.sig_buf.len() == 0 {
                 // Pre-populate first frame with zeros
@@ -731,14 +738,14 @@ pub fn generate_blueprint(
             }
 
             if gray_bits > 0 {
-                state.frame_buf.push(cropped);
+                state.frame_buf.push(img);
                 if state.frame_buf.len() < frames_per_cb as usize && !is_last_frame {
                     continue; // wait until we have a full chunk for this group
                 }
                 frame_sigs = grayscale_frames_to_outputs(&state.frame_buf, gray_bits)?;
                 state.frame_buf.clear();
             } else {
-                frame_sigs = color_frame_to_outputs(&cropped)?;
+                frame_sigs = color_frame_to_outputs(&img)?;
             }
             if frame_sigs.len() != target_outputs_len {
                 return Err(JsValue::from_str(&format!(
