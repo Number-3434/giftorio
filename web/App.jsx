@@ -11,6 +11,7 @@ const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60];
 // Constants
 const LAST_FILE_KEY = "last-file-user-uploaded";
 const FORM_DATA_KEY = "giftorio-form-data";
+const SHOW_ADVANCED_KEY = "giftorio-form-data-show-advanced";
 const _INITIAL_VALUES = {
 	connectionDirection: "horizontal",
 	file: null,
@@ -405,7 +406,7 @@ function App({ worker }) {
 	const [isDragging, setIsDragging] = createSignal(false);
 	const [xOffset, setXOffset] = createSignal(0);
 	const [yOffset, setYOffset] = createSignal(0);
-	const [showAdvanced, setShowAdvanced] = createSignal(true);
+	const [showAdvanced, setShowAdvanced] = createSignal(localStorage.getItem(SHOW_ADVANCED_KEY) === "true");
 	const [isMobile, setIsMobile] = createSignal(false);
 	let form;
 
@@ -641,6 +642,10 @@ function App({ worker }) {
 		setInitialValues(formData);
 	});
 
+	createEffect(() => {
+		localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced());
+	});
+
 	return (
 		<>
 			<Background />
@@ -765,7 +770,7 @@ function App({ worker }) {
 						</form>
 					</div>
 
-					<div class="panel w-100 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
+					<div class="panel w-100 z-10" classList={{ invisible: !showAdvanced() || isGenerating() }}>
 						<div class="flex items-center justify-between">
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
