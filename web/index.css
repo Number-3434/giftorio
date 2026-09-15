@@ -261,8 +261,6 @@ select option {
 
 .factorio-select-container {
     position: relative;
-    padding-top: 0.25rem;
-    padding-bottom: 0.25rem;
 
     &::before {
         content: "";
@@ -284,8 +282,6 @@ select option {
         box-shadow: 0 -1px 0 0 #88888888;
     }
 }
-
-
 
 input[type=file] {
     box-shadow: none;

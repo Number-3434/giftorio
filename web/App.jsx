@@ -6,6 +6,7 @@ import { loadFileDB, saveFileDB } from "./fileUtils";
 import { animationInfo as getAnimationInfo } from "./imageUtils";
 import { Slider } from "./slider";
 
+const isTyping = () => document.activeElement?.matches("input, textarea, select, [contenteditable]");
 const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60];
 
 // Constants
@@ -53,7 +54,7 @@ const FORM_ELEMENTS = {
 			It also allows for higher quality substations.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				Requires the Space Age DLC (v2.0.77 or later).
 			</span>
 		`,
@@ -73,7 +74,7 @@ const FORM_ELEMENTS = {
 			The quality level of the substations.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				Usable if <strong>Use Space Age DLC?</strong> is enabled.
 			</span>
 		`,
@@ -82,37 +83,26 @@ const FORM_ELEMENTS = {
 		name: "Signal Compression",
 		type: "select",
 		tooltip: `
-			Signal compression is a <strong>lossless</strong> compression method that reduces blueprint
-			size by storing unchanged pixels.
+			Uses <strong>lossless</strong> compression to reduce size by storing unchanged pixels.
 			<br/>
-			<br/><strong>Temporal Compression</strong>
-			<br/>Reduces filesize up to 75% depending on the source video, but uses more combinators.
+			<br/><strong>Temporal Compression</strong> uses ~2x more combinators, but reduces filesize
+			~2-4x.
 			<br/>
-			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
-				Temporal compression scans the frames on a fixed window and stores any non-changing
-				pixels within the last window using one combinator, instead of always storing every
-				pixel in a combinator per-frame.
-				Temporal compression is <strong>non-volatile</strong>, and the resulting blueprint can
-				be seeked to any point in time safely without corruption.
+			<span class='text-tan-500' style='opacity:0.6;'>
+				Scans frames within a fixed window, storing non-changing pixels in a dedicated
+				combinator for the window. Temporal compression is <strong>static</strong>, and the
+				resulting blueprint can be paused / seeked safely without corruption.
 			</span>
 			<br/>
-			<br/><strong>Delta Compression</strong>
-			<br/>Has better compression than temporal compression, BUT the resulting blueprint cannot be
-			seeked / paused and must only be played from start to finish. Delta signals are reset on the
-			first frame.
+			<br/><strong>Delta Compression</strong> is not seekable or pausable, but reduces filesize
+			~3-10x.
 			<br/>
-			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
-				Delta compression uses a memory combinator to hold all signal values, allowing the data
-				combinators to only store the difference in pixel values between frames rather than the
-				real values. This means any non-changing pixels can be ommited from the output, but a
-				frame requires state from all previous frames to render, so the resulting blueprint
-				cannot be paused or seeked, and must only be played from start to finish.
+			<span class='text-tan-500' style='opacity:0.6;'>
+				Stores differences between frames, using a memory combinator to hold values. Each frame
+				depends on all previous frames, so it cannot be paused or seeked.
 			</span>
 			<br/>
-			<br/><strong>None</strong>
-			<br/>No compression.
+			<br/><strong>None</strong> turns off compression.
 		`,
 		options: {
 			none: "None",
@@ -129,7 +119,7 @@ const FORM_ELEMENTS = {
 			(that changed) are stored in per-frame combinators.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				This setting should be fine-tuned to the amount of movement in the GIF. Larger windows
 				can give greater compression, but if large portions of the GIF are moving, less
 				compression is possible in comparison to using shorter sampling times.
@@ -153,7 +143,7 @@ const FORM_ELEMENTS = {
 			more frames to be generated, increasing the size of the blueprint.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				Must be a factor of <strong>60</strong> (to match Factorio's tick-rate).
 			</span>
 		`,
@@ -167,7 +157,7 @@ const FORM_ELEMENTS = {
 			when looping.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				Usually should be disabled unless it is desirable to see the last frame of the GIF.
 			</span>
 		`,
@@ -180,34 +170,37 @@ const FORM_ELEMENTS = {
 			fields. This helps reduce the size of the blueprint for small group sizes.
 			<br/>
 			<br/>
-			If disabled, signals are sorted how their appear in Factorio.
+			If disabled, signals are sorted as they appear internally in Factorio v2.0.77.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
-				Usually recommended, but note this setting also lamp signal ordering and may clash with
-				another display if the same display for multiple GIFs.
+			<span class='text-tan-500' style='opacity:0.6;'>
+				Usually recommended, but affects lamp signal ordering.
 			</span>
 		`,
 	},
 	grayscaleBits: {
-		name: "Colour Mode",
+		name: "Color Format",
 		type: "select",
 		tooltip: `
-			Full colour will try to match the original GIF colours.
+			The color format used to store the image. Greatly affects the blueprint size.
+			<br/>
+			<br/><strong>Full color</strong> tries to match the original GIF colors.
+			<br/><strong>8-bit grayscale</strong> has 256 shades of gray and reduces blueprint size up
+			to 4x.
+			<br/><strong>4-bit grayscale</strong> has 16 shades of gray and reduces blueprint size up to
+			8x.
+			<br/><strong>1-bit Black and White</strong> reduces blueprint size up to 32x.
 			<br/>
 			<br/>
-			Greyscale reduces the size of the blueprint by 75-95%. Greyscale is also recommended for
-			black-and-white GIFs.
-			<br/>
-			<br/>
-			8-bit greyscale has 256 shades of grey and can reduce the blueprint size by 60-70%; 4-bit
-			greyscale has 16 shades of grey and can reduce the blueprint size by up to 85%. Full black
-			and white is ~32x smaller than full colour.
+			<span class='text-tan-500' style='opacity:0.6;'>
+				Using <strong>Grayscale</strong> reduces the size of the blueprint by 75-95%, and is
+				also recommended for black-and-white only GIFs.
+			</span>
 		`,
 		options: [
-			["0", "Full Colour"],
-			["8", "8-bit Greyscale (256)"],
-			["4", "4-bit Greyscale (16)"],
+			["0", "Full Color"],
+			["8", "8-bit Grayscale (256)"],
+			["4", "4-bit Grayscale (16)"],
 			["1", "Black & White"],
 		],
 	},
@@ -233,11 +226,11 @@ const FORM_ELEMENTS = {
 			<br/>Very smooth outputs, but can blur pixel art. Very stable, no aliasing.
 			<br/>
 			<br/><strong>Nearest</strong>
-			<br/>Generates risp outputs but looks "blocky". Great for pixel art, especially when the
+			<br/>Generates crisp outputs but looks "blocky". Great for pixel art, especially when the
 			dimensions are matched up.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				Only used to resize the video to the blueprint's dimensions.
 			</span>
 		`,
@@ -257,7 +250,7 @@ const FORM_ELEMENTS = {
 			Combinators will always appear in the top-left corner.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				This can be utilised to change the location of data combinators. E.g. to put combinators
 				on the left side instead of the right, set this to 90°, and then inside Factorio, rotate
 				the blueprint by -90° to match the original GIF.
@@ -281,7 +274,7 @@ const FORM_ELEMENTS = {
 			Combinators will always appear in the top-left corner.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				This can be utilised to change the location of data combinators. E.g. to put combinators
 				on the right of the top side instead of the right, set this to <strong>X</strong>, and
 				then inside Factorio, flip the blueprint horizontally to match the original GIF.
@@ -295,10 +288,10 @@ const FORM_ELEMENTS = {
 		},
 	},
 	wireColor: {
-		name: "Preferred Wire Colour",
+		name: "Preferred Wire Color",
 		type: "select",
 		tooltip: `
-			The colour of the wires used to connect the lamps.
+			The color of the wires used to connect the lamps.
 			<br/>
 			<br/> <strong>Green</strong> is usually recommended as green wires connect horizontally in
 			straight lines and take up the least space.
@@ -306,10 +299,10 @@ const FORM_ELEMENTS = {
 			as the wire does not connect straight, and may obscure the video more.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
-				The wire colour used will slightly tint the image the same colour. Note that changing
+			<span class='text-tan-500' style='opacity:0.6;'>
+				The wire color used will slightly tint the image the same color. Note that changing
 				this setting will completely flip all wires (all red wires become green, all green wires
-				become red, and vice versa). There will always be a wire of the opposite colour
+				become red, and vice versa). There will always be a wire of the opposite color
 				connecting the lamps together at the top row to transmit data.
 			</span>
 		`,
@@ -336,7 +329,7 @@ const FORM_ELEMENTS = {
 			<br/>Green wires connect straight both horizontally and vertically.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				Horizontal wires are recommended for most GIFs as they are more obscure.
 				<br/>
 				<br/>
@@ -364,7 +357,7 @@ const FORM_ELEMENTS = {
 			and blueprint files can be imported directly into the game via drag-and-drop.
 			<br/>
 			<br/>
-			<span class='text-tan-500' style='opacity:0.5;'>
+			<span class='text-tan-500' style='opacity:0.6;'>
 				<strong>
 					If Factorio has issues importing blueprint strings, try using the JSON format.
 				</strong>
@@ -582,6 +575,14 @@ function App({ worker }) {
 		form.style.position = "absolute";
 		form.style.left = `${bounds.left}px`;
 		form.style.top = `${bounds.top}px`;
+
+		// Add keyboard shorcut to start form
+		document.addEventListener("keydown", (evt) => {
+			if (isTyping()) return;
+			if (evt.key === "Enter" || evt.key.toLowerCase() === "e") {
+				formRefs.submitButton.click();
+			}
+		});
 	});
 
 	createEffect(() => {
@@ -950,7 +951,7 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 		}
 		return (
 			<div class="mb-1">
-				<label className="block text-white-500 mb-2" htmlFor={k}>
+				<label className="block text-white-500 mb-0" htmlFor={k}>
 					{name}
 					{mkTooltip(tooltip)}
 				</label>
