@@ -54,10 +54,7 @@ pub fn resize_dimensions(
 pub fn gif_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
     if data.len() < 13 {
         return Err("GIF data is too short");
-    }
-
-    let header = &data[..6];
-    if header != b"GIF87a" && header != b"GIF89a" {
+    } else if !matches!(&data[..6], b"GIF87a" | b"GIF89a") {
         return Err("Invalid GIF header");
     }
 
@@ -73,26 +70,21 @@ pub fn gif_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
         pos += size;
     }
 
-    let mut frames = 0u32;
-    let mut duration_cs = 0u64;
-
     // Delay belonging to the next image descriptor.
     let mut pending_delay_cs = 0u64;
+    let mut frames = 0u32;
+    let mut duration_cs = 0u64;
 
     #[inline(always)]
     fn skip_sub_blocks(data: &[u8], pos: &mut usize) -> Result<(), &'static str> {
         loop {
             let size = *data.get(*pos).ok_or("Truncated GIF sub-block")?;
             *pos += 1;
-
             if size == 0 {
                 return Ok(());
-            }
-
-            if data.len().saturating_sub(*pos) < size as usize {
+            } else if data.len().saturating_sub(*pos) < size as usize {
                 return Err("Truncated GIF sub-block data");
             }
-
             *pos += size as usize;
         }
     }
@@ -109,18 +101,15 @@ pub fn gif_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
                 if data.len().saturating_sub(pos) < 9 {
                     return Err("Truncated image descriptor");
                 }
-
                 let packed = data[pos + 8];
                 pos += 9;
 
                 // Local Color Table
                 if packed & 0x80 != 0 {
                     let size = 3usize << ((packed & 0x07) + 1);
-
                     if data.len().saturating_sub(pos) < size {
                         return Err("Truncated local color table");
                     }
-
                     pos += size;
                 }
 
@@ -148,29 +137,22 @@ pub fn gif_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
                     // 21 F9 04 [packed] [delay lo] [delay hi] [transparent] 00
                     if data.len().saturating_sub(pos) < 6 {
                         return Err("Truncated graphic control extension");
-                    }
-
-                    let block_size = data[pos];
-                    if block_size != 4 {
+                    } else if data[pos] != 4 {
                         return Err("Invalid graphic control extension");
                     }
-
                     pending_delay_cs = u16::from_le_bytes([data[pos + 2], data[pos + 3]]) as u64;
-
                     pos += 6;
                 } else {
                     // Other extension data
                     skip_sub_blocks(data, &mut pos)?;
                 }
             }
-
             0x3B => {
                 return Ok(AnimationInfo {
                     frames,
                     duration: Duration::from_millis(duration_cs * 10),
                 });
             }
-
             _ => {
                 return Err("Invalid GIF block introducer");
             }
@@ -189,14 +171,11 @@ pub fn gif_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
 pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
     if data.len() < 12 {
         return Err("WebP data is too short");
-    }
-
-    if &data[0..4] != b"RIFF" || &data[8..12] != b"WEBP" {
+    } else if &data[0..4] != b"RIFF" || &data[8..12] != b"WEBP" {
         return Err("Invalid WebP header");
     }
 
     let riff_size = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
-
     let end = 8usize.checked_add(riff_size).ok_or("Invalid RIFF size")?;
 
     if end > data.len() {
@@ -209,7 +188,6 @@ pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
 
     while end.saturating_sub(pos) >= 8 {
         let chunk_type = &data[pos..pos + 4];
-
         let chunk_size =
             u32::from_le_bytes([data[pos + 4], data[pos + 5], data[pos + 6], data[pos + 7]])
                 as usize;
@@ -218,13 +196,10 @@ pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
 
         if chunk_size > end.saturating_sub(pos) {
             return Err("Truncated WebP chunk");
-        }
-
-        if chunk_type == b"ANMF" {
+        } else if chunk_type == b"ANMF" {
             if chunk_size < 16 {
                 return Err("Invalid ANMF chunk");
             }
-
             frames = frames.checked_add(1).ok_or("Too many WebP frames")?;
 
             // ANMF:
@@ -236,7 +211,6 @@ pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
             let frame_duration_ms = data[pos + 12] as u64
                 | ((data[pos + 13] as u64) << 8)
                 | ((data[pos + 14] as u64) << 16);
-
             duration_ms += frame_duration_ms;
         }
 
@@ -255,7 +229,7 @@ pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
 }
 
 pub fn animation_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
-    if data.len() >= 6 && (&data[..6] == b"GIF87a" || &data[..6] == b"GIF89a") {
+    if data.len() >= 6 && matches!(&data[..6], b"GIF87a" | b"GIF89a") {
         gif_info(data)
     } else if data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
         webp_info(data)

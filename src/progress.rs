@@ -1,6 +1,5 @@
 use js_sys::Function;
-use std::cell::RefCell;
-use std::thread_local;
+use std::{cell::RefCell, thread_local};
 use wasm_bindgen::prelude::*;
 
 thread_local! {

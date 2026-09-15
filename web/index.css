@@ -320,6 +320,10 @@ input[type=number] {
     border: none;
     border-radius: 5px;
     text-align: center;
+
+    &[aria-invalid="true"] {
+        background-color: #ac5e5e;
+    }
 }
 
 .handle {

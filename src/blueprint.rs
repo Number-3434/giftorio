@@ -3,141 +3,15 @@ use crate::image_processing::{rgb_to_int, FrameData};
 use crate::macros::*;
 use crate::models::*;
 use crate::signals::get_signals_with_quality;
-use std::collections::{HashMap, HashSet};
-use std::fmt::Display;
-use std::sync::Arc;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use wasm_bindgen::JsValue;
 
-/// High-level utility macro for making wire connections.
-macro_rules! get_wires {
-    ($wire_type:ident $ents:ident; $src_type:ident $src_name:expr => $dst_type:ident $dst_name:expr) => {
-        [
-            entity_idx_by_tag!($ents, $src_name).expect("No entity found with tag"),
-            get_wires!(@wire_type $wire_type, $src_type),
-            entity_idx_by_tag!($ents, $dst_name).expect("No entity found with tag"),
-            get_wires!(@wire_type $wire_type, $dst_type),
-        ]
-    };
-
-    (@wire_type R, IN) => { 1 };
-    (@wire_type G, IN) => { 2 };
-    (@wire_type R, OUT) => { 3 };
-    (@wire_type G, OUT) => { 4 };
-
-    (@wire_type C, IN) => { 5 };
-    (@wire_type C, OUT) => { 6 };
-}
-macro_rules! entity_idx_by_tag {
-    ($ents:ident, $tag:expr) => {
-        $ents
-            .iter()
-            .find(|e| e.has_tag($tag))
-            .map(|e| e.entity_number)
-    };
-}
-
-#[derive(serde::Deserialize)]
-pub struct BlueprintArgs {
-    pub name: String,
-    #[serde(rename = "imageType")]
-    pub image_type: String,
-
-    #[serde(rename = "combinatorCompression")]
-    pub combinator_compression: Option<BlueprintCombinatorCompression>,
-
-    #[serde(rename = "includeLastFrame")]
-    pub last_frame: bool,
-
-    #[serde(rename = "useDLC")]
-    pub use_dlc: bool,
-
-    #[serde(rename = "targetFps")]
-    pub target_fps: u32,
-
-    #[serde(rename = "maxSize")]
-    pub max_size: u32,
-
-    #[serde(rename = "substationQuality")]
-    pub substation_quality: BlueprintSubstationQuality,
-
-    #[serde(rename = "grayscaleBits")]
-    pub grayscale_bits: u32,
-
-    #[serde(rename = "resamplingFilter")]
-    pub sampling_filter: BlueprintResamplingFilter,
-
-    #[serde(rename = "useGreenLampWires")]
-    pub prefer_green_wires: bool,
-
-    #[serde(rename = "useHorizontalLampWires")]
-    pub prefer_horizontal_wires: bool,
-
-    #[serde(rename = "sortSignals")]
-    pub sort_signals: bool,
-
-    #[serde(rename = "outputFormat")]
-    pub output_format: BlueprintOutputFormat,
-}
-
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
-pub enum BlueprintSubstationQuality {
-    #[serde(rename = "none")]
-    None,
-    #[serde(rename = "normal")]
-    Normal,
-    #[serde(rename = "uncommon")]
-    Uncommon,
-    #[serde(rename = "rare")]
-    Rare,
-    #[serde(rename = "epic")]
-    Epic,
-    #[serde(rename = "legendary")]
-    Legendary,
-}
-impl Display for BlueprintSubstationQuality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::None => write!(f, "none"),
-            Self::Normal => write!(f, "normal"),
-            Self::Uncommon => write!(f, "uncommon"),
-            Self::Rare => write!(f, "rare"),
-            Self::Epic => write!(f, "epic"),
-            Self::Legendary => write!(f, "legendary"),
-        }
-    }
-}
-
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
-pub enum BlueprintResamplingFilter {
-    #[serde(rename = "catrom")]
-    Catrom,
-    #[serde(rename = "gaussian")]
-    Gaussian,
-    #[serde(rename = "lanczos3")]
-    Lanczos3,
-    #[serde(rename = "nearest")]
-    Nearest,
-    #[serde(rename = "triangle")]
-    Triangle,
-}
-
-#[derive(serde::Deserialize, Clone, PartialEq)]
-pub enum BlueprintCombinatorCompression {
-    #[serde(rename = "temporal")]
-    Temporal { window: u32 },
-    #[serde(rename = "delta")]
-    Delta,
-}
-
-#[derive(serde::Deserialize, Clone, PartialEq)]
-pub enum BlueprintOutputFormat {
-    #[serde(rename = "blueprint")]
-    Blueprint,
-    #[serde(rename = "json")]
-    Json,
-}
-
 /// Generates timer entities and wires for the blueprint's timing mechanism.
+///
+/// This is only run once for the entire blueprint.
 ///
 /// # Arguments
 ///
@@ -151,89 +25,70 @@ pub enum BlueprintOutputFormat {
 /// A tuple with timer entities and wires.
 pub fn generate_timer(
     stop: u32,
-    gray_bits: u32,
     ticks_per_frame: u32,
     frames_per_comb: u32,
+    args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Wire>) {
+    let gray_bits = args.grayscale_bits;
     let mut ents = Vec::new();
     let mut wires = Vec::new();
 
-    ents.push(
-        Entity::new(1, CONSTANT_COMB, TIMER1_POS)
-            .with_direction(DIR_R)
-            .with_control_behavior(ControlBehavior::Constant {
-                sections: Sections {
-                    sections: vec![Section {
-                        index: 1,
-                        filters: vec![Filter {
-                            index: 1,
-                            type_: SIG_TYPE_VIRTUAL,
-                            name: SIG_T,
-                            quality: Some(QUAL_NORMAL),
-                            comparator: Some(COMP_EQ),
-                            count: Some(1),
-                        }],
-                    }],
-                },
-            }),
-    );
-    ents.push(
-        Entity::new(2, DECIDER_COMB, TIMER2_POS)
-            .with_direction(DIR_R)
-            .with_control_behavior(ControlBehavior::Decider {
-                decider_conditions: DeciderConditions {
-                    conditions: vec![Condition {
-                        first_signal: Signal::new_virtual(SIG_T),
-                        constant: stop as i32,
-                        comparator: COMP_LT,
-                        compare_type: None,
-                        first_signal_networks: None,
-                    }],
-                    outputs: vec![CombinatorOutput::new(
-                        Arc::from(Signal::new_virtual(SIG_T)),
-                        None,
-                    )],
-                },
-            }).with_description("[virtual-signal=signal-T] is our timer that ticks up 60 times per second up to the max ticks for the entire gif. \
-            When it reaches the max, it will start over, resetting the gif. This timer is used to know which frames to render.")
-    );
-    ents.push(
-        Entity::new(3, ARITHMETIC_COMB, TIMER3_POS)
-            .with_direction(DIR_R)
-            .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
-                arithmetic_virtual!(SIG_T - 1 => SIG_T),
-            )),
-    );
+    let ent = Entity::new(1, CONSTANT_COMB, TIMER1_POS).with_direction(DIR_R);
+    ents.push(ent.with_control_behavior(ControlBehavior::Constant {
+        sections: Sections {
+            sections: vec![Section {
+                index: 1,
+                filters: vec![Filter {
+                    index: 1,
+                    type_: SIG_TYPE_VIRTUAL,
+                    name: SIG_T,
+                    quality: Some(QUAL_NORMAL),
+                    comparator: Some(COMP_EQ),
+                    count: Some(1),
+                }],
+            }],
+        },
+    }));
+
+    let mut ent = Entity::new(2, DECIDER_COMB, TIMER2_POS).with_direction(DIR_R);
+    ent = ent.with_description("[virtual-signal=signal-T] increments 60 times per second up to the GIF's frame count, then resets to 0. It determines the current frame.");
+    ents.push(ent.with_control_behavior(ControlBehavior::Decider {
+        decider_conditions: DeciderConditions {
+            conditions: vec![Condition {
+                first_signal: Signal::new_virtual(SIG_T),
+                constant: stop as i32,
+                comparator: COMP_LT,
+                compare_type: None,
+                first_signal_networks: None,
+            }],
+            outputs: vec![CombinatorOutput::new(
+                Arc::from(Signal::new_virtual(SIG_T)),
+                None,
+            )],
+        },
+    }));
+
+    let ent = Entity::new(3, ARITHMETIC_COMB, TIMER3_POS).with_direction(DIR_R);
+    let conds = arithmetic_virtual!(SIG_T - 1 => SIG_T);
+    ents.push(ent.with_control_behavior(ControlBehavior::from_arithmetic_conditions(conds)));
 
     wires.push([1, WIRE_R, 2, WIRE_R]);
     wires.push([2, WIRE_R, 2, WIRE_OUT_R]);
     wires.push([2, WIRE_R, 3, WIRE_R]);
 
     if gray_bits > 0 {
-        ents.push(
-            Entity::new(4, ARITHMETIC_COMB, TIMER4_POS)
-                .with_direction(DIR_L)
-                .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
-                    arithmetic_virtual!(SIG_T % (ticks_per_frame * frames_per_comb) => SIG_S),
-                )),
-        );
-        ents.push(
-            Entity::new(5, ARITHMETIC_COMB, TIMER5_POS).with_control_behavior(
-                ControlBehavior::from_arithmetic_conditions(
-                    arithmetic_virtual!(SIG_S / ticks_per_frame => SIG_F),
-                ),
-            ),
-        );
-        ents.push(
-            Entity::new(6, ARITHMETIC_COMB, TIMER6_POS)
-                .with_direction(DIR_R)
-                .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
-                    arithmetic_virtual!(SIG_EACH * gray_bits => SIG_EACH),
-                ))
-                .with_description(
-                    "Calculates the bit shift necessary for the frame we should be rendering.",
-                ),
-        );
+        let ent = Entity::new(4, ARITHMETIC_COMB, TIMER4_POS).with_direction(DIR_L);
+        let conds = arithmetic_virtual!(SIG_T % (ticks_per_frame * frames_per_comb) => SIG_S);
+        ents.push(ent.with_control_behavior(ControlBehavior::from_arithmetic_conditions(conds)));
+
+        let ent = Entity::new(5, ARITHMETIC_COMB, TIMER5_POS);
+        let conds = arithmetic_virtual!(SIG_S / ticks_per_frame => SIG_F);
+        ents.push(ent.with_control_behavior(ControlBehavior::from_arithmetic_conditions(conds)));
+
+        let mut ent = Entity::new(6, ARITHMETIC_COMB, TIMER6_POS).with_direction(DIR_R);
+        let conds = arithmetic_virtual!(SIG_EACH * gray_bits => SIG_EACH);
+        ent = ent.with_description("Calculates the bit shift for current frame.");
+        ents.push(ent.with_control_behavior(ControlBehavior::from_arithmetic_conditions(conds)));
 
         wires.push([3, WIRE_R, 4, WIRE_R]);
         wires.push([4, WIRE_OUT_R, 5, WIRE_R]);
@@ -258,38 +113,32 @@ pub fn generate_timer(
 ///
 /// A tuple with substation entities, their wires, occupied grid cells, and the next entity number.
 pub fn generate_substations(
-    lamp_width: u32,
-    lamp_height: u32,
+    lamp_dim: (u32, u32),
     n_frames: u32,
-    base_ent_num: u32,
+    base_ent_n: u32,
     args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Wire>, HashSet<(i32, i32)>, u32) {
     if args.substation_quality == BlueprintSubstationQuality::None {
-        return (Vec::new(), Vec::new(), HashSet::new(), base_ent_num);
+        return (Vec::new(), Vec::new(), HashSet::new(), base_ent_n);
     }
     let coverage = match args.substation_quality {
-        BlueprintSubstationQuality::Normal => 18,
-        BlueprintSubstationQuality::Uncommon => 20,
-        BlueprintSubstationQuality::Rare => 22,
-        BlueprintSubstationQuality::Epic => 24,
-        BlueprintSubstationQuality::Legendary => 28,
-        _ => 18,
+        BlueprintSubstationQuality::Normal => 18.0,
+        BlueprintSubstationQuality::Uncommon => 20.0,
+        BlueprintSubstationQuality::Rare => 22.0,
+        BlueprintSubstationQuality::Epic => 24.0,
+        BlueprintSubstationQuality::Legendary => 28.0,
+        _ => 18.0,
     };
 
     let mut ents = Vec::new();
     let mut wires = Vec::new();
     let mut occupied = HashSet::new();
-    let mut curr_ent_num = base_ent_num;
-    let half_cov = ((coverage as f64) - 2.0) / 2.0;
-    let mut n_frame_cov = (((n_frames as f64) - half_cov) / (coverage as f64)).ceil() as u32;
-    while ((n_frames as f64) - half_cov + (n_frame_cov as f64 * 2.0))
-        > (n_frame_cov as f64 * coverage as f64)
-    {
-        n_frame_cov += 1;
-    }
-    let n_subs_width = (((lamp_width as f64) - half_cov) / (coverage as f64)).ceil() as u32 + 1;
+    let mut curr_ent_n = base_ent_n;
+    let half_cov = (coverage - 2.0) / 2.0;
+    let n_frame_cov = ((n_frames as f64 - half_cov) / (coverage - 2.0)).floor() + 1.0;
+    let n_subs_width = ((lamp_dim.0 as f64 - half_cov) / coverage).ceil() as u32 + 1;
     let n_subs_height =
-        (((lamp_height as f64) - half_cov) / (coverage as f64)).ceil() as u32 + 1 + n_frame_cov;
+        (((lamp_dim.1 as f64 - half_cov) / coverage).ceil() + n_frame_cov) as u32 + 1;
     let start_x = -1;
     let start_y = -1 - (n_frame_cov as i32 * coverage as i32);
 
@@ -297,7 +146,7 @@ pub fn generate_substations(
         for j in 0..n_subs_width {
             let x = start_x + (j as i32 * coverage as i32);
             let y = start_y + (i as i32 * coverage as i32);
-            let mut ent = Entity::new(curr_ent_num, SUBSTATION, (x as f64, y as f64));
+            let mut ent = Entity::new(curr_ent_n, SUBSTATION, (x as f64, y as f64));
             ent.quality = (args.substation_quality != BlueprintSubstationQuality::Normal)
                 .then_some(args.substation_quality.to_string());
             ents.push(ent);
@@ -307,31 +156,31 @@ pub fn generate_substations(
             occupied.insert((x - 1, y));
             occupied.insert((x, y - 1));
             occupied.insert((x, y));
+
             if i > 0 {
-                wires.push([curr_ent_num, WIRE_C, curr_ent_num - n_subs_width, WIRE_C]);
+                wires.push([curr_ent_n, WIRE_C, curr_ent_n - n_subs_width, WIRE_C]);
             }
             if j > 0 {
-                wires.push([curr_ent_num, WIRE_C, curr_ent_num - 1, WIRE_C]);
+                wires.push([curr_ent_n, WIRE_C, curr_ent_n - 1, WIRE_C]);
             }
-            curr_ent_num += 1;
+            curr_ent_n += 1;
         }
     }
 
-    return (ents, wires, occupied, curr_ent_num);
+    return (ents, wires, occupied, curr_ent_n);
 }
 
 /// Generates combinator entities and wiring for each frame group.
 ///
 /// # Arguments
 ///
-/// * `frame_outputs` - A vector of all the outputs for a frame.
 /// * `occupied_y` - Set of Y coordinates occupied by substations.
 /// * `ticks_per_group` - Ticks per group.
-/// * `base_entity_number` - Starting entity number.
-/// * `base_decider_x` - Base X coordinate for decider combinators.
+/// * `base_ent_n` - Starting entity number.
+/// * `base_dc_x` - Base X coordinate for decider combinators.
 /// * `base_y` - Base Y coordinate for placement.
 /// * `max_rows_per_group` - Maximum rows per group.
-/// * `grayscale_bits` - Number of grayscale bits (affects extra combinators).
+/// * `args` - Uses BlueprintArgs.grayscale_bits (affects extra combinators).
 ///
 /// # Returns
 ///
@@ -340,31 +189,32 @@ pub fn generate_substations(
 ///
 /// Does not populate combinators with data.
 pub fn mk_frame_combs(
-    n_chunks: u64,
+    ticks_per_group: u64,
     occupied_y: &HashSet<i32>,
-    base_ent_num: u32,
+    base_ent_n: u32,
     base_dc_x: f64,
     base_y: f64,
     max_rows_per_group: u32,
     args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Entity>, Vec<Wire>, (u32, u32, u32)) {
-    let mut first_connection_ent_num: Option<u32> = None;
-    let mut curr_ent_num = base_ent_num;
+    let mut first_connection_ent_n: Option<u32> = None;
+    let mut curr_ent_n = base_ent_n;
     let mut other_ents = Vec::with_capacity(3); // shifters / etc
-    let mut new_ent = Vec::with_capacity(n_chunks as usize * 2); // data entities
-    let mut wires = Vec::with_capacity(n_chunks as usize * 3 + 4);
+    let mut new_ent = Vec::with_capacity(ticks_per_group as usize * 2); // data entities
+    let mut wires = Vec::with_capacity(ticks_per_group as usize * 3 + 4);
     let use_delta_comp = args
         .combinator_compression
         .as_ref()
         .is_some_and(|c| *c == BlueprintCombinatorCompression::Delta);
 
+    let gray_bits = args.grayscale_bits;
     let comp1_x = base_dc_x;
     let shifter1_x = base_dc_x + (1 as f64) * 2.0;
-    let shifter2_x = base_dc_x + (2 as f64) * 2.0;
+    let cb2_x = base_dc_x + (2 as f64) * 2.0;
 
     if use_delta_comp {
         other_ents.push(
-            Entity::new(curr_ent_num, DECIDER_COMB, (comp1_x + 1.0, base_y + 2.0))
+            Entity::new(curr_ent_n, DECIDER_COMB, (comp1_x + 1.0, base_y + 2.0))
                 .with_tag("delay comb")
                 .with_direction(DIR_R)
                 .with_control_behavior(ControlBehavior::from_decider_conditions(
@@ -384,12 +234,12 @@ pub fn mk_frame_combs(
                 ))
                 .with_description("Utility 1-tick delay combinator."),
         );
-        first_connection_ent_num = Some(curr_ent_num);
-        curr_ent_num += 1;
+        first_connection_ent_n = Some(curr_ent_n);
+        curr_ent_n += 1;
 
         let desc = "Memory cell for delta compression. This holds all the signal values, then allows us to set any signal value by applying a delta. We can reach any number in one tick using overflow logic.";
         other_ents.push(
-            Entity::new(curr_ent_num, DECIDER_COMB, (comp1_x + 3.0, base_y + 2.0))
+            Entity::new(curr_ent_n, DECIDER_COMB, (comp1_x + 3.0, base_y + 2.0))
                 .with_tag("memory comb")
                 .with_direction(DIR_R)
                 .with_control_behavior(ControlBehavior::from_decider_conditions(
@@ -421,14 +271,14 @@ pub fn mk_frame_combs(
         );
 
         // Self connection for memory
-        wires.push([curr_ent_num, WIRE_G, curr_ent_num, WIRE_OUT_G]);
+        wires.push([curr_ent_n, WIRE_G, curr_ent_n, WIRE_OUT_G]);
         wires.push(get_wires!(R other_ents; OUT "delay comb" => IN "memory comb"));
-        curr_ent_num += 1;
+        curr_ent_n += 1;
     }
 
-    if args.grayscale_bits > 0 {
+    if gray_bits > 0 {
         other_ents.push(
-            Entity::new(curr_ent_num, ARITHMETIC_COMB, (shifter1_x, base_y + 1.0))
+            Entity::new(curr_ent_n, ARITHMETIC_COMB, (shifter1_x, base_y + 1.0))
                 .with_tag(">> comb")
                 .with_direction(DIR_R)
                 .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
@@ -445,21 +295,17 @@ pub fn mk_frame_combs(
                 ),
         );
 
-        if first_connection_ent_num.is_none() {
-            first_connection_ent_num = Some(curr_ent_num);
+        if first_connection_ent_n.is_none() {
+            first_connection_ent_n = Some(curr_ent_n);
         }
-        curr_ent_num += 1;
+        curr_ent_n += 1;
 
         other_ents.push(
-            Entity::new(curr_ent_num, ARITHMETIC_COMB, (shifter2_x, base_y + 1.0))
+            Entity::new(curr_ent_n, ARITHMETIC_COMB, (cb2_x, base_y + 1.0))
                 .with_tag("AND comb")
                 .with_direction(DIR_R)
                 .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
-                    arithmetic_virtual!(SIG_EACH AND match args.grayscale_bits {
-                    1 => 1,
-                    4 => 15,
-                    _ => 255,
-                } => SIG_EACH),
+                    arithmetic_virtual!(SIG_EACH AND match gray_bits { 1 => 1, 4 => 15, _ => 255 } => SIG_EACH),
                 ))
                 .with_description("Filters out the bits that are not relevant for the current frame, after bit-shifting. (The value of each signal encodes multiple frames)"),
         );
@@ -471,65 +317,57 @@ pub fn mk_frame_combs(
         }
 
         // RSHIFT -> AND
-        curr_ent_num += 1;
+        curr_ent_n += 1;
 
-        if args.grayscale_bits == 1 || args.grayscale_bits == 4 {
-            other_ents.push(
-                Entity::new(
-                    curr_ent_num,
-                    ARITHMETIC_COMB,
-                    (shifter2_x + 1.0, base_y + 2.0),
-                )
-                .with_tag("* comb")
-                .with_direction(DIR_L)
-                .with_control_behavior(ControlBehavior::from_arithmetic_conditions(
-                    arithmetic_virtual!(SIG_EACH * if args.grayscale_bits == 1 { 255 } else { 17 } => SIG_EACH),
-                )),
-            );
+        if gray_bits == 1 || gray_bits == 4 {
+            let mut en = Entity::new(curr_ent_n, ARITHMETIC_COMB, (cb2_x + 1.0, base_y + 2.0));
+            let conds =
+                arithmetic_virtual!(SIG_EACH * if gray_bits == 1 { 255 } else { 17 } => SIG_EACH);
+            en = en.with_tag("* comb").with_direction(DIR_L);
+            other_ents
+                .push(en.with_control_behavior(ControlBehavior::from_arithmetic_conditions(conds)));
             wires.push(get_wires!(R other_ents; OUT "AND comb" => IN "* comb"));
-            curr_ent_num += 1;
-        } else {
+            curr_ent_n += 1;
         }
-    } else if first_connection_ent_num.is_none() {
-        first_connection_ent_num = Some(curr_ent_num);
+    } else if first_connection_ent_n.is_none() {
+        first_connection_ent_n = Some(curr_ent_n);
     }
 
-    let first_connection_ent = first_connection_ent_num.unwrap();
-    let comb_out_ent_num = if args.grayscale_bits > 0 {
-        (curr_ent_num - 1).max(base_ent_num)
+    let first_connection_ent = first_connection_ent_n.unwrap();
+    let comb_out_ent_n = if gray_bits > 0 {
+        (curr_ent_n - 1).max(base_ent_n)
     } else {
-        entity_idx_by_tag!(other_ents, "memory comb")
-            .unwrap_or((curr_ent_num - 1).max(base_ent_num))
+        entity_idx_by_tag!(other_ents, "memory comb").unwrap_or((curr_ent_n - 1).max(base_ent_n))
     };
 
     let mut is_first_dc = true;
     let (mut x_offset, mut y_offset) = (0.0, 0.0);
     let mut row_in_this_col = 0;
-    let mut prev_first_dc: Option<u32> = None;
+    let mut prev_first_dc_ent_n: Option<u32> = None;
 
     // Generates combinators up to down, then left ro right.
-    for chunk_i in 0..n_chunks as usize {
+    for chunk_i in 0..ticks_per_group as usize {
         let mut curr_y = base_y - (row_in_this_col as f64) - y_offset;
         if occupied_y.contains(&(curr_y.floor() as i32)) {
             y_offset += 2.0;
             curr_y -= 2.0;
         }
 
-        let en = Entity::new(curr_ent_num, DECIDER_COMB, (base_dc_x + x_offset, curr_y))
+        let en = Entity::new(curr_ent_n, DECIDER_COMB, (base_dc_x + x_offset, curr_y))
             .with_direction(DIR_R);
 
         if chunk_i == 0 {
             new_ent.push(en.with_tag("first data comb"));
             if use_delta_comp {
                 wires.push([
-                    curr_ent_num,
+                    curr_ent_n,
                     WIRE_OUT_G,
                     entity_idx_by_tag!(other_ents, "memory comb").expect("No memory combinator!"),
                     WIRE_G,
                 ]);
-            } else if args.grayscale_bits > 0 {
+            } else if gray_bits > 0 {
                 wires.push([
-                    curr_ent_num,
+                    curr_ent_n,
                     WIRE_OUT_G,
                     entity_idx_by_tag!(other_ents, ">> comb").expect("No bitshift combinator!"),
                     WIRE_G,
@@ -541,19 +379,19 @@ pub fn mk_frame_combs(
 
         if !is_first_dc {
             // Wire to previous decider
-            let prev_dc_num = curr_ent_num - 1;
-            wires.push([prev_dc_num, WIRE_R, curr_ent_num, WIRE_R]);
-            wires.push([prev_dc_num, WIRE_OUT_G, curr_ent_num, WIRE_OUT_G]);
+            let prev_dc_ent_n = curr_ent_n - 1;
+            wires.push([prev_dc_ent_n, WIRE_R, curr_ent_n, WIRE_R]);
+            wires.push([prev_dc_ent_n, WIRE_OUT_G, curr_ent_n, WIRE_OUT_G]);
         } else {
-            if let Some(prev) = prev_first_dc {
-                wires.push([prev, WIRE_R, curr_ent_num, WIRE_R]);
-                wires.push([prev, WIRE_OUT_G, curr_ent_num, WIRE_OUT_G]);
+            if let Some(prev) = prev_first_dc_ent_n {
+                wires.push([prev, WIRE_R, curr_ent_n, WIRE_R]);
+                wires.push([prev, WIRE_OUT_G, curr_ent_n, WIRE_OUT_G]);
             }
-            prev_first_dc = Some(curr_ent_num);
+            prev_first_dc_ent_n = Some(curr_ent_n);
         }
 
         is_first_dc = false;
-        curr_ent_num += 1;
+        curr_ent_n += 1;
         row_in_this_col += 1;
 
         if row_in_this_col >= max_rows_per_group {
@@ -575,7 +413,7 @@ pub fn mk_frame_combs(
         other_ents,
         new_ent,
         wires,
-        (first_connection_ent, comb_out_ent_num, curr_ent_num),
+        (first_connection_ent, comb_out_ent_n, curr_ent_n),
     );
 }
 
@@ -606,13 +444,19 @@ pub fn generate_lamps(
 ) -> (Vec<Entity>, Vec<Wire>, u32, u32) {
     let mut ents = Vec::new();
     let mut wires = Vec::new();
-    let mut curr_ent_num = base_ent_num;
+    let mut curr_ent_n = base_ent_num;
     let mut prev_ents: HashMap<i32, u32> = HashMap::new();
     let mut top_right_lamp: u32 = 0;
-    let mut prev_ent_num: Option<u32>;
+    let mut prev_ent_n: Option<u32>;
+
+    // We just rotate the entire blueprint based on the combinator position
+    let horizontal_wires = matches!(
+        args.combinator_position,
+        BlueprintCombinatorPosition::Left | BlueprintCombinatorPosition::Right
+    ) ^ args.prefer_horizontal_wires;
 
     for r in 0..grid_dim.1 as i32 {
-        prev_ent_num = None;
+        prev_ent_n = None;
         for c in 0..grid_dim.0 as i32 {
             let x = start_pos.0 + c;
             let y = start_pos.1 + r;
@@ -636,35 +480,35 @@ pub fn generate_lamps(
                     rgb_signal: signal,
                 }
             };
-            let lamp = Entity::new(curr_ent_num, LAMP, (x as f64, y as f64))
+            let lamp = Entity::new(curr_ent_n, LAMP, (x as f64, y as f64))
                 .with_control_behavior(colors)
                 .with_always_on(true);
             ents.push(lamp);
 
             if r == 0 && c > 0 {
-                wires.push([curr_ent_num, WIRE_G, curr_ent_num - 1, WIRE_G]);
-                wires.push([curr_ent_num, WIRE_R, curr_ent_num - 1, WIRE_R]);
-                top_right_lamp = curr_ent_num;
-            } else if args.prefer_horizontal_wires {
-                if let Some(prev) = prev_ent_num {
-                    wires.push([curr_ent_num, WIRE_G, prev, WIRE_G]);
+                wires.push([curr_ent_n, WIRE_G, curr_ent_n - 1, WIRE_G]);
+                wires.push([curr_ent_n, WIRE_R, curr_ent_n - 1, WIRE_R]);
+                top_right_lamp = curr_ent_n;
+            } else if horizontal_wires {
+                if let Some(prev) = prev_ent_n {
+                    wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]);
                 }
-                prev_ent_num = Some(curr_ent_num);
+                prev_ent_n = Some(curr_ent_n);
             }
 
             if r > 0 {
-                if !args.prefer_horizontal_wires || (c + 1 == grid_dim.0 as i32) {
+                if !horizontal_wires || (c + 1 == grid_dim.0 as i32) {
                     if let Some(&prev_entity) = prev_ents.get(&x) {
-                        wires.push([curr_ent_num, WIRE_G, prev_entity, WIRE_G]);
+                        wires.push([curr_ent_n, WIRE_G, prev_entity, WIRE_G]);
                     }
                 }
             }
-            prev_ents.insert(x, curr_ent_num);
-            curr_ent_num += 1;
+            prev_ents.insert(x, curr_ent_n);
+            curr_ent_n += 1;
         }
     }
 
-    return (ents, wires, curr_ent_num, top_right_lamp);
+    return (ents, wires, curr_ent_n, top_right_lamp);
 }
 
 /// Builds the complete blueprint JSON by combining all components.
@@ -703,6 +547,7 @@ pub fn generate_blueprint(
         return Err(JsValue::from_str("No sampled frames"));
     }
 
+    let gray_bits = args.grayscale_bits;
     let combinator_compression = args.combinator_compression.as_ref();
     let time_comp_win = combinator_compression
         .map(|c| match c {
@@ -714,18 +559,13 @@ pub fn generate_blueprint(
         combinator_compression.is_some_and(|c| *c == BlueprintCombinatorCompression::Delta);
     let n_frames = frame_data.total_frames();
     let n_scaled_frames = frame_data.total_frames() * if time_comp_win > 0 { 2 } else { 1 };
-    let frames_per_cb = if args.grayscale_bits > 0 {
-        32 / args.grayscale_bits
+    let frames_per_cb = if gray_bits > 0 { 32 / gray_bits } else { 1 };
+    let n_buf_frames = (if time_comp_win > 0 {
+        (time_comp_win * args.fps).div_ceil(1000 * frames_per_cb)
     } else {
         1
-    };
-    let n_comp_buf_frames = if time_comp_win > 0 {
-        (time_comp_win as u64 * frame_data.fps() as u64).div_ceil(1000 * frames_per_cb as u64)
-            as usize
-    } else {
-        1
-    };
-    let n_comp_frames_per_chunk = if n_comp_buf_frames > 1 { 1 } else { 0 } as usize;
+    }) as usize;
+    let n_frames_per_chunk = if n_buf_frames > 1 { 1 } else { 0 } as usize;
     let (full_width, full_height) = frame_data.dimensions();
     let max_cols_per_grp = ((signals.len() as u32) / full_height).min(full_width);
     let n_groups = (full_width as f64 / max_cols_per_grp as f64).ceil() as u32;
@@ -740,90 +580,81 @@ pub fn generate_blueprint(
         / frames_per_cb as f64)
         .ceil() as u32;
 
-    let ticks_per_frame = (60.0 / frame_data.fps() as f64) as u32;
+    let ticks_per_frame = (60.0 / args.fps as f64) as u32;
     let stop = n_frames * ticks_per_frame;
-    let (timer_ent, timer_wires) =
-        generate_timer(stop, args.grayscale_bits, ticks_per_frame, frames_per_cb);
+    let (timer_ent, timer_wires) = generate_timer(stop, ticks_per_frame, frames_per_cb, &args);
     let mut all_ents = timer_ent;
     let mut all_wires: Vec<Wire> = timer_wires;
     let occupied_cells: HashSet<(i32, i32)>;
-    let mut next_ent_num = all_ents.iter().map(|e| e.entity_number).max().unwrap_or(0) + 1;
+    let mut next_ent_n = all_ents.iter().map(|e| e.entity_number).max().unwrap_or(0) + 1;
 
     {
-        let (ents, wires, cells, new_next) = generate_substations(
-            full_width,
-            full_height,
-            max_rows_per_grp
-                + match args.grayscale_bits {
-                    1 | 4 => 2,
-                    8 => 1,
-                    _ => 0,
-                },
-            next_ent_num,
-            &args,
-        );
+        let n_frames = max_rows_per_grp
+            + match gray_bits {
+                1 | 4 => 2,
+                8 => 1,
+                _ => 0,
+            };
+        let (ents, wires, cells, new_next_ent_n) =
+            generate_substations((full_width, full_height), n_frames, next_ent_n, &args);
         occupied_cells = cells;
-        next_ent_num = new_next;
+        next_ent_n = new_next_ent_n;
         all_ents.extend(ents);
         all_wires.extend(wires);
     }
 
     let substation_occupied_y: HashSet<i32> = occupied_cells.iter().map(|(_, y)| *y).collect();
-    let mut prev_top_right_lamp: Option<u32> = None;
-    let mut all_data_combs: Vec<Vec<u32>> = Vec::new();
+    let mut prev_top_right_lamp_ent_n: Option<u32> = None;
+    let mut all_data_cbs: Vec<Vec<u32>> = Vec::new();
 
     for group_i in 0..n_groups {
         let grp_left = group_i * max_cols_per_grp;
         let grp_right = ((group_i + 1) * max_cols_per_grp).min(full_width);
         let grp_width = grp_right - grp_left;
         let grp_offset_x = group_i * max_cols_per_grp;
-        let (
-            other_ents,
-            data_cbs,
-            mut grp_cb_wires,
-            (cb_in_ent_num, cb_out_ent_num, new_base_ent_num),
-        ) = mk_frame_combs(
-            (n_scaled_frames as u64).div_ceil(frames_per_cb as u64),
-            &substation_occupied_y,
-            next_ent_num,
-            grp_offset_x as f64 + 0.5,
-            match args.grayscale_bits {
-                1 | 4 => -5.0,
-                8 => -4.0,
-                _ => -3.0,
-            },
-            max_rows_per_grp,
-            args,
-        );
-        next_ent_num = new_base_ent_num;
+        let (other_ents, data_cbs, mut grp_cb_wires, (cb_in_ent_n, cb_out_ent_n, new_base_ent_n)) =
+            mk_frame_combs(
+                (n_scaled_frames as u64).div_ceil(frames_per_cb as u64),
+                &substation_occupied_y,
+                next_ent_n,
+                grp_offset_x as f64 + 0.5,
+                match gray_bits {
+                    1 | 4 => -5.0,
+                    8 => -4.0,
+                    _ => -3.0,
+                },
+                max_rows_per_grp,
+                args,
+            );
+        next_ent_n = new_base_ent_n;
         if group_i == 0 {
             // Connect first wire to comb in
-            grp_cb_wires.push([3, WIRE_OUT_R, cb_in_ent_num, WIRE_R]);
+            grp_cb_wires.push([3, WIRE_OUT_R, cb_in_ent_n, WIRE_R]);
         }
 
         #[allow(unused_variables)]
-        let (grp_lamps, mut grp_lamp_wires, new_next, top_right_lamp) = generate_lamps(
+        let (grp_lamps, mut grp_lamp_wires, new_next_ent_n, top_right_lamp_ent_n) = generate_lamps(
             &signals,
             (grp_width, full_height),
             &occupied_cells,
-            next_ent_num,
+            next_ent_n,
             (grp_offset_x as i32, 0),
             &args,
         );
-        next_ent_num = new_next;
+        next_ent_n = new_next_ent_n;
         let first_lamp = grp_lamps[0].entity_number;
 
-        grp_cb_wires.push([first_lamp, WIRE_R, cb_in_ent_num, WIRE_R]);
-        grp_cb_wires.push([first_lamp, WIRE_G, cb_out_ent_num, WIRE_OUT_G]);
+        grp_cb_wires.push([first_lamp, WIRE_R, cb_in_ent_n, WIRE_R]);
+        grp_cb_wires.push([first_lamp, WIRE_G, cb_out_ent_n, WIRE_OUT_G]);
 
         // Connect previous lamps together
-        if let Some(prev) = prev_top_right_lamp {
+        if let Some(prev) = prev_top_right_lamp_ent_n {
             grp_lamp_wires.push([grp_lamps[0].entity_number, WIRE_R, prev, WIRE_R]);
         }
-        prev_top_right_lamp = Some(top_right_lamp);
+        prev_top_right_lamp_ent_n = Some(top_right_lamp_ent_n);
 
         // Track the entity indexes of the data combinators for each group
-        all_data_combs.push(data_cbs.iter().map(|e| e.entity_number).collect());
+        all_data_cbs.push(data_cbs.iter().map(|e| e.entity_number).collect());
 
         all_ents.extend(other_ents);
         all_ents.extend(data_cbs);
@@ -834,16 +665,16 @@ pub fn generate_blueprint(
 
     struct GroupPatchState {
         chunk_i: usize, // which *chunk* we’re patching (not frame)
-        grayscale_buf: Vec<image::DynamicImage>,
-        output_buf: Vec<Vec<i32>>,
+        frame_buf: Vec<image::DynamicImage>,
+        sig_buf: Vec<Vec<i32>>,
     }
 
-    let ticks_per_group = ticks_per_frame * frames_per_cb;
+    let ticks_per_grp = ticks_per_frame * frames_per_cb;
     let mut patch_states: Vec<GroupPatchState> = (0..n_groups)
         .map(|_| GroupPatchState {
             chunk_i: 0,
-            grayscale_buf: Vec::with_capacity(frames_per_cb as usize),
-            output_buf: Vec::with_capacity(n_comp_buf_frames),
+            frame_buf: Vec::with_capacity(frames_per_cb as usize),
+            sig_buf: Vec::with_capacity(n_buf_frames),
         })
         .collect();
 
@@ -881,51 +712,47 @@ pub fn generate_blueprint(
     all_ents.sort_by_key(|entity| entity.entity_number);
 
     loop {
-        next_frame = match frame_data.next() {
-            Some(frame) => Some(frame?),
-            None => None,
-        };
+        next_frame = frame_data.next().transpose()?;
         let is_last_frame = next_frame.is_none();
 
         for group_i in 0..n_groups as usize {
             let state = &mut patch_states[group_i];
-            let outputs: Vec<i32>;
+            let frame_sigs: Vec<i32>;
 
             let grp_left = group_i as u32 * max_cols_per_grp;
             let grp_right = ((group_i as u32 + 1) * max_cols_per_grp).min(full_width);
-            let grp_width = grp_right - grp_left;
 
-            let cropped = frame.crop_imm(grp_left, 0, grp_width, full_height);
-            let expected_outputs_len = (cropped.width() * cropped.height()) as usize;
+            let cropped = frame.crop_imm(grp_left, 0, grp_right - grp_left, full_height);
+            let target_outputs_len = (cropped.width() * cropped.height()) as usize;
 
-            if use_delta_comp && state.output_buf.len() == 0 {
+            if use_delta_comp && state.sig_buf.len() == 0 {
                 // Pre-populate first frame with zeros
-                state.output_buf.push(vec![0i32; expected_outputs_len]);
+                state.sig_buf.push(vec![0i32; target_outputs_len]);
             }
 
-            if args.grayscale_bits > 0 {
-                state.grayscale_buf.push(cropped);
-                if state.grayscale_buf.len() < frames_per_cb as usize && !is_last_frame {
+            if gray_bits > 0 {
+                state.frame_buf.push(cropped);
+                if state.frame_buf.len() < frames_per_cb as usize && !is_last_frame {
                     continue; // wait until we have a full chunk for this group
                 }
-                outputs = grayscale_frames_to_outputs(&state.grayscale_buf, args.grayscale_bits)?;
-                state.grayscale_buf.clear();
+                frame_sigs = grayscale_frames_to_outputs(&state.frame_buf, gray_bits)?;
+                state.frame_buf.clear();
             } else {
-                outputs = color_frame_to_outputs(&cropped)?;
+                frame_sigs = color_frame_to_outputs(&cropped)?;
             }
-            if outputs.len() != expected_outputs_len {
+            if frame_sigs.len() != target_outputs_len {
                 return Err(JsValue::from_str(&format!(
                     "Outputs length ({}) does not match frame size ({}).",
-                    outputs.len(),
-                    expected_outputs_len
+                    frame_sigs.len(),
+                    target_outputs_len
                 )));
             }
 
             if !use_delta_comp {
                 // If we're using delta compression we only compare aginst the previous frame
-                state.output_buf.push(outputs.clone());
+                state.sig_buf.push(frame_sigs.clone());
             }
-            if state.output_buf.len() < n_comp_buf_frames && !is_last_frame {
+            if state.sig_buf.len() < n_buf_frames && !is_last_frame {
                 continue; // Accumulate until we have `compression_level` outputs,
             }
 
@@ -940,14 +767,14 @@ pub fn generate_blueprint(
             // If using delta compression, only store the difference between the current frame
             // and the previous frame
             if use_delta_comp {
-                let prev_outputs = &state.output_buf[0];
-                let mut target_outputs = Vec::with_capacity(expected_outputs_len);
+                let prev_outputs = &state.sig_buf[0];
+                let mut target_outputs = Vec::with_capacity(target_outputs_len);
 
-                for i in 0..expected_outputs_len {
+                for i in 0..target_outputs_len {
                     // In Factorio we will use overflow to reach any target value.
                     // E.g. if we need to get from -100 to max_positive_i32, we will instead subtract
                     // instead of adding
-                    let v = outputs[i].wrapping_sub(prev_outputs[i]);
+                    let v = frame_sigs[i].wrapping_sub(prev_outputs[i]);
                     if v != 0 {
                         target_outputs
                             .push(CombinatorOutput::new(Arc::clone(&signals[i]), Some(v)));
@@ -955,63 +782,62 @@ pub fn generate_blueprint(
                 }
 
                 // Update the data combinator. Note this uses the real frame index at all times.
-                let ent_i = find_entity(&all_ents, all_data_combs[group_i][state.chunk_i]);
+                let ent_i = find_entity(&all_ents, all_data_cbs[group_i][state.chunk_i]);
                 all_ents[ent_i] = all_ents[ent_i].clone().with_control_behavior(mk_cb(
-                    1 + ((state.chunk_i as u32) * ticks_per_group),
-                    2 + ((state.chunk_i as u32) * ticks_per_group),
+                    1 + ((state.chunk_i as u32) * ticks_per_grp),
+                    2 + ((state.chunk_i as u32) * ticks_per_grp),
                     target_outputs,
                 ));
-                state.output_buf[0] = outputs;
+                state.sig_buf[0] = frame_sigs;
             } else {
-                let mut changed_mask: Vec<bool> = vec![false; expected_outputs_len];
-                let outputs_0 = &state.output_buf[0];
+                let mut changed_mask: Vec<bool> = vec![false; target_outputs_len];
+                let outputs_0 = &state.sig_buf[0];
 
-                if state.output_buf.len() > 1 {
-                    for comb_outputs in state.output_buf.iter().skip(1) {
-                        for i in 0..expected_outputs_len {
+                if state.sig_buf.len() > 1 {
+                    for comb_outputs in state.sig_buf.iter().skip(1) {
+                        for i in 0..target_outputs_len {
                             if !changed_mask[i] && (&comb_outputs[i] != &outputs_0[i]) {
                                 changed_mask[i] = true;
                             }
                         }
                     }
                 } else {
-                    for i in 0..expected_outputs_len {
+                    for i in 0..target_outputs_len {
                         changed_mask[i] = true;
                     }
                 }
-                let base_chunk_i = state.chunk_i * n_comp_buf_frames;
+                let base_chunk_i = state.chunk_i * n_buf_frames;
 
                 // Update data for all non-static frames (frames with differing pixels)
-                for (comb_i, comb_outputs) in state.output_buf.iter().enumerate() {
-                    let target_i = base_chunk_i + comb_i;
-                    let target_comb = state.chunk_i * (n_comp_buf_frames + n_comp_frames_per_chunk)
-                        + comb_i
-                        + n_comp_frames_per_chunk;
+                for (cb_i, cb_outputs) in state.sig_buf.iter().enumerate() {
+                    let target_i = base_chunk_i + cb_i;
+                    let target_comb = state.chunk_i * (n_buf_frames + n_frames_per_chunk)
+                        + cb_i
+                        + n_frames_per_chunk;
 
                     // Only contains non-changed pixels (i.e., the ones we want to store)
                     let mut target_outputs = Vec::with_capacity(signals.len());
 
                     // Accumulate only the changed outputs
-                    for (i, v) in comb_outputs.iter().enumerate() {
+                    for (i, v) in cb_outputs.iter().enumerate() {
                         if changed_mask[i] && *v != 0 {
                             target_outputs
                                 .push(CombinatorOutput::new(Arc::clone(&signals[i]), Some(*v)));
                         }
                     }
 
-                    let ent_i = find_entity(&all_ents, all_data_combs[group_i][target_comb]);
+                    let ent_i = find_entity(&all_ents, all_data_cbs[group_i][target_comb]);
                     all_ents[ent_i] = all_ents[ent_i].clone().with_control_behavior(mk_cb(
-                        target_i as u32 * ticks_per_group,
-                        (target_i as u32 + 1) * ticks_per_group,
+                        target_i as u32 * ticks_per_grp,
+                        (target_i as u32 + 1) * ticks_per_grp,
                         target_outputs,
                     ));
                 }
 
                 // Make unchanged pixels data combinators
-                if state.output_buf.len() > 1 {
+                if state.sig_buf.len() > 1 {
                     let mut target_outputs = Vec::with_capacity(signals.len());
-
-                    for i in 0..expected_outputs_len {
+                    for i in 0..target_outputs_len {
                         if !changed_mask[i] && outputs_0[i] != 0 {
                             target_outputs.push(CombinatorOutput::new(
                                 Arc::clone(&signals[i]),
@@ -1019,19 +845,17 @@ pub fn generate_blueprint(
                             ));
                         }
                     }
-
                     let ent_i = find_entity(
                         &all_ents,
-                        all_data_combs[group_i]
-                            [state.chunk_i * (n_comp_buf_frames + n_comp_frames_per_chunk)],
+                        all_data_cbs[group_i][state.chunk_i * (n_buf_frames + n_frames_per_chunk)],
                     );
                     all_ents[ent_i] = all_ents[ent_i].clone().with_control_behavior(mk_cb(
-                        base_chunk_i as u32 * ticks_per_group,
-                        (base_chunk_i as u32 + state.output_buf.len() as u32) * ticks_per_group,
+                        base_chunk_i as u32 * ticks_per_grp,
+                        (base_chunk_i as u32 + state.sig_buf.len() as u32) * ticks_per_grp,
                         target_outputs,
                     ));
                 }
-                state.output_buf.clear();
+                state.sig_buf.clear();
             }
             state.chunk_i += 1;
         }
@@ -1059,29 +883,28 @@ pub fn generate_blueprint(
     Ok(blueprint)
 }
 fn invert_wires(ents: &mut Vec<Entity>, wires: &mut Vec<Wire>) {
-    fn get_swap(x: u32) -> u32 {
-        match x {
-            1 => 2, // circuit_green / combinator_input_green -> circuit_red / combinator_input_red
+    #[inline(always)]
+    fn get_swap(wire_id: u32) -> u32 {
+        match wire_id {
+            1 => 2,       // circuit_green / combinator_input_green -> circuit_red / combinator_input_red
             2 => 1, // circuit_red / combinator_input_red -> circuit_green / combinator_input_green
             3 => 4, // combinator_output_green -> combinator_output_red
             4 => 3, // combinator_output_red -> combinator_output_green
-            _ => x, // usually just copper
+            _ => wire_id, // usually just copper
         }
     }
 
-    for e in ents.iter_mut() {
-        if let Some(control_behavior) = &mut e.control_behavior {
-            if let ControlBehavior::Decider {
-                decider_conditions, ..
-            } = control_behavior
-            {
-                decider_conditions.swap_networks();
-            }
+    for ent in ents.iter_mut() {
+        if let Some(ControlBehavior::Decider {
+            decider_conditions, ..
+        }) = ent.control_behavior.as_mut()
+        {
+            decider_conditions.swap_networks();
         }
     }
-    for w in wires.iter_mut() {
-        w[1] = get_swap(w[1]);
-        w[3] = get_swap(w[3]);
+    for wire in wires.iter_mut() {
+        wire[1] = get_swap(wire[1]);
+        wire[3] = get_swap(wire[3]);
     }
 }
 
@@ -1099,10 +922,7 @@ fn invert_wires(ents: &mut Vec<Entity>, wires: &mut Vec<Wire>) {
 #[inline(always)]
 pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, JsValue> {
     let mut outputs: Vec<i32> = Vec::with_capacity((frame.width() * frame.height()) as usize);
-    for chunk in frame.to_rgb8().into_raw().chunks(3) {
-        if chunk.len() < 3 {
-            continue;
-        }
+    for chunk in frame.to_rgb8().into_raw().chunks_exact(3) {
         outputs.push(rgb_to_int(chunk[0], chunk[1], chunk[2]) as i32);
     }
     Ok(outputs)

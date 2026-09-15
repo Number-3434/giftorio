@@ -6,24 +6,27 @@ import { loadFileDB, saveFileDB } from "./fileUtils";
 import { animationInfo as getAnimationInfo } from "./imageUtils";
 import { Slider } from "./slider";
 
+const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60];
+
 // Constants
 const LAST_FILE_KEY = "last-file-user-uploaded";
 const FORM_DATA_KEY = "giftorio-form-data";
 const _INITIAL_VALUES = {
 	file: null,
-	targetFps: 15,
-	maxSize: 50,
-	useDLC: false,
-	includeLastFrame: false,
-	substationQuality: "normal",
-	resamplingFilter: "catrom",
-	grayscaleBits: 0,
-	wireColor: "green",
-	connectionDirection: "horizontal",
-	sortSignals: false,
 	combinatorCompressionType: "none",
-	temporalCompressionWindow: 300,
+	combinatorPosition: "left",
+	connectionDirection: "horizontal",
+	grayscaleBits: 0,
+	includeLastFrame: false,
+	maxSize: 50,
 	outputFormat: "blueprint",
+	resamplingFilter: "catrom",
+	sortSignals: false,
+	substationQuality: "normal",
+	targetFps: 15,
+	temporalCompressionWindow: 300,
+	useDLC: false,
+	wireColor: "green",
 };
 
 function setInitialValues(values) {
@@ -121,9 +124,7 @@ const FORM_ELEMENTS = {
 			"\n\nThis can also impact UPS (game performance; may cause stutters),",
 			"although Factorio will attempt to continue rendering at 1:1 time.",
 		].join(" "),
-		min: 1,
-		max: 60,
-		step: 1,
+		values: FACTORS_OF_60,
 	},
 	includeLastFrame: {
 		name: "Always Include Last Frame",
@@ -180,6 +181,24 @@ const FORM_ELEMENTS = {
 			lanczos3: "Lanczos3",
 			nearest: "Nearest",
 			triangle: "Triangle",
+		},
+	},
+	combinatorPosition: {
+		name: "Combinator Position",
+		type: "select",
+		tooltip: [
+			"The position of the data combinators. This affects the look of lamp seams.",
+			"\n",
+			"\n<strong>Left</strong> or <strong>Right</strong> is generally recommended, along with Horizontal",
+			"wiring, as the group seams run horizontally and are harder to see.",
+			"\n<strong>Bottom</strong> and <strong>Top</strong> are generally not recommended,",
+			"especially with Horizontal wire connection direction as the group seams are very noticeable.",
+		].join(" "),
+		options: {
+			left: "Left",
+			right: "Right",
+			top: "Top",
+			bottom: "Bottom",
 		},
 	},
 	wireColor: {
@@ -296,8 +315,6 @@ function App({ worker }) {
 			formRefs.blueprintResult.classList.remove("hidden");
 			formRefs.responseText.innerHTML = "Blueprint downloaded!";
 			formRefs.submitButton.disabled = false;
-
-			setInitialValues(formData);
 		} else if (event.data.error) {
 			setToast({ show: true, message: event.data.error, isError: true });
 			setTimeout(() => setToast({ show: false, message: "", isError: false }), 3000);
@@ -315,6 +332,21 @@ function App({ worker }) {
 
 	async function handleSubmit(event) {
 		event.preventDefault();
+
+		// Validate ALL inputs (instead of only showing errors for the first invalid input)
+		let isValid = true;
+		for (const e of [event.target, ...Object.values(formRefs)]) {
+			if (e.checkValidity?.() === false) {
+				e.reportValidity();
+				isValid = false;
+			}
+		}
+		if (!isValid) {
+			setToast({ show: true, message: "Please fix all errors", isError: true });
+			setTimeout(() => setToast({ show: false, message: "", isError: false }), 3000);
+			return;
+		}
+
 		setIsGenerating(true);
 		formRefs.submitButton.disabled = true;
 
@@ -365,6 +397,7 @@ function App({ worker }) {
 						name: formData.file.name,
 						imageType: formData.file.type.substring(6 /* image/ */),
 						combinatorCompression,
+						combinatorPosition: formData.combinatorPosition,
 						targetFps: +formData.targetFps,
 						maxSize: +formData.maxSize,
 						useDLC: !!formData.useDLC,
@@ -484,6 +517,7 @@ function App({ worker }) {
 		if (!formData.useDLC && !["none", "normal"].includes(formData.substationQuality)) {
 			setFormData("substationQuality", "normal");
 		}
+		setInitialValues(formData);
 	});
 
 	return (
@@ -778,6 +812,16 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 			</div>
 		);
 	} else if (type === "number") {
+		function handleSubmit(rawValue) {
+			if (v.values && !v.values.includes(rawValue)) {
+				formRefs[k].setCustomValidity(`Value must be one of: ${v.values.join(", ")}`);
+				formRefs[k].setAttribute("aria-invalid", "true");
+				return;
+			}
+			formRefs[k].setCustomValidity("");
+			formRefs[k].setAttribute("aria-invalid", "false");
+			setFormData(k, rawValue);
+		}
 		return (
 			<div class="mb-1">
 				<label className="block text-white-500 mb-2" htmlFor={k}>
@@ -786,13 +830,15 @@ function makeFormElement({ formData, formRefs, setFormData, obj }) {
 				</label>
 				<div class="flex items-center gap-3">
 					<Slider
+						id={k}
 						disabled={disabled}
 						ref={(e) => (formRefs[k] = e)}
 						value={formData[k]}
 						min={v.min}
 						max={v.max}
 						step={v.step}
-						onChange={(v) => setFormData(k, v)}
+						values={v.values}
+						onSubmit={handleSubmit}
 					/>
 				</div>
 			</div>

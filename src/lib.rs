@@ -33,10 +33,10 @@ pub async fn run_blueprint(
 ) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 
-    let args: blueprint::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
+    let args: models::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
 
     // Process the image to extract frames and determine the effective FPS.
-    let mut frame_data = image_processing::FrameData::new(image_data, &args)?;
+    let mut frame_data = image_processing::FrameData::new(image_data, args.clone())?;
 
     let blueprint = blueprint::generate_blueprint(&mut frame_data, &args)?;
     let mut encoder = blueprint_encoder::BlueprintEncoder::new(blueprint, &args);

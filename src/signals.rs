@@ -24,8 +24,8 @@ pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
     all_signals
         .into_iter()
         .flat_map(|signal| {
-            let mut signals_vec = Vec::new();
-            let qualities = if use_dlc {
+            let mut sigs = Vec::new();
+            let quals = if use_dlc {
                 vec![
                     QUAL_NORMAL,
                     QUAL_UNCOMMON,
@@ -37,25 +37,21 @@ pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
             } else {
                 vec![QUAL_NORMAL, QUAL_UNKNOWN]
             };
-            for quality in qualities.iter() {
-                let signal_type = signal["type"].as_str().unwrap();
-                let signal_name = signal["name"].as_str().unwrap();
+            for q in quals.iter() {
+                let n = signal["name"].as_str().unwrap();
+                let t = signal["type"].as_str().unwrap();
 
                 // Skip the common signal of F, S, T as they're used internally
-                if signal_type == "virtual" && *quality == QUAL_NORMAL {
-                    if signal_name == SIG_F || signal_name == SIG_S || signal_name == SIG_T {
-                        continue;
-                    }
+                if t == "virtual" && *q == QUAL_NORMAL && matches!(n, SIG_F | SIG_S | SIG_T) {
+                    continue;
                 }
-
-                let signal = Arc::from(Signal {
-                    type_: Arc::new(signal_type.to_string()),
-                    name: Arc::new(signal_name.to_string()),
-                    quality: Some(quality),
-                });
-                signals_vec.push(signal);
+                sigs.push(Arc::from(Signal {
+                    type_: Arc::new(t.to_string()),
+                    name: Arc::new(n.to_string()),
+                    quality: Some(q),
+                }));
             }
-            signals_vec
+            sigs
         })
         .collect()
 }

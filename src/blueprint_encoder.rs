@@ -1,11 +1,9 @@
-use crate::blueprint::{BlueprintArgs, BlueprintOutputFormat};
-use crate::models::Blueprint;
+use crate::models::{Blueprint, BlueprintArgs, BlueprintOutputFormat};
 use crate::progress::{report_progress, set_progress};
 use crate::streaming_writer::{ChunkQueue, StreamingWriter};
 use crate::JsValue;
 use base64::write::EncoderWriter;
-use flate2::write::ZlibEncoder;
-use flate2::Compression;
+use flate2::{write::ZlibEncoder, Compression};
 use std::{
     collections::VecDeque,
     io::{self},
@@ -133,11 +131,8 @@ impl BlueprintEncoder {
             // Return anything already produced by the previous call first
             if let Some(chunk) = self.chunks.lock().unwrap().pop_front() {
                 return Ok(Some(chunk));
-            }
-
-            // If we're done, return None
-            if self.finished {
-                return Ok(None);
+            } else if self.finished {
+                return Ok(None); // If we're done, return None
             }
 
             if !self.json_encoder.done() {
@@ -150,9 +145,7 @@ impl BlueprintEncoder {
                     self.chunks.lock().unwrap().push_back(buf);
                 }
                 continue;
-            }
-
-            if self.zlib_encoder.is_none() {
+            } else if self.zlib_encoder.is_none() {
                 return Ok(None);
             }
 
