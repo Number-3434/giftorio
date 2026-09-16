@@ -14,6 +14,7 @@ use wasm_bindgen::JsValue;
 const ENCODE_CHUNK_SIZE: usize = 100;
 
 fn write_to(writer: &mut dyn io::Write, buf: &[u8]) -> Result<(), JsValue> {
+    log!("Write");
     writer
         .write_all(buf)
         .map_err(|e| JsValue::from_str(&format!("Write error: {e}")))
@@ -1003,7 +1004,6 @@ impl<'a> BlueprintGenerator<'a> {
                     state.sig_buf.clear();
                 }
                 state.chunk_i += 1;
-                break;
             }
 
             if self.next_frame.is_none() {
