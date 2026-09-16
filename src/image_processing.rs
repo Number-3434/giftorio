@@ -135,7 +135,7 @@ impl Iterator for FrameData<'_> {
             };
 
             // % of prime number cuz i like seeing it go through every number :D
-            if self.curr_frame_idx % 3 == 0 {
+            if self.curr_frame_idx % 1 == 0 {
                 set_progress(
                     0.00,
                     0.67,

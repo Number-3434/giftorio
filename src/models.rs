@@ -121,11 +121,6 @@ pub enum OutputFormat {
 }
 
 #[derive(Serialize)]
-pub struct Blueprint {
-    pub blueprint: BlueprintInner,
-}
-
-#[derive(Serialize)]
 pub struct BlueprintInner {
     pub icons: Vec<Icon>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
