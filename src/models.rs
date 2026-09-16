@@ -128,7 +128,9 @@ pub struct Blueprint {
 #[derive(Serialize)]
 pub struct BlueprintInner {
     pub icons: Vec<Icon>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub entities: Vec<Entity>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub wires: Vec<Wire>,
     pub item: &'static str,
     pub label: String,

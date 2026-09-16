@@ -11,10 +11,15 @@ macro_rules! arithmetic_virtual {
 }
 
 #[allow(unused_macros)]
+/// Logs a message to the web console.
+///
+/// Alos returns back the original objects passed in, allowing this to be used inline.
 macro_rules! log {
-    ($($arg:tt)*) => {
-        web_sys::console::log_1(&format!($($arg)*).into());
-    };
+    ($($arg:tt)*) => {{
+        let value = format!($($arg)*);
+        web_sys::console::log_1(&value.clone().into());
+        value
+    }};
 }
 macro_rules! arithmetic_combinator_op {
     (*) => {

@@ -36,10 +36,8 @@ pub async fn run_blueprint(
     let args: models::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
 
     // Process the image to extract frames and determine the effective FPS.
-    let mut frame_data = image_processing::FrameData::new(image_data, args.clone())?;
-
-    let blueprint = blueprint::generate_blueprint(&mut frame_data, &args)?;
-    let mut encoder = blueprint_encoder::BlueprintEncoder::new(blueprint, &args);
+    let frame_data = image_processing::FrameData::new(image_data, args.clone())?;
+    let mut encoder = blueprint_encoder::BlueprintEncoder::new_from_frame_data(frame_data, &args)?;
 
     while let Some(chunk) = encoder.next_chunk()? {
         let chunk = js_sys::Uint8Array::from(&chunk[..]);

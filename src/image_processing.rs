@@ -271,6 +271,10 @@ pub fn get_frames<'a>(
 
 /// Converts an RGB pixel to a single 24 bit integer (inside a u32, I know...).
 ///
+/// TODO: Test if this is actually needed; maybe we could use image.to_rgba8() and then
+/// chunk into 4? WASM is always little-endian, so this would behave the same across
+/// devices.
+///
 /// # Arguments
 ///
 /// * `r` - Red channel (0–255).

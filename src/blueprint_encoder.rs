@@ -1,3 +1,6 @@
+use crate::blueprint::BlueprintGenerator;
+use crate::image_processing::FrameData;
+use crate::macros::*;
 use crate::models::{Blueprint, BlueprintArgs, OutputFormat};
 use crate::progress::{report_progress, set_progress};
 use crate::streaming_writer::{ChunkQueue, StreamingWriter};
@@ -79,7 +82,6 @@ impl BlueprintJsonEncoder {
                 w(&mut writer, &json_bytes[1..json_bytes.len() - 1])?;
 
                 self.curr_i += chunk.len();
-
                 if self.curr_i >= ents.len() {
                     w(&mut writer, b"]")?;
                     self.state = BlueprintEncoderState::Wires;
@@ -103,17 +105,18 @@ impl BlueprintJsonEncoder {
         Ok(())
     }
 }
-pub struct BlueprintEncoder {
+pub struct BlueprintEncoder<'a> {
+    blueprint_generator: BlueprintGenerator<'a>,
     chunks: ChunkQueue,
     finished: bool,
-    json_encoder: BlueprintJsonEncoder,
     zlib_encoder: Option<ZlibEncoder<EncoderWriter<StreamingWriter>>>,
 }
-impl BlueprintEncoder {
-    pub fn new(blueprint: Blueprint, args: &BlueprintArgs) -> Self {
+impl<'a> BlueprintEncoder<'a> {
+    pub fn new(blueprint_generator: BlueprintGenerator<'a>, args: &BlueprintArgs) -> Self {
         let chunks = Arc::new(Mutex::new(VecDeque::new()));
         let writer = StreamingWriter::new(Arc::clone(&chunks));
         let mut zlib: Option<ZlibEncoder<EncoderWriter<StreamingWriter>>> = None;
+
         let format_str = if args.output_format == OutputFormat::Blueprint {
             "Converting to Blueprint"
         } else {
@@ -126,11 +129,19 @@ impl BlueprintEncoder {
         }
 
         Self {
+            blueprint_generator,
             chunks,
             finished: false,
-            json_encoder: BlueprintJsonEncoder::new(blueprint, format_str),
             zlib_encoder: zlib,
         }
+    }
+
+    pub fn new_from_frame_data(
+        frame_data: FrameData<'a>,
+        args: &'a BlueprintArgs,
+    ) -> Result<Self, JsValue> {
+        let gen = BlueprintGenerator::new(frame_data, args)?;
+        Ok(Self::new(gen, args))
     }
 
     pub fn next_chunk(&mut self) -> Result<Option<Vec<u8>>, JsValue> {
@@ -142,13 +153,13 @@ impl BlueprintEncoder {
                 return Ok(None); // If we're done, return None
             }
 
-            if !self.json_encoder.done() {
+            if !self.blueprint_generator.done() {
                 if self.zlib_encoder.is_some() {
-                    self.json_encoder
+                    self.blueprint_generator
                         .next_chunk(&mut self.zlib_encoder.as_mut().unwrap())?;
                 } else {
                     let mut buf = Vec::new();
-                    self.json_encoder.next_chunk(&mut buf)?;
+                    self.blueprint_generator.next_chunk(&mut buf)?;
                     self.chunks.lock().unwrap().push_back(buf);
                 }
                 continue;
