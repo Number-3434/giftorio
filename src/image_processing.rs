@@ -25,13 +25,21 @@ impl FrameData<'_> {
     ///
     /// Note: This is truncated from the raw dimensions instead of rounded.
     pub fn dimensions(&mut self) -> (u32, u32) {
-        resize_dimensions(
+        let (w, h) = resize_dimensions(
             self.in_dim.0,
             self.in_dim.1,
             self.out_dim_raw.0.round() as u32,
             self.out_dim_raw.1.round() as u32,
             false,
-        )
+        );
+        return if matches!(
+            self.args.image_rotation,
+            ImageRotation::Deg90 | ImageRotation::Deg270
+        ) {
+            (h, w)
+        } else {
+            (w, h)
+        };
     }
     pub fn total_frames(&self) -> u32 {
         self.out_n_frames

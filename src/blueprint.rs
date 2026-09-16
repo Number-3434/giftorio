@@ -565,15 +565,7 @@ pub fn generate_blueprint(
         1
     }) as usize;
     let n_frames_per_chunk = if n_buf_frames > 1 { 1 } else { 0 } as usize;
-    let (mut full_width, mut full_height) = frame_data.dimensions();
-
-    if matches!(
-        args.image_rotation,
-        ImageRotation::Deg90 | ImageRotation::Deg270
-    ) {
-        (full_width, full_height) = (full_height, full_width);
-    }
-
+    let (full_width, full_height) = frame_data.dimensions();
     let max_cols_per_grp = ((signals.len() as u32) / full_height).min(full_width);
     let n_groups = (full_width as f64 / max_cols_per_grp as f64).ceil() as u32;
     let max_cols_per_grp = full_width / n_groups;
