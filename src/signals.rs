@@ -14,14 +14,7 @@ use std::sync::Arc;
 ///
 /// A new vector of signal JSON objects with added quality attributes.
 pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
-    let mut all_signals = get_signal_list(use_dlc);
-
-    if sort {
-        // Sort by total length of the type + name (so use the smallest ids first)
-        all_signals
-            .sort_by_key(|s| s["type"].as_str().unwrap().len() + s["name"].as_str().unwrap().len());
-    }
-    all_signals
+    let mut signals: Vec<Arc<Signal>> = get_signal_list(use_dlc)
         .into_iter()
         .flat_map(|signal| {
             let mut sigs = Vec::new();
@@ -48,12 +41,20 @@ pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
                 sigs.push(Arc::from(Signal {
                     type_: Arc::new(t.to_string()),
                     name: Arc::new(n.to_string()),
-                    quality: Some(q),
+                    quality: if *q == QUAL_NORMAL { None } else { Some(q) },
                 }));
             }
             sigs
         })
-        .collect()
+        .collect();
+
+    if sort {
+        // Sort by total length of the type + name + quality (so use the smallest ids first)
+        signals.sort_by_key(|s| {
+            s.type_.len() + s.name.len() + s.quality.as_ref().unwrap_or(&"").len()
+        });
+    }
+    signals
 }
 
 /// Retrieves the list of signals from the embedded JSON file.

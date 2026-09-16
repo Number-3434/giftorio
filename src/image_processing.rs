@@ -135,7 +135,7 @@ impl Iterator for FrameData<'_> {
             };
 
             // % of prime number cuz i like seeing it go through every number :D
-            if self.curr_frame_idx % 3 == 0 {
+            if self.curr_frame_idx % 1 == 0 {
                 set_progress(
                     0.00,
                     0.67,
@@ -270,6 +270,10 @@ pub fn get_frames<'a>(
 }
 
 /// Converts an RGB pixel to a single 24 bit integer (inside a u32, I know...).
+///
+/// TODO: Test if this is actually needed; maybe we could use image.to_rgba8() and then
+/// chunk into 4? WASM is always little-endian, so this would behave the same across
+/// devices.
 ///
 /// # Arguments
 ///
