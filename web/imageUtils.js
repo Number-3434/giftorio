@@ -1,15 +1,19 @@
 class AnimationInfo {
-	constructor(frames, duration) {
+	constructor(frames, duration, width, height) {
 		this.frames = frames;
 		this.duration = duration; // milliseconds
+		this.width = width;
+		this.height = height;
 	}
 }
-
 function gifInfo(data) {
 	if (data.length < 13) throw new Error("GIF data is too short");
 
 	const header = new TextDecoder().decode(data.subarray(0, 6));
 	if (header !== "GIF87a" && header !== "GIF89a") throw new Error("Invalid GIF header");
+
+	const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+	const [width, height] = [view.getUint16(6, true), view.getUint16(8, true)];
 
 	let pos = 13;
 	const packed = data[10];
@@ -55,7 +59,6 @@ function gifInfo(data) {
 					if (data.length - pos < size) throw new Error("Truncated local color table");
 					pos += size;
 				}
-
 				if (pos >= data.length) throw new Error("Missing LZW code size"); // LZW minimum code size
 
 				pos++;
@@ -84,7 +87,7 @@ function gifInfo(data) {
 				break;
 			}
 			case 0x3b:
-				return new AnimationInfo(frames, durationCs * 10);
+				return new AnimationInfo(frames, durationCs * 10, width, height);
 			default:
 				throw new Error("Invalid GIF block introducer");
 		}
@@ -109,15 +112,20 @@ function webpInfo(data) {
 	let frames = 0;
 	let durationMs = 0;
 
+	// Read image dimensions
+	let width, height;
 	while (end - pos >= 8) {
 		const chunkType = String.fromCharCode(data[pos], data[pos + 1], data[pos + 2], data[pos + 3]);
 		const chunkSize = view.getUint32(pos + 4, true);
 		pos += 8;
 
 		if (chunkSize > end - pos) throw new Error("Truncated WebP chunk");
-		if (chunkType === "ANMF") {
+		if (chunkType === "VP8X") {
+			if (chunkSize < 10) throw new Error("Invalid VP8X chunk");
+			width = 1 + (data[pos + 4] | (data[pos + 5] << 8) | (data[pos + 6] << 16));
+			height = 1 + (data[pos + 7] | (data[pos + 8] << 8) | (data[pos + 9] << 16));
+		} else if (chunkType === "ANMF") {
 			if (chunkSize < 16) throw new Error("Invalid ANMF chunk");
-
 			frames++;
 			// ANMF:
 			//   bytes 0..3   X
@@ -131,20 +139,17 @@ function webpInfo(data) {
 		pos += chunkSize;
 		if (chunkSize & 1) pos++; // RIFF chunks are padded to an even size.
 	}
-	return new AnimationInfo(frames, durationMs);
+	return new AnimationInfo(frames, durationMs, width, height);
 }
 
 export function animationInfo(data) {
-	if (
-		data.length >= 6 &&
-		(String.fromCharCode(...data.subarray(0, 6)) === "GIF87a" || String.fromCharCode(...data.subarray(0, 6)) === "GIF89a")
-	)
+	if (data.length >= 6 && ["GIF87a", "GIF89a"].includes(String.fromCharCode(...data.subarray(0, 6)))) {
 		return gifInfo(data);
-	else if (
+	} else if (
 		data.length >= 12 &&
 		String.fromCharCode(...data.subarray(0, 4)) === "RIFF" &&
 		String.fromCharCode(...data.subarray(8, 12)) === "WEBP"
-	)
+	) {
 		return webpInfo(data);
-	else throw new Error("Unsupported image format");
+	} else throw new Error("Unsupported image format");
 }

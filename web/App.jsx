@@ -716,9 +716,24 @@ function App({ worker }) {
 
 							{animationInfo() && (
 								<div>
-									<div class="text-gray-300 font-semibold">
-										{formatDuration(animationInfo().duration)} ({animationInfo().frames} Frames, ~
-										{Math.round((10 * (animationInfo().frames * 1000)) / animationInfo().duration) / 10} FPS)
+									<div class="text-gray-300">
+										<div>
+											Duration: <span class="font-semibold">{formatDuration(animationInfo().duration)}</span>
+										</div>
+										<div>
+											Total frames: <span class="font-semibold">{animationInfo().frames}</span> (~
+											{Math.round((10 * (animationInfo().frames * 1000)) / animationInfo().duration) / 10} FPS)
+										</div>
+										<div>
+											<span>
+												Dimensions:{" "}
+												<span class="font-semibold">
+													{animationInfo().width} x {animationInfo().height} px
+												</span>
+											</span>
+										</div>
+
+										<div>{formData.file.size} bytes</div>
 									</div>
 								</div>
 							)}
