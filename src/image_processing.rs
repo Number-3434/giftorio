@@ -180,9 +180,9 @@ impl Iterator for FrameData<'_> {
 
                 // Find the closest frame to the current sample (forwards / backwards)
                 for (img, t) in &self.buf {
-                    let dt = sample_ms.abs_diff(*t);
-                    if dt < best_delta {
-                        best_delta = dt;
+                    let delta = sample_ms.abs_diff(*t);
+                    if delta < best_delta {
+                        best_delta = delta;
                         best_frame = Some(img);
                     }
                 }

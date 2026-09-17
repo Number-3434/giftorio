@@ -1119,6 +1119,8 @@ pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, J
 
 /// Packs grayscale frames into output signals by bit-packing pixel values.
 ///
+/// A single output represents the value of a single pixel across multiple frames.
+///
 /// # Arguments
 ///
 /// * `frames` - A slice of grayscale image frames.
@@ -1139,24 +1141,41 @@ pub fn grayscale_frames_to_outputs(
     let num_pixels = (frames[0].width() * frames[0].height()) as usize;
     let luma_images: Vec<_> = frames.iter().map(|x| x.to_luma8()).collect();
     let mut outputs: Vec<i32> = Vec::with_capacity(num_pixels);
-
-    for i in 0..num_pixels {
-        let mut packed_value = 0u32;
-        for (j, img) in luma_images.iter().enumerate() {
-            packed_value |= match grayscale_bits {
-                1 => (img.as_raw()[i] >= GRAYSCALE_THRESH) as u32,
-                4 => (img.as_raw()[i] >> 4) as u32,
-                8 => img.as_raw()[i] as u32,
-                _ => {
-                    return Err(JsValue::from_str("Unsupported grayscale bit depth"));
+    match grayscale_bits {
+        1 => {
+            for i in 0..num_pixels {
+                let mut packed = 0u32;
+                for (j, img) in luma_images.iter().enumerate() {
+                    packed |= ((img.as_raw()[i] >= GRAYSCALE_THRESH) as u32) << j;
                 }
-            } << (grayscale_bits * j as u32);
+                outputs.push(packed as i32);
+            }
         }
-        outputs.push(packed_value as i32);
+        4 => {
+            for i in 0..num_pixels {
+                let mut packed = 0u32;
+                for (j, img) in luma_images.iter().enumerate() {
+                    packed |= ((img.as_raw()[i] >> 4) as u32) << (j * 4);
+                }
+                outputs.push(packed as i32);
+            }
+        }
+        8 => {
+            for i in 0..num_pixels {
+                let mut packed = 0u32;
+                for (j, img) in luma_images.iter().enumerate() {
+                    packed |= (img.as_raw()[i] as u32) << (j * 8);
+                }
+                outputs.push(packed as i32);
+            }
+        }
+
+        _ => {
+            return Err(JsValue::from_str("Unsupported grayscale bit depth"));
+        }
     }
     Ok(outputs)
 }
-
 #[cfg(target_arch = "wasm32")]
 use core::arch::wasm32::*;
 

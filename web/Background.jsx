@@ -1,4 +1,4 @@
-import { For, createSignal, onMount } from "solid-js";
+import { createEffect, createSignal, onMount } from "solid-js";
 import gumpMp4 from "./assets/img/gump.mp4";
 import gumpWebm from "./assets/img/gump.webm";
 import nyanGif from "./assets/img/nyan.gif";
@@ -15,12 +15,28 @@ const MEDIA = [
 
 function Background(props) {
 	const [currMediaIdx, setCurrMediaIdx] = createSignal(0);
+	const [canUseVideoBg, setCanUseVideoBg] = createSignal(true);
 	const [useVideoBg, setUseVideoBg] = createSignal(true);
+	const [customImageURL, setCustomImageURL] = createSignal(null);
+
+	const api = {
+		setImageURL(url) {
+			if (url === null) {
+				setUseVideoBg(canUseVideoBg());
+				return;
+			}
+			setCustomImageURL(url);
+			setUseVideoBg(false);
+		},
+	};
+	props.ref?.(api);
 
 	onMount(() => {
 		// Check if video playback is supported
 		const video = document.createElement("video");
-		setUseVideoBg(!!video.canPlayType);
+		const canPlay = !!video.canPlayType;
+		setCanUseVideoBg(canPlay);
+		setUseVideoBg(canPlay);
 
 		setCurrMediaIdx(Math.floor(Math.random() * MEDIA.length));
 		const duration = props.interval || 10000;
@@ -30,7 +46,16 @@ function Background(props) {
 	return (
 		<div id="media-container" class="fixed top-0 left-0 w-full h-full" style="z-index: -1;">
 			<div class="absolute inset-0 bg-black"></div>
-			{useVideoBg() ?
+			<img
+				src={customImageURL() ?? undefined}
+				alt="test"
+				class="absolute top-0 left-0 w-full h-full object-contain transition-opacity duration-1000 ease-in-out opacity-30"
+				classList={{ hidden: !customImageURL() }}
+				style="z-index: 0;"
+			/>
+			{customImageURL() ?
+				null
+			: useVideoBg() ?
 				MEDIA.map((media, i) => (
 					<video
 						id={`bg-video-${i + 1}`}

@@ -32,7 +32,15 @@ const _INITIAL_VALUES = {
 	useDLC: false,
 	wireColor: "green",
 };
+function formatFileSize(bytes) {
+	if (bytes === 0) return "0 Bytes";
 
+	const units = ["Bytes", "KB", "MB", "GB", "TB"];
+	const i = Math.floor(Math.log(bytes) / Math.log(1024));
+	const value = bytes / 1024 ** i;
+
+	return `${parseFloat(value.toFixed(2))} ${units[i]}`;
+}
 function setInitialValues(values) {
 	localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
 }
@@ -399,9 +407,10 @@ function App({ worker }) {
 	const [isDragging, setIsDragging] = createSignal(false);
 	const [xOffset, setXOffset] = createSignal(0);
 	const [yOffset, setYOffset] = createSignal(0);
-	const [showAdvanced, setShowAdvanced] = createSignal(localStorage.getItem(SHOW_ADVANCED_KEY) === "true");
+	const [showAdvanced, setShowAdvanced] = createSignal(false);
 	const [isMobile, setIsMobile] = createSignal(false);
 	let form;
+	let refBackground;
 
 	// Refs
 	let formRefs = {};
@@ -438,6 +447,8 @@ function App({ worker }) {
 
 	function setInputFile(file) {
 		setFormData("file", file);
+		console.log(URL.createObjectURL(file));
+		refBackground.setImageURL(URL.createObjectURL(file));
 		file.arrayBuffer().then((buffer) => {
 			setAnimationInfo(getAnimationInfo(new Uint8Array(buffer)));
 		});
@@ -619,6 +630,8 @@ function App({ worker }) {
 	});
 
 	onMount(() => {
+		// Show advanced after first render to preserver original centering
+		setShowAdvanced(localStorage.getItem(SHOW_ADVANCED_KEY) === "true");
 		loadFileDB(LAST_FILE_KEY)
 			.then((file) => {
 				if (file) {
@@ -649,11 +662,11 @@ function App({ worker }) {
 
 	return (
 		<>
-			<Background />
+			<Background ref={refBackground} />
 			{isMobile() && (
 				<div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Some features may be limited on mobile.</div>
 			)}
-			<div class="flex flex-col items-center justify-center min-h-screen">
+			<div class="flex flex-col items-center justify-start min-h-screen">
 				<div
 					classList={{
 						"opacity-0": !toast().show,
@@ -666,10 +679,16 @@ function App({ worker }) {
 					{toast().message}
 				</div>
 
-				<div ref={form} class="panel-container flex z-1">
+				<div
+					style={{
+						height: "20vh",
+					}}
+				/>
+
+				<div ref={form} class="panel-container flex">
 					<div classList={{ hidden: isGenerating() }} class="panel form flex-shrink-0">
 						<div class="flex items-center justify-between">
-							<h2 class="text-tan-500">Convert GIF (or WebP) to Blueprint</h2>
+							<h2 class="text-tan-500">GIF/WebP to Blueprint</h2>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown}></div>
 							<div
 								class="mb-[10px] w-5 h-5 flex items-center content-center justify-center"
@@ -713,27 +732,27 @@ function App({ worker }) {
 									/>
 								</div>
 							</div>
-
 							{animationInfo() && (
 								<div>
 									<div class="text-gray-300">
-										<div>
-											Duration: <span class="font-semibold">{formatDuration(animationInfo().duration)}</span>
+										<div class="flex items-center justify-between">
+											<div>
+												Length: <span class="font-semibold">{formatDuration(animationInfo().duration)}</span>
+											</div>
+											<div>
+												<span class="font-semibold">{animationInfo().width}</span> x{" "}
+												<span class="font-semibold">{animationInfo().height}</span> px
+											</div>
 										</div>
-										<div>
-											Total frames: <span class="font-semibold">{animationInfo().frames}</span> (~
-											{Math.round((10 * (animationInfo().frames * 1000)) / animationInfo().duration) / 10} FPS)
+										<div class="flex items-center justify-between">
+											<div>
+												Frames: <span class="font-semibold">{animationInfo().frames}</span> (~
+												{Math.round((10 * (animationInfo().frames * 1000)) / animationInfo().duration) / 10} FPS)
+											</div>
+											<div>
+												<span>{formatFileSize(formData.file.size)}</span>
+											</div>
 										</div>
-										<div>
-											<span>
-												Dimensions:{" "}
-												<span class="font-semibold">
-													{animationInfo().width} x {animationInfo().height} px
-												</span>
-											</span>
-										</div>
-
-										<div>{formData.file.size} bytes</div>
 									</div>
 								</div>
 							)}
@@ -786,7 +805,7 @@ function App({ worker }) {
 						</form>
 					</div>
 
-					<div class="panel w-100 z-10" classList={{ invisible: !showAdvanced() || isGenerating() }}>
+					<div class="panel w-100 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
 						<div class="flex items-center justify-between">
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
