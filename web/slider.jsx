@@ -45,7 +45,7 @@ export function Slider({ value, values, min, max, step, onSubmit, ref, ...props 
 	return (
 		<div class="flex items-center justify-between w-full">
 			<div class="flex justify-between items-center gap-3 w-full">
-				<div aria-disabled={props.disabled} class="factorio-slider-wrapper min-w-55">
+				<div aria-disabled={props.disabled} class="factorio-slider-wrapper min-w-45">
 					<div
 						class="factorio-slider-fill"
 						aria-disabled={props.disabled}

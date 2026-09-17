@@ -88,10 +88,11 @@ const FORM_ELEMENTS = {
 		`,
 	},
 	signalCompressionType: {
-		name: "Signal Compression",
+		name: "Compression",
 		type: "select",
 		tooltip: `
-			Uses <strong>lossless</strong> compression to reduce size by storing unchanged pixels.
+			Uses <strong>lossless</strong> compression to reduce size by storing unchanged pixels. Does
+			not change the output video, but may affect how it can be played.
 			<br/>
 			<br/><strong>Temporal Compression</strong> uses ~2x more combinators, but reduces filesize
 			~2-4x.
@@ -207,13 +208,13 @@ const FORM_ELEMENTS = {
 		`,
 		options: [
 			["0", "Full Color"],
-			["8", "8-bit Grayscale (256)"],
-			["4", "4-bit Grayscale (16)"],
+			["8", "8-bit Grayscale"],
+			["4", "4-bit Grayscale"],
 			["1", "Black & White"],
 		],
 	},
 	resamplingFilter: {
-		name: "Resampling Filter",
+		name: "Resize Filter",
 		type: "select",
 		tooltip: `
 			The filter used to resample the image.
@@ -296,7 +297,7 @@ const FORM_ELEMENTS = {
 		},
 	},
 	wireColor: {
-		name: "Preferred Wire Color",
+		name: "Primary Wire Color",
 		type: "select",
 		tooltip: `
 			The color of the wires used to connect the lamps.
@@ -320,7 +321,7 @@ const FORM_ELEMENTS = {
 		},
 	},
 	connectionDirection: {
-		name: "Wire Connection Direction",
+		name: "Wire Direction",
 		type: "select",
 		tooltip: `
 			Whether the majority of lamp wires should connect horizontally or vertically.
@@ -447,7 +448,6 @@ function App({ worker }) {
 
 	function setInputFile(file) {
 		setFormData("file", file);
-		console.log(URL.createObjectURL(file));
 		refBackground.setImageURL(URL.createObjectURL(file));
 		file.arrayBuffer().then((buffer) => {
 			setAnimationInfo(getAnimationInfo(new Uint8Array(buffer)));
@@ -782,7 +782,7 @@ function App({ worker }) {
 									onInput={(e) => setFormData("maxSize", e.target.value)}
 									value={formData.maxSize}
 									min="2"
-									max="1080"
+									max="7680"
 								/>
 							</div>
 
@@ -805,13 +805,13 @@ function App({ worker }) {
 						</form>
 					</div>
 
-					<div class="panel w-100 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
+					<div class="panel w-90 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
 						<div class="flex items-center justify-between">
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
 						</div>
 
-						<div class="panel-inset-light p-3 shadow-md w-full max-w-md">
+						<div class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md">
 							{Object.entries(FORM_ELEMENTS).map(([k, v]) => {
 								if (k === "substationQuality") {
 									let { options } = v;

@@ -18,6 +18,7 @@ function Background(props) {
 	const [canUseVideoBg, setCanUseVideoBg] = createSignal(true);
 	const [useVideoBg, setUseVideoBg] = createSignal(true);
 	const [customImageURL, setCustomImageURL] = createSignal(null);
+	let refImage;
 
 	const api = {
 		setImageURL(url) {
@@ -47,11 +48,16 @@ function Background(props) {
 		<div id="media-container" class="fixed top-0 left-0 w-full h-full" style="z-index: -1;">
 			<div class="absolute inset-0 bg-black"></div>
 			<img
+				ref={refImage}
 				src={customImageURL() ?? undefined}
 				alt="test"
+				width="20"
 				class="absolute top-0 left-0 w-full h-full object-contain transition-opacity duration-1000 ease-in-out opacity-30"
 				classList={{ hidden: !customImageURL() }}
-				style="z-index: 0;"
+				style={{
+					"z-index": "0",
+					"image-rendering": "pixelated",
+				}}
 			/>
 			{customImageURL() ?
 				null

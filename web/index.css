@@ -475,3 +475,19 @@ input[type=checkbox]:checked~.checkbox {
         @apply pr-0;
     }
 }
+
+.pixel-wrapper {
+    /* Scale the low-res container to fill the screen */
+    transform: scale(calc(100vw / 120));
+    transform-origin: top left;
+}
+
+.pixel-img {
+    width: 100%;
+    height: auto;
+
+    /* Critical: force pixelation */
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    object-fit: none;
+}
