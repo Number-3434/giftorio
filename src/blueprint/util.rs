@@ -19,14 +19,6 @@ where
     Ok(())
 }
 
-/// Utility to help us find the target entity number so we can populate the data
-/// combinator with the correct data. (Data combinators already placed, but no data)
-pub fn find_entity(entities: &Vec<Entity>, ent_n: u32) -> usize {
-    entities
-        .binary_search_by_key(&ent_n, |e| e.entity_number)
-        .expect("target entity number not found")
-}
-
 pub fn invert_wires(ents: &mut Vec<Entity>, wires: &mut Vec<Wire>) {
     #[inline(always)]
     fn get_swap(wire_id: u32) -> u32 {

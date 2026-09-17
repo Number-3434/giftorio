@@ -12,7 +12,6 @@ use wasm_bindgen::JsValue;
 const ENCODE_CHUNK_SIZE: usize = 100;
 
 pub struct BlueprintGenerator<'a> {
-    all_data_cbs_ent_n: Vec<Vec<u32>>,
     args: &'a BlueprintArgs,
     curr_frame: image::DynamicImage,
     entity_data: EntityData,
@@ -20,6 +19,7 @@ pub struct BlueprintGenerator<'a> {
     frames_per_cb: u32,
     full_height: u32,
     full_width: u32,
+    group_data_combs: Vec<Vec<Entity>>,
     max_cols_per_grp: u32,
     max_rows_per_grp: u32,
     n_buf_frames: usize,
@@ -91,7 +91,6 @@ impl<'a> BlueprintGenerator<'a> {
         log!("n_groups: {n_groups}, max_cols_per_grp: {max_cols_per_grp}, max_rows_per_grp: {max_rows_per_grp}");
 
         Ok(Self {
-            all_data_cbs_ent_n: Vec::new(),
             args,
             curr_frame: frame_data.next().transpose()?.unwrap(),
             entity_data: EntityData {
@@ -103,6 +102,7 @@ impl<'a> BlueprintGenerator<'a> {
             frames_per_cb,
             full_height,
             full_width,
+            group_data_combs: Vec::new(),
             max_cols_per_grp,
             n_buf_frames,
             n_frames_per_chunk: if n_buf_frames > 1 { 1 } else { 0 } as usize,
@@ -168,28 +168,30 @@ impl<'a> BlueprintGenerator<'a> {
         let args = self.args;
         let frame_data = &mut self.frame_data;
         let signals = &mut self.signals;
-
         let ent_data = &mut self.entity_data;
         let gray_bits = self.args.grayscale_bits;
         let occupied_cells: HashSet<(i32, i32)>;
         let stop = frame_data.total_frames() * self.ticks_per_frame;
+        let should_generate_cbs = args.mode != Mode::LampGrid;
 
-        let (ents, wires) = generate_timer(stop, self.ticks_per_frame, self.frames_per_cb, &args);
+        if should_generate_cbs {
+            let (ents, wires) =
+                generate_timer(stop, self.ticks_per_frame, self.frames_per_cb, &args);
 
-        ent_data.next_ent_n = ents.iter().map(|e| e.entity_number).max().unwrap_or(0);
-        ent_data.next_ent_n += 1;
-        ent_data.ents.extend(ents);
-        ent_data.wires.extend(wires);
+            ent_data.next_ent_n = ents.iter().map(|e| e.entity_number).max().unwrap_or(0);
+            ent_data.next_ent_n += 1;
+            ent_data.ents.extend(ents);
+            ent_data.wires.extend(wires);
+        }
 
-        let n_frames = self.max_rows_per_grp
-            + match gray_bits {
-                1 | 4 => 2,
-                8 => 1,
-                _ => 0,
-            };
         let (ents, wires, cells, new_next_ent_n) = generate_substations(
             (self.full_width, self.full_height),
-            n_frames,
+            self.max_rows_per_grp
+                + match gray_bits {
+                    1 | 4 => 2,
+                    8 => 1,
+                    _ => 0,
+                },
             ent_data.next_ent_n,
             &args,
         );
@@ -203,32 +205,8 @@ impl<'a> BlueprintGenerator<'a> {
 
         for group_i in 0..self.n_groups {
             let grp_left = group_i * self.max_cols_per_grp;
-            let grp_right = ((group_i + 1) * self.max_cols_per_grp).min(self.full_width);
-            let grp_width = grp_right - grp_left;
-            let grp_offset_x = group_i * self.max_cols_per_grp;
-            let (
-                other_ents,
-                data_cbs,
-                mut grp_cb_wires,
-                (cb_in_ent_n, cb_out_ent_n, new_base_ent_n),
-            ) = generate_combinators(
-                (self.n_scaled_frames as u64).div_ceil(self.frames_per_cb as u64),
-                &substation_occupied_y,
-                ent_data.next_ent_n,
-                grp_offset_x as f64 + 0.5,
-                match gray_bits {
-                    1 | 4 => -5.0,
-                    8 => -4.0,
-                    _ => -3.0,
-                } + if self.use_delta_comp { -2.0 } else { 0.0 },
-                self.max_rows_per_grp,
-                args,
-            );
-            ent_data.next_ent_n = new_base_ent_n;
-            if group_i == 0 {
-                // Connect first wire to comb in
-                grp_cb_wires.push([3, WIRE_OUT_R, cb_in_ent_n, WIRE_R]);
-            }
+            let grp_width = (self.max_cols_per_grp).min(self.full_width - grp_left);
+            let (mut cb_in_ent_n, mut cb_out_ent_n) = (0, 0);
 
             #[allow(unused_variables)]
             let (grp_lamps, mut grp_lamp_wires, new_next_ent_n, top_right_lamp_ent_n) =
@@ -237,14 +215,44 @@ impl<'a> BlueprintGenerator<'a> {
                     (grp_width, self.full_height),
                     &occupied_cells,
                     ent_data.next_ent_n,
-                    (grp_offset_x as i32, 0),
+                    (grp_left as i32, 0),
                     &args,
                 );
             ent_data.next_ent_n = new_next_ent_n;
             let first_lamp = grp_lamps[0].entity_number;
 
-            grp_cb_wires.push([first_lamp, WIRE_R, cb_in_ent_n, WIRE_R]);
-            grp_cb_wires.push([first_lamp, WIRE_G, cb_out_ent_n, WIRE_OUT_G]);
+            if should_generate_cbs {
+                let (other_ents, data_combs, wires, (in_ent_n, out_ent_n, new_base_ent_n)) =
+                    generate_combinators(
+                        self.n_scaled_frames.div_ceil(self.frames_per_cb),
+                        &substation_occupied_y,
+                        ent_data.next_ent_n,
+                        grp_left as f64 + 0.5,
+                        match gray_bits {
+                            1 | 4 => -5.0,
+                            8 => -4.0,
+                            _ => -3.0,
+                        } + if self.use_delta_comp { -2.0 } else { 0.0 },
+                        self.max_rows_per_grp,
+                        args,
+                    );
+                ent_data.next_ent_n = new_base_ent_n;
+                if group_i == 0 {
+                    ent_data.wires.push([3, WIRE_OUT_R, in_ent_n, WIRE_R]); // Connect timer
+                }
+                self.group_data_combs.push(data_combs);
+                ent_data.ents.extend(other_ents);
+                ent_data.wires.extend(wires);
+
+                (cb_in_ent_n, cb_out_ent_n) = (in_ent_n, out_ent_n);
+            }
+
+            if should_generate_cbs {
+                ent_data.wires.extend([
+                    [first_lamp, WIRE_R, cb_in_ent_n, WIRE_R],
+                    [first_lamp, WIRE_G, cb_out_ent_n, WIRE_OUT_G],
+                ]);
+            }
 
             // Connect previous lamps together
             if let Some(prev) = prev_top_right_lamp_ent_n {
@@ -252,18 +260,11 @@ impl<'a> BlueprintGenerator<'a> {
             }
             prev_top_right_lamp_ent_n = Some(top_right_lamp_ent_n);
 
-            // Track the entity indexes of the data combinators for each group
-            self.all_data_cbs_ent_n
-                .push(data_cbs.iter().map(|e| e.entity_number).collect());
-
             if group_i > 0 {
                 write_to(&mut writer, b",")?;
             }
             write_json_trimmed_to(&mut writer, &grp_lamps)?;
 
-            ent_data.ents.extend(other_ents);
-            ent_data.ents.extend(data_cbs);
-            ent_data.wires.extend(grp_cb_wires);
             ent_data.wires.extend(grp_lamp_wires);
         }
         ent_data.ents.sort_by_key(|e| e.entity_number);
@@ -272,12 +273,10 @@ impl<'a> BlueprintGenerator<'a> {
     }
 
     fn populate_data(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
-        let cb_idxs = &mut self.all_data_cbs_ent_n;
-        let ent_data = &mut self.entity_data;
+        let group_data_combs = &mut self.group_data_combs;
         let frame_data = &mut self.frame_data;
         let signals = &mut self.signals;
 
-        let all_ents = &mut ent_data.ents;
         let frames_per_cb = self.frames_per_cb;
         let (full_width, full_height) = (self.full_width, self.full_height);
         let gray_bits = self.args.grayscale_bits;
@@ -287,6 +286,8 @@ impl<'a> BlueprintGenerator<'a> {
         let ticks_per_frame = self.ticks_per_frame;
         let use_delta_comp = self.use_delta_comp;
         let ticks_per_grp = ticks_per_frame * frames_per_cb;
+
+        log!("Populate");
 
         let mk_cb = |start: u32, end: u32, outputs: Vec<CombinatorOutput>| {
             ControlBehavior::from_decider_conditions(DeciderConditions {
@@ -319,6 +320,7 @@ impl<'a> BlueprintGenerator<'a> {
             for group_i in 0..n_groups as usize {
                 let state = &mut self.patch_states[group_i]; // Individual state for each group of lamps
                 let frame_sigs: Vec<i32>;
+                let data_combs = &group_data_combs[group_i];
 
                 let grp_left = group_i as u32 * max_cols_per_grp;
                 let grp_right = ((group_i as u32 + 1) * max_cols_per_grp).min(full_width);
@@ -373,8 +375,8 @@ impl<'a> BlueprintGenerator<'a> {
                     }
 
                     // Update the data combinator. Note this uses the real frame index at all times.
-                    let en = find_entity(&all_ents, cb_idxs[group_i][state.chunk_i]);
-                    output_ents.push(all_ents[en].clone().with_control_behavior(mk_cb(
+                    let en = &data_combs[state.chunk_i];
+                    output_ents.push(en.clone().with_control_behavior(mk_cb(
                         1 + ((state.chunk_i as u32) * ticks_per_grp),
                         2 + ((state.chunk_i as u32) * ticks_per_grp),
                         target_outputs,
@@ -416,8 +418,8 @@ impl<'a> BlueprintGenerator<'a> {
                                     .push(CombinatorOutput::new(Arc::clone(&signals[i]), Some(*v)));
                             }
                         }
-                        let ent_n = find_entity(&all_ents, cb_idxs[group_i][target_comb]);
-                        output_ents.push(all_ents[ent_n].clone().with_control_behavior(mk_cb(
+                        let en = &data_combs[target_comb];
+                        output_ents.push(en.clone().with_control_behavior(mk_cb(
                             target_i as u32 * ticks_per_grp,
                             (target_i as u32 + 1) * ticks_per_grp,
                             target_outputs,
@@ -435,11 +437,8 @@ impl<'a> BlueprintGenerator<'a> {
                                 ));
                             }
                         }
-                        let ent_n = find_entity(
-                            &all_ents,
-                            cb_idxs[group_i][state.chunk_i * (n_buf_frames + n_frames_per_chunk)],
-                        );
-                        output_ents.push(all_ents[ent_n].clone().with_control_behavior(mk_cb(
+                        let en = &data_combs[state.chunk_i * (n_buf_frames + n_frames_per_chunk)];
+                        output_ents.push(en.clone().with_control_behavior(mk_cb(
                             base_chunk_i as u32 * ticks_per_grp,
                             (base_chunk_i as u32 + state.sig_buf.len() as u32) * ticks_per_grp,
                             target_outputs,
@@ -464,25 +463,11 @@ impl<'a> BlueprintGenerator<'a> {
         }
 
         if matches!(self.state, BlueprintState::Wires) {
-            let mut idxs: Vec<u32> = self
-                .all_data_cbs_ent_n
-                .iter()
-                .flat_map(|v| v.iter().map(|e| *e))
-                .collect::<Vec<_>>();
-
-            idxs.sort_unstable();
-
+            // Write remaining entities. Note that we've already written out data combinators,
+            // which are delibrately not added to entity_data.ents.
             for ents in self.entity_data.ents.chunks(ENCODE_CHUNK_SIZE) {
-                // Exclude data combinators (we already put them in the output)
-                let ents = ents
-                    .iter()
-                    .filter(|e| !idxs.binary_search(&e.entity_number).is_ok())
-                    .collect::<Vec<_>>();
-
-                if !ents.is_empty() {
-                    write_to(&mut writer, b",")?;
-                    write_json_trimmed_to(&mut writer, &ents)?; // Remove braces
-                }
+                write_to(&mut writer, b",")?;
+                write_json_trimmed_to(&mut writer, &ents)?; // Remove braces
             }
         }
 

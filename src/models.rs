@@ -96,6 +96,8 @@ pub enum Mode {
     Full,
     #[serde(rename = "lamps")]
     Lamps,
+    #[serde(rename = "lampGrid")]
+    LampGrid,
 }
 
 #[derive(serde::Deserialize, Clone, PartialEq, Eq)]

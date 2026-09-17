@@ -1,5 +1,6 @@
-use crate::blueprint::models::*;
+use crate::blueprint::models::{ImageRotation::*, *};
 use crate::constants::*;
+use crate::macros::log;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -9,15 +10,12 @@ use std::{
 ///
 /// # Arguments
 ///
-/// * `lamp_signals` - Signals to assign to each lamp.
-/// * `grid_width` - Number of lamps horizontally.
-/// * `grid_height` - Number of lamps vertically.
+/// * `signals` - Signals to assign to each lamp.
+/// * `grid_dim` - Number of lamps horizontally and vertically.
 /// * `occupied_cells` - Set of grid cells already occupied by substations.
-/// * `start_entity_number` - Starting entity number for lamps.
-/// * `start_x` - Starting X coordinate.
-/// * `start_y` - Starting Y coordinate.
-/// * `use_grayscale` - If true, configure lamps for grayscale mode.
-/// * `use_horizontal_lamp_wires` - If true, configure lamps to connect horizontally instead of vertically.
+/// * `base_ent_n` - Starting entity number for lamps.
+/// * `start_pos` - Starting X and Y coordinates.
+/// * `args` - Args for generating the blueprint.
 ///
 /// # Returns
 ///
@@ -26,32 +24,32 @@ pub fn generate_lamps(
     signals: &[Arc<Signal>],
     grid_dim: (u32, u32),
     occupied_cells: &HashSet<(i32, i32)>,
-    base_ent_num: u32,
+    base_ent_n: u32,
     start_pos: (i32, i32),
     args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Wire>, u32, u32) {
     let mut ents = Vec::new();
     let mut wires = Vec::new();
-    let mut curr_ent_n = base_ent_num;
-    let mut prev_ents: HashMap<i32, u32> = HashMap::new();
+    let mut curr_ent_n = base_ent_n;
+    let mut prev_ents_n: HashMap<i32, u32> = HashMap::new();
     let mut top_right_lamp: u32 = 0;
-    let mut prev_ent_n: Option<u32>;
 
     // Auto-rotate wires based on image rotation
-    let prefer_horizontal_wires = matches!(
-        args.image_rotation,
-        ImageRotation::Deg90 | ImageRotation::Deg270
-    ) ^ args.prefer_horizontal_wires;
+    let prefer_horizontal_wires =
+        matches!(args.image_rotation, Deg90 | Deg270) ^ args.prefer_horizontal_wires;
 
-    for r in 0..grid_dim.1 as i32 {
-        prev_ent_n = None;
-        for c in 0..grid_dim.0 as i32 {
-            let x = start_pos.0 + c;
-            let y = start_pos.1 + r;
+    let get_ent_num = |r: u32, c: u32| -> u32 { base_ent_n + r * grid_dim.0 + c };
+
+    for r in 0..grid_dim.1 {
+        let mut prev_ent_n: Option<u32> = None; // Used for horizontal wires
+        for c in 0..grid_dim.0 {
+            curr_ent_n = get_ent_num(r, c);
+
+            let (x, y) = (start_pos.0 + c as i32, start_pos.1 + r as i32);
             if occupied_cells.contains(&(x, y)) {
                 continue;
             }
-            let index = (r as u32 * grid_dim.0 + c as u32) as usize;
+            let index = (r * grid_dim.0 + c) as usize;
             let signal = Arc::clone(&signals[index]);
             let colors = if args.grayscale_bits > 0 {
                 ControlBehavior::GrayLamp {
@@ -68,29 +66,47 @@ pub fn generate_lamps(
                     rgb_signal: signal,
                 }
             };
-            let lamp = Entity::new(curr_ent_n, LAMP, (x as f64, y as f64))
-                .with_control_behavior(colors)
-                .with_always_on(true);
-            ents.push(lamp);
+            let lamp = Entity::new(curr_ent_n, LAMP, (x as f64, y as f64));
+            ents.push(lamp.with_control_behavior(colors).with_always_on(true));
 
             if r == 0 && c > 0 {
-                wires.push([curr_ent_n, WIRE_G, curr_ent_n - 1, WIRE_G]);
-                wires.push([curr_ent_n, WIRE_R, curr_ent_n - 1, WIRE_R]);
-                top_right_lamp = curr_ent_n;
-            } else if prefer_horizontal_wires {
                 if let Some(prev) = prev_ent_n {
-                    wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]);
+                    wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]); // Always a data wire here
+                    wires.push([curr_ent_n, WIRE_R, prev, WIRE_R]); // Timing signals wire
                 }
-                prev_ent_n = Some(curr_ent_n);
+                top_right_lamp = curr_ent_n;
+            } else {
+                if prefer_horizontal_wires {
+                    if let Some(prev) = prev_ent_n {
+                        wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]); // horizontal data wire
+                    }
+                }
+
+                // Detect if we're on the right edge, and connect vertical wires
+                if !prefer_horizontal_wires || (c + 1 == grid_dim.0) {
+                    if let Some(&prev) = prev_ents_n.get(&x) {
+                        // Always connect vertical wire to last entity, to handle rotation
+                        wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]); // vertical data wire
+
+                        // Detect if we're on the edge and a substation is right above us
+                        if grid_dim.0 >= 2 // height of a substation
+                            && occupied_cells.contains(&(x, y - 1))
+                            && occupied_cells.contains(&(x, y - 2))
+                            && occupied_cells.contains(&(x - 1, y - 1))
+                            && occupied_cells.contains(&(x - 1, y - 2))
+                        {
+                            let lamps_1 = (get_ent_num(r - 0, c - 2), get_ent_num(r - 1, c - 2));
+                            let lamps_2 = (get_ent_num(r - 2, c - 2), get_ent_num(r - 3, c - 2));
+
+                            wires.push([lamps_1.0, WIRE_G, lamps_1.1, WIRE_G]);
+                            wires.push([lamps_2.0, WIRE_G, lamps_2.1, WIRE_G]);
+                        }
+                    }
+                }
             }
 
-            if r > 0 && (!prefer_horizontal_wires || (c + 1 == grid_dim.0 as i32)) {
-                if let Some(&prev_entity) = prev_ents.get(&x) {
-                    wires.push([curr_ent_n, WIRE_G, prev_entity, WIRE_G]);
-                }
-            }
-            prev_ents.insert(x, curr_ent_n);
-            curr_ent_n += 1;
+            prev_ent_n = Some(curr_ent_n);
+            prev_ents_n.insert(x, curr_ent_n);
         }
     }
 

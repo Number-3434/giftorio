@@ -23,31 +23,37 @@ pub fn generate_substations(
     if args.substation_quality == SubstationQuality::None {
         return (Vec::new(), Vec::new(), HashSet::new(), base_ent_n);
     }
-    let coverage = match args.substation_quality {
-        SubstationQuality::Normal => 18.0,
-        SubstationQuality::Uncommon => 20.0,
-        SubstationQuality::Rare => 22.0,
-        SubstationQuality::Epic => 24.0,
-        SubstationQuality::Legendary => 28.0,
-        _ => 18.0,
-    };
     let mut ents = Vec::new();
     let mut wires = Vec::new();
     let mut occupied = HashSet::new();
     let mut curr_ent_n = base_ent_n;
 
-    let half_cov = (coverage - 2.0) / 2.0;
-    let n_frame_cov = ((n_frames as f64 - half_cov) / (coverage - 2.0)).floor() + 1.0;
-    let n_subs_width = lamp_dim.0.div_ceil(coverage as u32);
-    let n_subs_height =
-        (((lamp_dim.1 as f64 - half_cov) / coverage).ceil() + n_frame_cov) as u32 + 1;
+    const SUB_WIDTH: u32 = 2;
+    let half_cov: u32 = match args.substation_quality {
+        SubstationQuality::Normal => 9,
+        SubstationQuality::Uncommon => 10,
+        SubstationQuality::Rare => 11,
+        SubstationQuality::Epic => 12,
+        SubstationQuality::Legendary => 14,
+        _ => unreachable!(),
+    };
+    let cov: u32 = half_cov * 2;
+
+    // Frame combs don't go on same y as subs
+    let comb_cov = cov.strict_sub(2);
+
+    // Coverage for combinators.
+    let n_comb_subs = ((n_frames + comb_cov).strict_sub(half_cov)) / comb_cov;
+    let cov_margin = cov / 2 - SUB_WIDTH / 2; // they're both multiples of 2
+    let n_subs_width = 1 + (lamp_dim.0 - cov_margin).div_ceil(cov);
+    let n_subs_height = 1 + (lamp_dim.1 - cov_margin).div_ceil(cov) + n_comb_subs;
 
     let start_x = -1;
-    let start_y = -1 - (n_frame_cov * coverage) as i32;
+    let start_y = -1 - (n_comb_subs * cov) as i32;
 
     for i in 0..n_subs_height as i32 {
         for j in 0..n_subs_width as i32 {
-            let (x, y) = (start_x + j * coverage as i32, start_y + i * coverage as i32);
+            let (x, y) = (start_x + j * cov as i32, start_y + i * cov as i32);
             let mut ent = Entity::new(curr_ent_n, SUBSTATION, (x as f64, y as f64));
             ent.quality = Some(args.substation_quality.to_string());
             ents.push(ent);

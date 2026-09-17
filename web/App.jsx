@@ -21,17 +21,19 @@ const _INITIAL_VALUES = {
 	imageRotation: "none",
 	includeLastFrame: false,
 	maxSize: 50,
+	mode: "full",
 	outputFormat: "blueprint",
 	resamplingFilter: "triangle",
 	rotation: 0,
 	signalCompressionType: "none",
-	sortSignals: false,
+	sortSignals: "none",
 	substationQuality: "normal",
 	targetFps: 15,
 	temporalCompressionWindow: 300,
 	useDLC: false,
 	wireColor: "green",
 };
+
 function formatFileSize(bytes) {
 	if (bytes === 0) return "0 Bytes";
 
@@ -73,20 +75,17 @@ const FORM_ELEMENTS = {
 		options: {
 			full: "Everything",
 			lamps: "Lamps Only",
+			lampGrid: "Lamp Grid",
 		},
 		tooltip: `
 			Selects which parts of the blueprint to include.
 			<br/>
-			<br/><strong>Everything</strong>
-			<br/>Includes all the lamps, lamp wires, and data combinators.
-			<br/>
-			<br/><strong>Lamps Only</strong>
-			<br/>Only includes the lamps and lamp wires.
-			<br/>
-			<br/>
-			<span class='text-tan-500' style='opacity:0.6;'>
-				Lamps are the only part of the blueprint that can be used to power the blueprint.
-			</span>
+			<br/><strong>Everything</strong>: Include all lamps, wires, and combinators. The full
+			package.
+			<br/><strong>Lamps Only</strong>: Generate only lamps for the blueprint, with the wires.
+			<br/><strong>Lamp Grid</strong>: Generate a grid of lamps, with each section internally
+			connected by wires. Similar to <strong>Lamps Only</strong>, but excludes the signal
+			transfer wires. Useful for making a lamp screen of specific dimensions.
 		`,
 	},
 	substationQuality: {
@@ -113,10 +112,10 @@ const FORM_ELEMENTS = {
 		name: "Compression",
 		type: "select",
 		tooltip: `
-			Uses <strong>lossless</strong> compression to reduce size by storing unchanged pixels. Does
-			not change the output video, but may affect how it can be played.
+			Uses <strong>lossless</strong> compression to reduce size by storing unchanged pixels. May
+			affect how the output video can be played.
 			<br/>
-			<br/><strong>Temporal Compression</strong> uses ~2x more combinators, but reduces filesize
+			<br/><strong>Temporal Compression</strong>: Uses ~2x more combinators, but reduces filesize
 			~2-4x.
 			<br/>
 			<span class='text-tan-500' style='opacity:0.6;'>
@@ -124,16 +123,14 @@ const FORM_ELEMENTS = {
 				combinator for the window. Temporal compression is <strong>static</strong>, and the
 				resulting blueprint can be paused / seeked safely without corruption.
 			</span>
-			<br/>
-			<br/><strong>Delta Compression</strong> is not seekable or pausable, but reduces filesize
+			<br/><strong>Delta Compression</strong>: Not seekable / pausable, but reduces filesize
 			~3-10x.
 			<br/>
 			<span class='text-tan-500' style='opacity:0.6;'>
 				Stores differences between frames, using a memory combinator to hold values. Each frame
 				depends on all previous frames, so it cannot be paused or seeked.
 			</span>
-			<br/>
-			<br/><strong>None</strong> turns off compression.
+			<br/><strong>None</strong>: No compression.
 		`,
 		options: {
 			none: "None",
@@ -194,18 +191,25 @@ const FORM_ELEMENTS = {
 		`,
 	},
 	sortSignals: {
-		name: "Sort Signals",
-		type: "checkbox",
+		name: "Signal Sorting",
+		type: "select",
+		options: {
+			none: "Compatibility",
+			auto: "Auto",
+			compression: "Compression",
+			json: "Best JSON",
+		},
 		tooltip: `
-			If enabled, sorts signals by the combined string length of their internal 'type' and 'name'
-			fields. This helps reduce the size of the blueprint for small group sizes.
+			Affects ordering of lamp and data signals. Does not alter in-game performance.
 			<br/>
-			<br/>
-			If disabled, signals are sorted as they appear internally in Factorio v2.0.77.
+			<br/><strong>Compatibility</strong>: Sort signals as they appear in Factorio v2.0.77.
+			<br/><strong>Auto</strong>: Auto-select the best sorting method based on the output format.
+			<br/><strong>Compression</strong>: Minimize blueprint file size, but JSON may be larger.
+			<br/><strong>JSON</strong>: Minimize raw JSON size, but reduces compression value.
 			<br/>
 			<br/>
 			<span class='text-tan-500' style='opacity:0.6;'>
-				Usually recommended, but affects lamp signal ordering.
+				Determines how (and if) internal field names are sorted to reduce file size.
 			</span>
 		`,
 	},
@@ -215,12 +219,10 @@ const FORM_ELEMENTS = {
 		tooltip: `
 			The color format used to store the image. Greatly affects the blueprint size.
 			<br/>
-			<br/><strong>Full color</strong> tries to match the original GIF colors.
-			<br/><strong>8-bit grayscale</strong> has 256 shades of gray and reduces blueprint size up
-			to 4x.
-			<br/><strong>4-bit grayscale</strong> has 16 shades of gray and reduces blueprint size up to
-			8x.
-			<br/><strong>1-bit Black and White</strong> reduces blueprint size up to 32x.
+			<br/><strong>Full Color</strong>: Approximate the original GIF colors to RGB8.
+			<br/><strong>8-bit Grayscale</strong>: 256 shades of gray; reduces blueprint size up to 4x.
+			<br/><strong>4-bit Grayscale</strong>: 16 shades of gray; reduces blueprint size up to 8x.
+			<br/><strong>Black & White</strong>: 2 shades of gray; educes blueprint size up to 32x.
 			<br/>
 			<br/>
 			<span class='text-tan-500' style='opacity:0.6;'>
@@ -241,24 +243,11 @@ const FORM_ELEMENTS = {
 		tooltip: `
 			The filter used to resample the image.
 			<br/>
-			<br/><strong>Triangle</strong>
-			<br/>Fast, CPU friendly filter. Great for most videos, but has lower quality than other
-			filters.
-			<br/>
-			<br/><strong>Catmull-Rom</strong>
-			<br/>Has good sharpness and stability, may slightly blur. Gives the most consistent
-			results.
-			<br/>
-			<br/><strong>Lanczos3</strong>
-			<br/>More detailed, sharper edges but can shimmer. Yields crisp images, but may have minor
-			aliasing.
-			<br/>
-			<br/><strong>Gaussian</strong>
-			<br/>Very smooth outputs, but can blur pixel art. Very stable, no aliasing.
-			<br/>
-			<br/><strong>Nearest</strong>
-			<br/>Generates crisp outputs but looks "blocky". Great for pixel art, especially when the
-			dimensions are matched up.
+			<br/><strong>Triangle</strong>: Fast; CPU friendly; good for most videos.
+			<br/><strong>Catmull-Rom</strong>: Consistent; good sharpness and stability.
+			<br/><strong>Lanczos3</strong>: Crisp detail; sharper edges; may shimmer / have aliasing.
+			<br/><strong>Gaussian</strong>: Smooth; very stable; no aliasing, but may blur pixel art.
+			<br/><strong>Nearest</strong>: Sharp and "blocky". Great for pixel art.
 			<br/>
 			<br/>
 			<span class='text-tan-500' style='opacity:0.6;'>
@@ -324,9 +313,9 @@ const FORM_ELEMENTS = {
 		tooltip: `
 			The color of the wires used to connect the lamps.
 			<br/>
-			<br/> <strong>Green</strong> is usually recommended as green wires connect horizontally in
-			straight lines and take up the least space.
-			<br/><strong>Red</strong> wires are darker and harder to see but take up more screen space
+			<br/> <strong>Green</strong>: Usually recommended as green wires connect horizontally in
+			straight lines and take up less space.
+			<br/><strong>Red</strong>: Wires are darker and harder to see but take up more screen space
 			as the wire does not connect straight, and may obscure the video more.
 			<br/>
 			<br/>
@@ -348,14 +337,10 @@ const FORM_ELEMENTS = {
 		tooltip: `
 			Whether the majority of lamp wires should connect horizontally or vertically.
 			<br/>
-			<br/><strong>Horizontal</strong>
-			<br/>Recommended as they take minimal screen space, but require vertical connections between
-			groups that may be quite visible. Seams can be removed by rotating the blueprint 90°
-			clockwise.
-			<br/>
-			<br/><strong>Vertical</strong>
-			<br/>(Not recommended) Connections are much more noticeable.
-			<br/>
+			<br/><strong>Horizontal</strong>: Recommended as they take minimal screen space, but will
+			require vertical connections between groups that can be quite visible. Seams can be removed
+			by setting <i>Rotation</i> to <strong>90° clockwise</strong>.
+			<br/><strong>Vertical</strong>: (Not recommended) Connections are much more noticeable.
 			<br/>Red wires only connect straight vertically.
 			<br/>Green wires connect straight both horizontally and vertically.
 			<br/>

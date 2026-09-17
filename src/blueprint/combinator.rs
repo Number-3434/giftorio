@@ -21,7 +21,7 @@ use std::{collections::HashSet, sync::Arc};
 ///
 /// Does not populate combinators with data.
 pub fn generate_combinators(
-    ticks_per_group: u64,
+    ticks_per_group: u32,
     occupied_y: &HashSet<i32>,
     base_ent_n: u32,
     base_dc_x: f64,
