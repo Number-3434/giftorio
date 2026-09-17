@@ -67,6 +67,28 @@ const FORM_ELEMENTS = {
 			</span>
 		`,
 	},
+	mode: {
+		name: "Mode",
+		type: "select",
+		options: {
+			full: "Everything",
+			lamps: "Lamps Only",
+		},
+		tooltip: `
+			Selects which parts of the blueprint to include.
+			<br/>
+			<br/><strong>Everything</strong>
+			<br/>Includes all the lamps, lamp wires, and data combinators.
+			<br/>
+			<br/><strong>Lamps Only</strong>
+			<br/>Only includes the lamps and lamp wires.
+			<br/>
+			<br/>
+			<span class='text-tan-500' style='opacity:0.6;'>
+				Lamps are the only part of the blueprint that can be used to power the blueprint.
+			</span>
+		`,
+	},
 	substationQuality: {
 		name: "Substation Quality",
 		type: "select",
@@ -524,6 +546,7 @@ function App({ worker }) {
 						imageType: formData.file.type.substring(6 /* image/ */),
 						includeLastFrame: !!formData.includeLastFrame,
 						maxSize: +formData.maxSize,
+						mode: `${formData.mode}`,
 						name: `${formData.file.name}`,
 						outputFormat: `${formData.outputFormat}`,
 						resamplingFilter: `${formData.resamplingFilter}`,

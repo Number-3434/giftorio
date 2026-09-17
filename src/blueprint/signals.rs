@@ -1,5 +1,5 @@
+use crate::blueprint::models::Signal;
 use crate::constants::*;
-use crate::models::Signal;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -68,9 +68,9 @@ pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
 /// A vector of signal JSON objects.
 fn get_signal_list(use_dlc: bool) -> Vec<Value> {
     let signals_json = if use_dlc {
-        include_str!("data/signals-dlc.json")
+        include_str!("../data/signals-dlc.json")
     } else {
-        include_str!("data/signals.json")
+        include_str!("../data/signals.json")
     };
     serde_json::from_str(signals_json).unwrap()
 }

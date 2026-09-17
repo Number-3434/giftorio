@@ -1,4 +1,4 @@
-use crate::blueprint::BlueprintGenerator;
+use crate::blueprint::blueprint::BlueprintGenerator;
 use crate::image_processing::FrameData;
 use crate::models::{BlueprintArgs, OutputFormat};
 use crate::streaming_writer::{ChunkQueue, StreamingWriter};

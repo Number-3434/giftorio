@@ -1,13 +1,11 @@
 use wasm_bindgen::prelude::*;
 mod blueprint;
-mod blueprint_encoder;
 mod constants;
 mod image_processing;
 mod image_utils;
 mod macros;
 mod models;
 mod progress;
-mod signals;
 mod streaming_writer;
 
 /// Public entry point for WebAssembly.
@@ -37,7 +35,7 @@ pub async fn run_blueprint(
 
     // Process the image to extract frames and determine the effective FPS.
     let frame_data = image_processing::FrameData::new(image_data, args.clone())?;
-    let mut encoder = blueprint_encoder::BlueprintEncoder::new_from_frame_data(frame_data, &args)?;
+    let mut encoder = blueprint::encoder::BlueprintEncoder::new_from_frame_data(frame_data, &args)?;
 
     while let Some(chunk) = encoder.next_chunk()? {
         let chunk = js_sys::Uint8Array::from(&chunk[..]);

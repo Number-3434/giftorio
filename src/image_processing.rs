@@ -1,6 +1,6 @@
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
-use crate::models::{BlueprintArgs, FlippedAxes, ImageRotation, ResamplingFilter};
+use crate::models::{BlueprintArgs, FlippedAxes, ImageRotation::*, ResamplingFilter};
 use crate::progress::set_progress;
 use image::{imageops, AnimationDecoder, ImageDecoder};
 use std::{collections::VecDeque, io::Cursor, time::Duration};
@@ -18,6 +18,7 @@ pub struct FrameData<'a> {
     out_dim_raw: (f64, f64),
     out_n_frames: u32,
     output_frames: VecDeque<image::Frame>,
+    resize_filter: imageops::FilterType,
 }
 
 impl FrameData<'_> {
@@ -32,14 +33,11 @@ impl FrameData<'_> {
             self.out_dim_raw.1.round() as u32,
             false,
         );
-        return if matches!(
-            self.args.image_rotation,
-            ImageRotation::Deg90 | ImageRotation::Deg270
-        ) {
+        if matches!(self.args.image_rotation, Deg90 | Deg270) {
             (h, w)
         } else {
             (w, h)
-        };
+        }
     }
     pub fn total_frames(&self) -> u32 {
         self.out_n_frames
@@ -48,7 +46,6 @@ impl FrameData<'_> {
 impl<'a> FrameData<'a> {
     pub fn new(image_data: &'a [u8], args: BlueprintArgs) -> Result<Self, JsValue> {
         let frame_data = get_frames(&image_data, &args.image_type)?;
-
         let in_dim = frame_data.dimensions();
         let n_frames = frame_data.n_frames();
 
@@ -67,6 +64,13 @@ impl<'a> FrameData<'a> {
                 args.target_fps.max(1),
                 args.last_frame,
             ),
+            resize_filter: match args.sampling_filter {
+                ResamplingFilter::Catrom => imageops::FilterType::CatmullRom,
+                ResamplingFilter::Gaussian => imageops::FilterType::Gaussian,
+                ResamplingFilter::Lanczos3 => imageops::FilterType::Lanczos3,
+                ResamplingFilter::Nearest => imageops::FilterType::Nearest,
+                ResamplingFilter::Triangle => imageops::FilterType::Triangle,
+            },
             args: args,
             buf: Vec::new(),
             curr_frame_idx: 0,
@@ -94,34 +98,23 @@ impl Iterator for FrameData<'_> {
                 if self.args.grayscale_bits > 0 {
                     img = image::DynamicImage::ImageLuma8(img.to_luma8());
                 }
-
-                // Use raw dims for max precision
                 img = img.resize(
                     (self.out_dim_raw.0).round() as u32,
                     (self.out_dim_raw.1).round() as u32,
-                    match self.args.sampling_filter {
-                        ResamplingFilter::Catrom => imageops::FilterType::CatmullRom,
-                        ResamplingFilter::Gaussian => imageops::FilterType::Gaussian,
-                        ResamplingFilter::Lanczos3 => imageops::FilterType::Lanczos3,
-                        ResamplingFilter::Nearest => imageops::FilterType::Nearest,
-                        ResamplingFilter::Triangle => imageops::FilterType::Triangle,
-                    },
-                );
-
-                // Flip before rotate
+                    self.resize_filter,
+                ); // Use raw dims for max precision
                 img = match self.args.flipped_axes {
                     FlippedAxes::X => img.fliph(),
                     FlippedAxes::Y => img.flipv(),
                     FlippedAxes::Both => img.flipv().fliph(),
                     _ => img,
-                };
+                }; // Flip before rotate
                 img = match self.args.image_rotation {
-                    ImageRotation::Deg90 => img.rotate90(),
-                    ImageRotation::Deg180 => img.rotate180(),
-                    ImageRotation::Deg270 => img.rotate270(),
+                    Deg90 => img.rotate90(),
+                    Deg180 => img.rotate180(),
+                    Deg270 => img.rotate270(),
                     _ => img,
                 };
-
                 return Some(Ok(img));
             }
 
