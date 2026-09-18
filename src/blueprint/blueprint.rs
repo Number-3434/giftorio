@@ -20,8 +20,8 @@ pub struct BlueprintGenerator<'a> {
     full_height: u32,
     full_width: u32,
     group_data_combs: Vec<Vec<Entity>>,
-    max_cols_per_grp: u32,
-    max_rows_per_grp: u32,
+    max_lamp_cols_per_grp: u32,
+    max_comb_rows_per_grp: u32,
     n_buf_frames: usize,
     n_frames_per_chunk: usize,
     n_groups: u32,
@@ -75,20 +75,19 @@ impl<'a> BlueprintGenerator<'a> {
             1
         }) as usize;
         let (full_width, full_height) = frame_data.dimensions();
-        let max_cols_per_grp = signals.len() as u32 / full_height;
-        if max_cols_per_grp < 1 {
+        let max_lamp_cols_per_grp = (signals.len() as u32 / full_height).min(full_width);
+        if max_lamp_cols_per_grp < 1 {
             return Err(JsValue::from_str(
                 "Not enough signals for even one column of lamps!",
             ));
         }
-        let n_groups = full_width.div_ceil(max_cols_per_grp);
-        let max_rows_per_grp =
-            (((n_scaled_frames as f64 / ((max_cols_per_grp as f64 / 2.0).floor())).ceil())
-                / frames_per_cb as f64)
-                .ceil() as u32;
+        let n_groups = full_width.div_ceil(max_lamp_cols_per_grp);
+        let max_comb_rows_per_grp = n_scaled_frames
+            .div_ceil(max_lamp_cols_per_grp / 2)
+            .div_ceil(frames_per_cb);
 
         log!("n_signals: {}", signals.len());
-        log!("n_groups: {n_groups}, max_cols_per_grp: {max_cols_per_grp}, max_rows_per_grp: {max_rows_per_grp}");
+        log!("n_groups: {n_groups}, max_lamp_cols_per_grp: {max_lamp_cols_per_grp}, max_comb_rows_per_grp: {max_comb_rows_per_grp}");
 
         Ok(Self {
             args,
@@ -103,13 +102,13 @@ impl<'a> BlueprintGenerator<'a> {
             full_height,
             full_width,
             group_data_combs: Vec::new(),
-            max_cols_per_grp,
+            max_comb_rows_per_grp,
+            max_lamp_cols_per_grp,
             n_buf_frames,
-            n_frames_per_chunk: if n_buf_frames > 1 { 1 } else { 0 } as usize,
+            n_frames_per_chunk: if n_buf_frames > 1 { 1 } else { 0 },
             n_groups,
             n_scaled_frames,
             next_frame: None,
-            max_rows_per_grp,
             patch_states: (0..n_groups)
                 .map(|_| GroupPatchState {
                     chunk_i: 0,
@@ -186,7 +185,7 @@ impl<'a> BlueprintGenerator<'a> {
 
         let (ents, wires, cells, new_next_ent_n) = generate_substations(
             (self.full_width, self.full_height),
-            self.max_rows_per_grp
+            self.max_comb_rows_per_grp
                 + match gray_bits {
                     1 | 4 => 2,
                     8 => 1,
@@ -204,8 +203,8 @@ impl<'a> BlueprintGenerator<'a> {
         let mut prev_top_right_lamp_ent_n: Option<u32> = None;
 
         for group_i in 0..self.n_groups {
-            let grp_left = group_i * self.max_cols_per_grp;
-            let grp_width = (self.max_cols_per_grp).min(self.full_width - grp_left);
+            let grp_left = group_i * self.max_lamp_cols_per_grp;
+            let grp_width = (self.max_lamp_cols_per_grp).min(self.full_width - grp_left);
             let (mut cb_in_ent_n, mut cb_out_ent_n) = (0, 0);
 
             #[allow(unused_variables)]
@@ -233,7 +232,7 @@ impl<'a> BlueprintGenerator<'a> {
                             8 => -4.0,
                             _ => -3.0,
                         } + if self.use_delta_comp { -2.0 } else { 0.0 },
-                        self.max_rows_per_grp,
+                        self.max_comb_rows_per_grp,
                         args,
                     );
                 ent_data.next_ent_n = new_base_ent_n;
@@ -280,7 +279,7 @@ impl<'a> BlueprintGenerator<'a> {
         let frames_per_cb = self.frames_per_cb;
         let (full_width, full_height) = (self.full_width, self.full_height);
         let gray_bits = self.args.grayscale_bits;
-        let max_cols_per_grp = self.max_cols_per_grp;
+        let max_cols_per_grp = self.max_lamp_cols_per_grp;
         let (n_buf_frames, n_frames_per_chunk) = (self.n_buf_frames, self.n_frames_per_chunk);
         let n_groups = self.n_groups;
         let ticks_per_frame = self.ticks_per_frame;

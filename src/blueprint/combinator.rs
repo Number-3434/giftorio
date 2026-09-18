@@ -165,11 +165,11 @@ pub fn generate_combinators(
             curr_y -= 2.0;
         }
 
-        let en = Entity::new(curr_ent_n, DECIDER_COMB, (base_dc_x + x_offset, curr_y))
+        let mut en = Entity::new(curr_ent_n, DECIDER_COMB, (base_dc_x + x_offset, curr_y))
             .with_direction(DIR_R);
 
         if chunk_i == 0 {
-            new_ent.push(en.with_tag("first data comb"));
+            en = en.with_tag("first data comb");
             if use_delta_comp {
                 wires.push([
                     curr_ent_n,
@@ -185,9 +185,8 @@ pub fn generate_combinators(
                     WIRE_G,
                 ]);
             }
-        } else {
-            new_ent.push(en);
         }
+        new_ent.push(en);
 
         if !is_first_dc {
             // Wire to previous decider
