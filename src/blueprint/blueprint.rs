@@ -58,7 +58,7 @@ impl<'a> BlueprintGenerator<'a> {
         if frame_data.total_frames() == 0 {
             return Err(JsValue::from_str("No sampled frames"));
         }
-        let signals: Vec<Arc<Signal>> = get_signals_with_quality(args.use_dlc, args.sort_signals);
+        let signals: Vec<Arc<Signal>> = get_signals_with_quality(&args);
         let gray_bits = args.grayscale_bits;
         let combinator_compression = args.signal_compression.as_ref();
         let time_comp_win = combinator_compression

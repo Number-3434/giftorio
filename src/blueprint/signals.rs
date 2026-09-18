@@ -1,5 +1,6 @@
 use crate::blueprint::models::Signal;
 use crate::constants::*;
+use crate::models::SignalSorting;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -13,12 +14,12 @@ use std::sync::Arc;
 /// # Returns
 ///
 /// A new vector of signal JSON objects with added quality attributes.
-pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
-    let mut signals: Vec<Arc<Signal>> = get_signal_list(use_dlc)
+pub fn get_signals_with_quality(args: &crate::models::BlueprintArgs) -> Vec<Arc<Signal>> {
+    let mut signals: Vec<_> = get_signal_list(args.use_dlc)
         .into_iter()
         .flat_map(|signal| {
             let mut sigs = Vec::new();
-            let quals = if use_dlc {
+            let quals = if args.use_dlc {
                 vec![
                     QUAL_NORMAL,
                     QUAL_UNCOMMON,
@@ -48,13 +49,17 @@ pub fn get_signals_with_quality(use_dlc: bool, sort: bool) -> Vec<Arc<Signal>> {
         })
         .collect();
 
-    if sort {
-        // Sort by total length of the type + name + quality (so use the smallest ids first)
-        signals.sort_by_key(|s| {
+    match args.signal_sorting {
+        // Only sort by name (compressor really likes this)
+        SignalSorting::Compression => signals.sort_by_key(|s| s.name.len()),
+        SignalSorting::Json => signals.sort_by_key(|s| {
+            // Sort by total length of the type + name + quality (actual smallest JSON)
             s.type_.len() + s.name.len() + s.quality.as_ref().unwrap_or(&"").len()
-        });
+        }),
+        _ => {}
     }
-    signals
+
+    return signals;
 }
 
 /// Retrieves the list of signals from the embedded JSON file.

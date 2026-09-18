@@ -26,7 +26,7 @@ const _INITIAL_VALUES = {
 	resamplingFilter: "triangle",
 	rotation: 0,
 	signalCompressionType: "none",
-	sortSignals: "none",
+	signalSorting: "none",
 	substationQuality: "normal",
 	targetFps: 15,
 	temporalCompressionWindow: 300,
@@ -190,7 +190,7 @@ const FORM_ELEMENTS = {
 			</span>
 		`,
 	},
-	sortSignals: {
+	signalSorting: {
 		name: "Signal Sorting",
 		type: "select",
 		options: {
@@ -537,7 +537,12 @@ function App({ worker }) {
 						resamplingFilter: `${formData.resamplingFilter}`,
 						rotation: +formData.rotation,
 						signalCompression,
-						sortSignals: !!formData.sortSignals,
+						signalSorting:
+							formData.signalSorting === "auto" ?
+								formData.outputFormat === "json" ?
+									"json"
+								:	"compression"
+							:	`${formData.signalSorting}`,
 						substationQuality: `${formData.substationQuality}`,
 						targetFps: +formData.targetFps,
 						useDLC: !!formData.useDLC,
@@ -819,7 +824,10 @@ function App({ worker }) {
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
 						</div>
 
-						<div class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md">
+						<div
+							class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto"
+							style={{ "max-height": "50vh" }}
+						>
 							{Object.entries(FORM_ELEMENTS).map(([k, v]) => {
 								if (k === "substationQuality") {
 									let { options } = v;

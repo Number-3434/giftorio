@@ -6,34 +6,52 @@ pub struct BlueprintArgs {
 
     #[serde(rename = "flippedAxes")]
     pub flipped_axes: FlippedAxes,
+
     #[serde(rename = "grayscaleBits")]
     pub grayscale_bits: u32,
+
     #[serde(rename = "imageRotation")]
     pub image_rotation: ImageRotation,
+
     #[serde(rename = "imageType")]
     pub image_type: String,
+
     #[serde(rename = "includeLastFrame")]
     pub last_frame: bool,
+
     #[serde(rename = "maxSize")]
     pub max_size: u32,
+
     #[serde(rename = "mode")]
     pub mode: Mode,
+
     #[serde(rename = "outputFormat")]
     pub output_format: OutputFormat,
+
+    #[serde(rename = "maxGroupSize")]
+    pub max_group_size: u32,
+
     #[serde(rename = "useGreenLampWires")]
     pub prefer_green_wires: bool,
+
     #[serde(rename = "useHorizontalLampWires")]
     pub prefer_horizontal_wires: bool,
+
     #[serde(rename = "resamplingFilter")]
     pub sampling_filter: ResamplingFilter,
+
     #[serde(rename = "signalCompression")]
     pub signal_compression: Option<SignalCompression>,
-    #[serde(rename = "sortSignals")]
-    pub sort_signals: bool,
+
+    #[serde(rename = "signalSorting")]
+    pub signal_sorting: SignalSorting,
+
     #[serde(rename = "substationQuality")]
     pub substation_quality: SubstationQuality,
+
     #[serde(rename = "targetFps")]
     pub target_fps: u32,
+
     #[serde(rename = "useDLC")]
     pub use_dlc: bool,
 }
@@ -98,6 +116,16 @@ pub enum Mode {
     Lamps,
     #[serde(rename = "lampGrid")]
     LampGrid,
+}
+
+#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+pub enum SignalSorting {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "compression")]
+    Compression,
+    #[serde(rename = "json")]
+    Json,
 }
 
 #[derive(serde::Deserialize, Clone, PartialEq, Eq)]
