@@ -1,6 +1,5 @@
 use crate::blueprint::models::{ImageRotation::*, *};
 use crate::constants::*;
-use crate::macros::log;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -109,6 +108,6 @@ pub fn generate_lamps(
             prev_ents_n.insert(x, curr_ent_n);
         }
     }
-
+    curr_ent_n += 1;
     return (ents, wires, curr_ent_n, top_right_lamp);
 }

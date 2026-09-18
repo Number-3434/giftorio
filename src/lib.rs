@@ -8,6 +8,8 @@ mod models;
 mod progress;
 mod streaming_writer;
 
+type ChunkCallback = fn(js_sys::Uint8Array) -> js_sys::Promise;
+
 /// Public entry point for WebAssembly.
 ///
 /// # Parameters
@@ -27,7 +29,7 @@ mod streaming_writer;
 pub async fn run_blueprint(
     options: JsValue,
     image_data: &[u8],
-    send_chunk: &js_sys::Function,
+    send_chunk: &js_sys::Function<ChunkCallback>,
 ) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 
@@ -38,15 +40,13 @@ pub async fn run_blueprint(
     let mut encoder = blueprint::encoder::BlueprintEncoder::new_from_frame_data(frame_data, &args)?;
 
     while let Some(chunk) = encoder.next_chunk()? {
-        let chunk = js_sys::Uint8Array::from(&chunk[..]);
-        let promise = send_chunk.call1(&JsValue::NULL, &JsValue::from(chunk))?;
+        let promise = send_chunk.call1(&JsValue::NULL, &js_sys::Uint8Array::from(&chunk[..]))?;
         wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(promise)).await?;
     }
 
-    use js_sys::{Object, Reflect};
-    let obj = Object::new();
+    let obj = js_sys::Object::new();
 
-    Reflect::set(
+    js_sys::Reflect::set(
         &obj,
         &JsValue::from_str("label"),
         &JsValue::from_str(&args.name.to_string()),

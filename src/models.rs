@@ -29,7 +29,7 @@ pub struct BlueprintArgs {
     pub output_format: OutputFormat,
 
     #[serde(rename = "maxGroupSize")]
-    pub max_group_size: u32,
+    pub max_group_size: Option<u32>,
 
     #[serde(rename = "useGreenLampWires")]
     pub prefer_green_wires: bool,
