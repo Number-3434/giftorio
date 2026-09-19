@@ -1,6 +1,5 @@
-use crate::blueprint::models::*;
-use crate::constants::*;
-use std::collections::HashSet;
+use crate::blueprint::{constants::*, models::*};
+use std::{collections::HashSet, sync::Arc};
 
 /// Generates substation entities and wires for powering the blueprint.
 ///
@@ -54,7 +53,7 @@ pub fn generate_substations(
     for i in 0..n_subs_height as i32 {
         for j in 0..n_subs_width as i32 {
             let (x, y) = (start_x + j * cov as i32, start_y + i * cov as i32);
-            let mut ent = Entity::new(curr_ent_n, SUBSTATION, (x as f64, y as f64));
+            let mut ent = Entity::new(curr_ent_n, Arc::clone(&SUBSTATION), (x as f64, y as f64));
             ent.quality = Some(args.substation_quality.to_string());
             ents.push(ent);
 

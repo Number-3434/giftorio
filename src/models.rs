@@ -1,44 +1,63 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BlueprintArgs {
     pub name: String,
 
     #[serde(rename = "flippedAxes")]
     pub flipped_axes: FlippedAxes,
+
     #[serde(rename = "grayscaleBits")]
     pub grayscale_bits: u32,
+
     #[serde(rename = "imageRotation")]
     pub image_rotation: ImageRotation,
+
     #[serde(rename = "imageType")]
     pub image_type: String,
+
     #[serde(rename = "includeLastFrame")]
     pub last_frame: bool,
+
     #[serde(rename = "maxSize")]
     pub max_size: u32,
+
     #[serde(rename = "mode")]
     pub mode: Mode,
+
     #[serde(rename = "outputFormat")]
     pub output_format: OutputFormat,
+
+    #[serde(rename = "maxGroupSize")]
+    pub max_group_size: Option<u32>,
+
     #[serde(rename = "useGreenLampWires")]
     pub prefer_green_wires: bool,
+
     #[serde(rename = "useHorizontalLampWires")]
     pub prefer_horizontal_wires: bool,
+
     #[serde(rename = "resamplingFilter")]
     pub sampling_filter: ResamplingFilter,
+
     #[serde(rename = "signalCompression")]
     pub signal_compression: Option<SignalCompression>,
-    #[serde(rename = "sortSignals")]
-    pub sort_signals: bool,
+
+    #[serde(rename = "signalSorting")]
+    pub signal_sorting: SignalSorting,
+
     #[serde(rename = "substationQuality")]
     pub substation_quality: SubstationQuality,
+
     #[serde(rename = "targetFps")]
     pub target_fps: u32,
+
     #[serde(rename = "useDLC")]
     pub use_dlc: bool,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SubstationQuality {
     #[serde(rename = "none")]
     None,
@@ -66,7 +85,7 @@ impl Display for SubstationQuality {
     }
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum ImageRotation {
     #[serde(rename = "none")]
     Deg0 = 0,
@@ -78,7 +97,7 @@ pub enum ImageRotation {
     Deg270 = 270,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum FlippedAxes {
     #[serde(rename = "none")]
     None = 0,
@@ -90,7 +109,7 @@ pub enum FlippedAxes {
     Both = 3,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Mode {
     #[serde(rename = "full")]
     Full,
@@ -100,7 +119,17 @@ pub enum Mode {
     LampGrid,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
+pub enum SignalSorting {
+    #[serde(rename = "none")]
+    None,
+    #[serde(rename = "compression")]
+    Compression,
+    #[serde(rename = "json")]
+    Json,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum ResamplingFilter {
     #[serde(rename = "catrom")]
     Catrom,
@@ -114,7 +143,7 @@ pub enum ResamplingFilter {
     Triangle,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum SignalCompression {
     #[serde(rename = "temporal")]
     Temporal { window: u32 },
@@ -122,7 +151,7 @@ pub enum SignalCompression {
     Delta,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum OutputFormat {
     #[serde(rename = "blueprint")]
     Blueprint,

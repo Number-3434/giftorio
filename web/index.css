@@ -6,6 +6,7 @@
     --color-bright-green-500: #93e897;
     --color-gray-100: #8e8e8e;
     --color-gray-500: #313031;
+    --color-gray-600: #403f40;
     --color-light-gray-500: #414040;
     --color-dark-gray-500: #242324;
     --color-white-500: #cccccc;
@@ -20,6 +21,10 @@ body {
     @apply overflow-hidden p-3 mb-3 bg-gray-500 h-fit;
 
     border-image: url("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABEAAAARCAMAAAAMs7fIAAABhWlDQ1BJQ0MgcHJvZmlsZQAAKJF9kT1Iw1AUhU9bpSIVETuICAasulgQFXHUKhShQqgVWnUweekfNGlIUlwcBdeCgz+LVQcXZ10dXAVB8AfE0clJ0UVKvC8ptIjxwuN9nHfP4b37AH+txFSzbRxQNctIxmNCOrMqBF/hwyB6MIohiZn6nCgm4Flf99RNdRflWd59f1aXkjUZ4BOIZ5luWMQbxNObls55nzjMCpJCfE48ZtAFiR+5Lrv8xjnvsJ9nho1Ucp44TCzkW1huYVYwVOIp4oiiapTvT7uscN7irJYqrHFP/sJQVltZ5jqtAcSxiCWIECCjgiJKsBClXSPFRJLOYx7+fscvkksmVxGMHAsoQ4Xk+MH/4PdszdzkhJsUigHtL7b9MQwEd4F61ba/j227fgIEnoErrekv14CZT9KrTS1yBHRvAxfXTU3eAy53gL4nXTIkRwrQ8udywPsZfVMG6L0FOtfcuTXOcfoApGhWiRvg4BAYyVP2use7O1rn9m9PY34/opByuh0Yaa8AAAAJcEhZcwAALiMAAC4jAXilP3YAAAAHdElNRQfmAgIQJSQU1l6SAAAAGXRFWHRDb21tZW50AENyZWF0ZWQgd2l0aCBHSU1QV4EOFwAAALpQTFRFZGJhY2BgYF1cXVpZXFpZXFpYW1hXWlVSV1JQT01MT0xLT0pJTUdETUZDSEJBPDk4PDg3PzYzPzYxOzc2OzYzNi8sMTAxMTAwMS8wMS8vMS4vMC4uMC0tMCwsMCwrMCsqLyooMSYhLCclLCYlLiUhLCUkKCEfJSIhJyEeJSEhJyAdJCEfJCAeJx0aIx0bIxwZIxsYIxoXIBoXHhYUFQ8NEw4NDw4NEQ0MEA0MDw0NDAkHBQQDAwICAAAAeCdZ2wAAAAFiS0dECfHZpewAAACCSURBVHhebY9LDsMwCAXh+RdUiCPl/lc1EXa8aNWRjR6zAWANTBtGM5RSS8kpyDOjR62LMB16N5HXiLRbkeulaqarXDXDx/CxiQY03H25GQhORL6JDPrlj4mFeTPXJkREMAOBgdVPN98hqvp5vxwAJ9HTemCnSmLEgbktcpwMfM8HHrGVLy5TM6g2AAAAAElFTkSuQmCC") 8/4px repeat;
+
+    &:has(.progress-container) {
+        padding: 0;
+    }
 }
 
 .panel-inset {
@@ -424,6 +429,61 @@ input[type=checkbox]:checked~.checkbox {
 
     i {
         font-style: italic;
+        letter-spacing: 0.2px;
+    }
+}
+
+.progress-container {
+    margin-top: 5px;
+    margin-left: 14px;
+    margin-right: 14px;
+    margin-bottom: 20px;
+
+
+    .progress-bar-container {
+        @apply bg-gray-600;
+
+
+        margin-top: 5px;
+        padding: 7px;
+        box-shadow:
+            1px 2px 0 -1px #aaaaaa66,
+            inset -2px 0 4px 0 #000,
+            inset 2px 0 3px 0 #000,
+            inset 0 2px 3px 0 #000;
+
+        .progress-bar-wrapper {
+            position: relative;
+            margin: 7px;
+            height: 33px;
+            background: #3e3d3e;
+            min-width: 25vw;
+
+            .progress-bar {
+                left: 0;
+                top: 0;
+                height: 100%;
+                background: #00f300;
+            }
+
+            &::after {
+                content: "";
+                position: absolute;
+                inset: 0;
+                box-shadow:
+                    1px 2px 0 -1px #aaaaaaaa,
+                    inset -2px 2px 4px -1px #000,
+                    inset -1px 0 3px 0px #000,
+                    inset 1px 0 3px 0px #000,
+                    inset 0 2px 2px 0px #0008;
+
+            }
+
+        }
+    }
+
+    .progress-status {
+        font-weight: 600;
         letter-spacing: 0.2px;
     }
 }
