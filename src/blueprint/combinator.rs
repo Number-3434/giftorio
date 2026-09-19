@@ -97,8 +97,8 @@ pub fn generate_combinators(
             conditions: Some(vec![
                 Condition::new(Signal::new_virtual(Arc::clone(&SIG_EACH)), 0, COMP_NE)
                     .with_first_signal_networks(NetworkFilters::green()),
-                Condition::new(Signal::new_virtual(Arc::clone(&SIG_T)), 0, COMP_AND)
-                    .with_comparator(COMP_NE)
+                Condition::new(Signal::new_virtual(Arc::clone(&SIG_T)), 0, COMP_NE)
+                    .with_compare_type(COMP_AND)
                     .with_first_signal_networks(NetworkFilters::red()),
             ]),
             outputs: Some(vec![CombinatorOutput::new(
