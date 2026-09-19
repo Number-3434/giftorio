@@ -1,11 +1,11 @@
 macro_rules! arithmetic_virtual {
     ($in_name:ident $op:tt $second:expr => $out_name:ident) => {
         ArithmeticConditions {
-            first_signal: Signal::new_virtual($in_name),
+            first_signal: Some(Signal::new_virtual($in_name.clone())),
             second_signal: None,
             second_constant: Some($second as i32),
-            operation: $crate::blueprint::macros::arithmetic_combinator_op!($op),
-            output_signal: Signal::new_virtual($out_name),
+            operation: Some($crate::blueprint::macros::arithmetic_combinator_op!($op).to_owned()),
+            output_signal: Some(Signal::new_virtual($out_name.clone())),
         }
     };
 }
@@ -69,7 +69,7 @@ macro_rules! entity_idx_by_tag {
     ($ents:ident, $tag:expr) => {
         $ents
             .iter()
-            .find(|e| e.has_tag($tag))
+            .find(|e| e.has_tag($tag.to_string()))
             .map(|e| e.entity_number)
     };
 }

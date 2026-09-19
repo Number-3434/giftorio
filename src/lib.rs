@@ -8,8 +8,6 @@ mod models;
 mod progress;
 mod streaming_writer;
 
-type ChunkCallback = fn(js_sys::Uint8Array) -> js_sys::Promise;
-
 /// Public entry point for WebAssembly.
 ///
 /// # Parameters
@@ -29,7 +27,7 @@ type ChunkCallback = fn(js_sys::Uint8Array) -> js_sys::Promise;
 pub async fn run_blueprint(
     options: JsValue,
     image_data: &[u8],
-    send_chunk: &js_sys::Function<ChunkCallback>,
+    send_chunk: &js_sys::Function<fn(js_sys::Uint8Array) -> js_sys::Promise>,
 ) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 

@@ -1,5 +1,7 @@
-use crate::blueprint::models::{ImageRotation::*, *};
-use crate::constants::*;
+use crate::blueprint::{
+    constants::*,
+    models::{ImageRotation::*, *},
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
@@ -54,9 +56,9 @@ pub fn generate_lamps(
                 ControlBehavior::GrayLamp {
                     use_colors: true,
                     color_mode: 1,
-                    red_signal: signal.clone(),
-                    green_signal: signal.clone(),
-                    blue_signal: signal.clone(),
+                    red_signal: Arc::clone(&signal),
+                    green_signal: Arc::clone(&signal),
+                    blue_signal: Arc::clone(&signal),
                 }
             } else {
                 ControlBehavior::ColorLamp {
@@ -65,7 +67,7 @@ pub fn generate_lamps(
                     rgb_signal: signal,
                 }
             };
-            let lamp = Entity::new(curr_ent_n, LAMP, (x as f64, y as f64));
+            let lamp = Entity::new(curr_ent_n, Arc::clone(&LAMP), (x as f64, y as f64));
             ents.push(lamp.with_control_behavior(colors).with_always_on(true));
 
             if r == 0 && c > 0 {

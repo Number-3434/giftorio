@@ -237,15 +237,13 @@ pub fn get_frames<'a>(
     Ok(ImageFrameData {
         frames: match image_type {
             "gif" => {
-                let decoder = image::codecs::gif::GifDecoder::new(cursor)
-                    .map_err(|e| JsValue::from_str(&format!("GIF decode error: {}", e)))?;
+                let decoder = image::codecs::gif::GifDecoder::new(cursor).unwrap_throw();
                 dimensions = decoder.dimensions();
                 info = animation_info(&image_data)?;
                 decoder.into_frames()
             }
             "webp" => {
-                let decoder = image::codecs::webp::WebPDecoder::new(cursor)
-                    .map_err(|e| JsValue::from_str(&format!("WebP decode error: {}", e)))?;
+                let decoder = image::codecs::webp::WebPDecoder::new(cursor).unwrap_throw();
                 dimensions = decoder.dimensions();
                 info = animation_info(&image_data)?;
                 decoder.into_frames()
@@ -278,6 +276,7 @@ pub fn get_frames<'a>(
 ///
 /// An integer representing the RGB value.
 #[inline(always)]
+#[allow(dead_code)]
 pub fn rgb_to_int(r: u8, g: u8, b: u8) -> u32 {
     ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
 }

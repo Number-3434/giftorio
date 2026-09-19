@@ -1,22 +1,16 @@
-use crate::blueprint::models::*;
-use crate::constants::*;
-use crate::image_processing::rgb_to_int;
+use crate::blueprint::{constants::*, models::*};
 use std::io;
-use wasm_bindgen::JsValue;
+use wasm_bindgen::*;
 
 pub fn write_to(writer: &mut dyn io::Write, buf: &[u8]) -> Result<(), JsValue> {
-    writer
-        .write_all(buf)
-        .map_err(|e| JsValue::from_str(&format!("Write error: {e}")))
+    writer.write_all(buf).map_js_err("Write error")
 }
 pub fn write_json_trimmed_to<T>(writer: &mut dyn io::Write, value: &T) -> Result<(), JsValue>
 where
     T: ?Sized + serde::Serialize,
 {
-    let json_bytes = serde_json::to_vec(value)
-        .map_err(|e| JsValue::from_str(&format!("JSON write error: {e}")))?;
-    write_to(writer, &json_bytes[1..json_bytes.len() - 1])?; // Remove braces
-    Ok(())
+    let json_bytes = serde_json::to_vec(value).map_js_err("Write error")?;
+    write_to(writer, &json_bytes[1..json_bytes.len() - 1]) // Remove braces
 }
 
 pub fn invert_wires(ents: &mut Vec<Entity>, wires: &mut Vec<Wire>) {
@@ -65,6 +59,7 @@ pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, J
 
     #[cfg(not(target_arch = "wasm32"))] // scalar fallback
     {
+        use crate::image_processing::rgb_to_int;
         let rgb = frame.to_rgb8();
         let mut outputs = Vec::with_capacity((frame.width() * frame.height()) as usize);
 
@@ -180,4 +175,37 @@ pub unsafe fn rgba_to_rgb_simd(rgba: &[u8]) -> Vec<i32> {
     }
 
     output
+}
+
+pub trait ResultJsExt<T, E> {
+    fn map_js_err(self, prefix: &str) -> Result<T, JsValue>;
+}
+
+impl<T, E: std::fmt::Display> ResultJsExt<T, E> for Result<T, E> {
+    fn map_js_err(self, prefix: &str) -> Result<T, JsValue> {
+        self.map_err(|e| JsValue::from_str(&format!("{prefix}: {e}")))
+    }
+}
+
+pub fn is_none_or_empty_string(value: &Option<String>) -> bool {
+    value.as_ref().is_none_or(|v| v.is_empty())
+}
+pub fn is_none_or_empty_vec<T>(value: &Option<Vec<T>>) -> bool {
+    value.as_ref().is_none_or(|v| v.is_empty())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+pub enum OneOrMany<T> {
+    One(T),
+    Many(Vec<T>),
+}
+impl<T: Clone> OneOrMany<T> {
+    /// Returns a new clone of the contained value.
+    pub fn to_vec(&self) -> Vec<T> {
+        match self {
+            Self::One(v) => vec![v.clone()],
+            Self::Many(v) => v.clone(),
+        }
+    }
 }

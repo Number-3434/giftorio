@@ -1,0 +1,50 @@
+{
+  "blueprint": {
+    "icons": [
+      { "signal": { "name": "arithmetic-combinator" }, "index": 1 },
+      { "signal": { "name": "decider-combinator" }, "index": 2 }
+    ],
+    "entities": [
+      {
+        "entity_number": 1,
+        "name": "decider-combinator",
+        "position": { "x": -415, "y": 687.5 },
+        "direction": 4,
+        "control_behavior": { "decider_conditions": { "conditions": [{}], "outputs": [{}] } },
+        "player_description": "delay"
+      },
+      {
+        "entity_number": 2,
+        "name": "decider-combinator",
+        "position": { "x": -415, "y": 688.5 },
+        "direction": 12,
+        "control_behavior": { "decider_conditions": { "conditions": [{}], "outputs": [{}] } },
+        "player_description": "memory"
+      },
+      {
+        "entity_number": 3,
+        "name": "arithmetic-combinator",
+        "position": { "x": -415, "y": 689.5 },
+        "direction": 4,
+        "control_behavior": { "arithmetic_conditions": { "second_constant": 0, "operation": "*" } },
+        "player_description": "*"
+      },
+      {
+        "entity_number": 4,
+        "name": "arithmetic-combinator",
+        "position": { "x": -414.5, "y": 691 },
+        "control_behavior": { "arithmetic_conditions": { "second_constant": 0, "operation": "*" } },
+        "player_description": ">>"
+      },
+      {
+        "entity_number": 5,
+        "name": "arithmetic-combinator",
+        "position": { "x": -415.5, "y": 691 },
+        "control_behavior": { "arithmetic_conditions": { "second_constant": 0, "operation": "*" } },
+        "player_description": "AND"
+      }
+    ],
+    "item": "blueprint",
+    "version": 562949958467584
+  }
+}

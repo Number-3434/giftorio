@@ -1,6 +1,7 @@
+use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(serde::Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct BlueprintArgs {
     pub name: String,
 
@@ -56,7 +57,7 @@ pub struct BlueprintArgs {
     pub use_dlc: bool,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SubstationQuality {
     #[serde(rename = "none")]
     None,
@@ -84,7 +85,7 @@ impl Display for SubstationQuality {
     }
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum ImageRotation {
     #[serde(rename = "none")]
     Deg0 = 0,
@@ -96,7 +97,7 @@ pub enum ImageRotation {
     Deg270 = 270,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum FlippedAxes {
     #[serde(rename = "none")]
     None = 0,
@@ -108,7 +109,7 @@ pub enum FlippedAxes {
     Both = 3,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Mode {
     #[serde(rename = "full")]
     Full,
@@ -118,7 +119,7 @@ pub enum Mode {
     LampGrid,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum SignalSorting {
     #[serde(rename = "none")]
     None,
@@ -128,7 +129,7 @@ pub enum SignalSorting {
     Json,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum ResamplingFilter {
     #[serde(rename = "catrom")]
     Catrom,
@@ -142,7 +143,7 @@ pub enum ResamplingFilter {
     Triangle,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum SignalCompression {
     #[serde(rename = "temporal")]
     Temporal { window: u32 },
@@ -150,7 +151,7 @@ pub enum SignalCompression {
     Delta,
 }
 
-#[derive(serde::Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub enum OutputFormat {
     #[serde(rename = "blueprint")]
     Blueprint,

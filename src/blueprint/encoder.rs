@@ -9,6 +9,7 @@ use std::{
     collections::VecDeque,
     sync::{Arc, Mutex},
 };
+use wasm_bindgen::UnwrapThrowExt;
 
 pub struct BlueprintEncoder<'a> {
     blueprint_generator: BlueprintGenerator<'a>,
@@ -67,12 +68,8 @@ impl<'a> BlueprintEncoder<'a> {
             }
 
             let zlib = self.zlib_encoder.take().unwrap();
-            let mut b64 = zlib
-                .finish()
-                .map_err(|e| JsValue::from_str(&format!("JSON write error: {e}")))?;
-            let _writer = b64
-                .finish()
-                .map_err(|e| JsValue::from_str(&format!("JSON write error: {e}")))?;
+            let mut b64 = zlib.finish().unwrap_throw();
+            let _writer = b64.finish().unwrap_throw();
 
             self.finished = true;
         }

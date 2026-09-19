@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onMount } from "solid-js";
+import { createEffect, createSignal, onMount, For } from "solid-js";
 import { createStore } from "solid-js/store";
 import Background, { BackgroundApi } from "./Background";
 import infoIcon from "./assets/img/info.png";
@@ -265,6 +265,16 @@ const FORM_ELEMENTS = {
       lanczos3: "Lanczos3",
       nearest: "Nearest",
     },
+  },
+  maxGroupSize: {
+    name: "Max Group Size",
+    type: "number",
+    tooltip: `
+
+		`,
+    min: 0,
+    max: 10,
+    step: 1,
   },
   imageRotation: {
     name: "Rotation",
@@ -556,7 +566,7 @@ function App({ worker }: { worker: Worker }) {
             imageRotation: `${formData.imageRotation}`,
             imageType: formData.file.type.substring(6 /* image/ */),
             includeLastFrame: !!formData.includeLastFrame,
-            maxGroupSize: formData.maxGroupSize,
+            maxGroupSize: +formData.maxGroupSize! || null,
             maxSize: +formData.maxSize,
             mode: `${formData.mode}`,
             name: `${formData.file.name}`,
@@ -832,17 +842,19 @@ function App({ worker }: { worker: Worker }) {
             </div>
 
             <div class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto" style={{ "max-height": "50vh" }}>
-              {Object.entries(FORM_ELEMENTS).map(([k, v]) => {
-                if (k === "substationQuality") {
-                  let { options } = v as (typeof FORM_ELEMENTS)["substationQuality"];
-                  options = formData.useDLC ? options : options.filter(([k, ..._]) => k === "none" || k === "normal");
-                  v = { ...v, options };
-                } else if (k === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") {
-                  v = { ...v, disabled: true } as any;
-                }
-                setNeedsTooltipUpdate(true);
-                return makeFormElement({ formData, formRefs, setFormData, key: k, value: v });
-              })}
+              <For each={Object.entries(FORM_ELEMENTS)}>
+                {([k, v]) => {
+                  if (k === "substationQuality") {
+                    let { options } = v as (typeof FORM_ELEMENTS)["substationQuality"];
+                    options = formData.useDLC ? options : options.filter(([k, ..._]) => k === "none" || k === "normal");
+                    v = { ...v, options };
+                  } else if (k === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") {
+                    v = { ...v, disabled: true } as any;
+                  }
+                  setNeedsTooltipUpdate(true);
+                  return makeFormElement({ formData, formRefs, setFormData, key: k, value: v });
+                }}
+              </For>
             </div>
           </div>
 
@@ -989,9 +1001,7 @@ function makeFormElement({
           value={formData[k] as unknown as string}
           onChange={(e) => setFormData(k, e.currentTarget.value)}
         >
-          {(Array.isArray(options) ? options : Object.entries(options)).map(([k, v]) => (
-            <option value={k}>{v}</option>
-          ))}
+          <For each={Array.isArray(options) ? options : Object.entries(options)}>{([k, v]) => <option value={k}>{v}</option>}</For>
         </select>
       </div>
     );

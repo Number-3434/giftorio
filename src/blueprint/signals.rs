@@ -1,5 +1,4 @@
-use crate::blueprint::models::Signal;
-use crate::constants::*;
+use crate::blueprint::{constants::*, models::Signal};
 use crate::models::SignalSorting;
 use serde_json::Value;
 use std::sync::Arc;
@@ -14,35 +13,51 @@ use std::sync::Arc;
 /// # Returns
 ///
 /// A new vector of signal JSON objects with added quality attributes.
-pub fn get_signals_with_quality(args: &crate::models::BlueprintArgs) -> Vec<Arc<Signal>> {
+pub fn get_signals_with_quality<'a>(args: &crate::models::BlueprintArgs) -> Vec<Arc<Signal>> {
+    let quals: Vec<Arc<str>> = if args.use_dlc {
+        vec![
+            Arc::clone(&QUAL_NORMAL),
+            Arc::clone(&QUAL_UNCOMMON),
+            Arc::clone(&QUAL_RARE),
+            Arc::clone(&QUAL_EPIC),
+            Arc::clone(&QUAL_LEGENDARY),
+            Arc::clone(&QUAL_UNKNOWN),
+        ] as Vec<_>
+    } else {
+        vec![Arc::clone(&QUAL_NORMAL), Arc::clone(&QUAL_UNKNOWN)] as Vec<_>
+    };
+    let mut sig_types: Vec<Arc<str>> = Vec::new(); // Allow "type" field to reference the same strings
     let mut signals: Vec<_> = get_signal_list(args.use_dlc)
         .into_iter()
         .flat_map(|signal| {
             let mut sigs = Vec::new();
-            let quals = if args.use_dlc {
-                vec![
-                    QUAL_NORMAL,
-                    QUAL_UNCOMMON,
-                    QUAL_RARE,
-                    QUAL_EPIC,
-                    QUAL_LEGENDARY,
-                    QUAL_UNKNOWN,
-                ]
-            } else {
-                vec![QUAL_NORMAL, QUAL_UNKNOWN]
-            };
-            for q in quals.iter() {
-                let n = signal["name"].as_str().unwrap();
-                let t = signal["type"].as_str().unwrap();
 
+            let n = signal["name"].as_str().unwrap();
+            let t = signal["type"].as_str().unwrap();
+            let name: Arc<str> = Arc::from(n);
+
+            // Use a singular cached String for each type instead of one per signal
+            // Search from right as we added the new type at the end
+            let type_ = if let Some(i) = sig_types.iter().rposition(|x| x.to_string() == t) {
+                Arc::clone(&sig_types[i])
+            } else {
+                let type_: Arc<str> = Arc::from(t);
+                sig_types.push(Arc::clone(&type_));
+                type_
+            };
+
+            for q in quals.iter() {
                 // Skip the common signal of F, S, T as they're used internally
-                if t == "virtual" && *q == QUAL_NORMAL && matches!(n, SIG_F | SIG_S | SIG_T) {
+                if t == "virtual"
+                    && *q == *QUAL_NORMAL
+                    && (n == &**SIG_F || n == &**SIG_S || n == &**SIG_T)
+                {
                     continue;
                 }
                 sigs.push(Arc::from(Signal {
-                    type_: Arc::new(t.to_string()),
-                    name: Arc::new(n.to_string()),
-                    quality: if *q == QUAL_NORMAL { None } else { Some(q) },
+                    type_: Arc::clone(&type_),
+                    name: Arc::clone(&name),
+                    quality: Some(Arc::clone(&q)),
                 }));
             }
             sigs
@@ -54,7 +69,7 @@ pub fn get_signals_with_quality(args: &crate::models::BlueprintArgs) -> Vec<Arc<
         SignalSorting::Compression => signals.sort_by_key(|s| s.name.len()),
         SignalSorting::Json => signals.sort_by_key(|s| {
             // Sort by total length of the type + name + quality (actual smallest JSON)
-            s.type_.len() + s.name.len() + s.quality.as_ref().unwrap_or(&"").len()
+            s.type_.len() + s.name.len() + s.quality.as_ref().map_or(0, |q| q.len())
         }),
         _ => {}
     }

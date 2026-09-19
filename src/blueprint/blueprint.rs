@@ -1,9 +1,9 @@
 use crate::blueprint::{
-    combinator::generate_combinators, lamp::generate_lamps, models::*,
+    combinator::generate_combinators, constants::*, lamp::generate_lamps, models::*,
     signals::get_signals_with_quality, substation::generate_substations, timer::generate_timer,
     util::*,
 };
-use crate::constants::*;
+
 use crate::image_processing::FrameData;
 use crate::macros::log;
 use std::{collections::HashSet, io, sync::Arc};
@@ -20,7 +20,7 @@ pub struct BlueprintGenerator<'a> {
     full_height: u32,
     full_width: u32,
     group_data_combs: Vec<Vec<Entity>>,
-    max_lamp_cols_per_grp: u32,
+    max_cols_per_grp: u32,
     max_comb_rows_per_grp: u32,
     n_buf_frames: usize,
     n_frames_per_chunk: usize,
@@ -75,7 +75,9 @@ impl<'a> BlueprintGenerator<'a> {
             1
         }) as usize;
         let (full_width, full_height) = frame_data.dimensions();
-        let max_lamp_cols_per_grp = (signals.len() as u32 / full_height).min(full_width);
+        let max_lamp_cols_per_grp = (signals.len() as u32 / full_height)
+            .min(full_width)
+            .min(args.max_group_size.unwrap_or(0u32.wrapping_sub(1)));
         if max_lamp_cols_per_grp < 1 {
             return Err(JsValue::from_str(
                 "Not enough signals for even one column of lamps!",
@@ -86,7 +88,6 @@ impl<'a> BlueprintGenerator<'a> {
             .div_ceil(max_lamp_cols_per_grp / 2)
             .div_ceil(frames_per_cb);
 
-        log!("n_signals: {}", signals.len());
         log!("n_groups: {n_groups}, max_lamp_cols_per_grp: {max_lamp_cols_per_grp}, max_comb_rows_per_grp: {max_comb_rows_per_grp}");
 
         Ok(Self {
@@ -103,7 +104,7 @@ impl<'a> BlueprintGenerator<'a> {
             full_width,
             group_data_combs: Vec::new(),
             max_comb_rows_per_grp,
-            max_lamp_cols_per_grp,
+            max_cols_per_grp: max_lamp_cols_per_grp,
             n_buf_frames,
             n_frames_per_chunk: if n_buf_frames > 1 { 1 } else { 0 },
             n_groups,
@@ -134,15 +135,15 @@ impl<'a> BlueprintGenerator<'a> {
             BlueprintState::Start => {
                 write_to(&mut writer, b"{\"blueprint\":{")?;
                 let bp = BlueprintInner {
-                    icons: vec![Icon {
-                        signal: Signal::new_virtual(DECIDER_COMB),
+                    icons: Some(vec![Icon {
+                        signal: Signal::new_virtual(Arc::clone(&DEC_CB)),
                         index: 1,
-                    }],
-                    item: BLUEPRINT,
-                    label: self.args.name.clone(),
+                    }]),
+                    item: BLUEPRINT.to_string(),
+                    label: Some(self.args.name.clone()),
                     version: BLUEPRINT_VERSION,
-                    entities: Vec::new(), // don't serialize
-                    wires: Vec::new(),    // don't serialize
+                    entities: Vec::new(),    // don't serialize
+                    wires: Some(Vec::new()), // don't serialize
                 };
                 write_json_trimmed_to(&mut writer, &bp)?;
                 self.state = BlueprintState::Entities;
@@ -203,8 +204,8 @@ impl<'a> BlueprintGenerator<'a> {
         let mut prev_top_right_lamp_ent_n: Option<u32> = None;
 
         for group_i in 0..self.n_groups {
-            let grp_left = group_i * self.max_lamp_cols_per_grp;
-            let grp_width = (self.max_lamp_cols_per_grp).min(self.full_width - grp_left);
+            let grp_left = group_i * self.max_cols_per_grp;
+            let grp_width = (self.max_cols_per_grp).min(self.full_width - grp_left);
             let (mut cb_in_ent_n, mut cb_out_ent_n) = (0, 0);
 
             #[allow(unused_variables)]
@@ -226,15 +227,11 @@ impl<'a> BlueprintGenerator<'a> {
                         self.n_scaled_frames.div_ceil(self.frames_per_cb),
                         &substation_occupied_y,
                         ent_data.next_ent_n,
-                        grp_left as f64 + 0.5,
-                        match gray_bits {
-                            1 | 4 => -5.0,
-                            8 => -4.0,
-                            _ => -3.0,
-                        } + if self.use_delta_comp { -2.0 } else { 0.0 },
+                        (grp_left as f64 + 0.5, -3.0),
                         self.max_comb_rows_per_grp,
+                        self.max_cols_per_grp,
                         args,
-                    );
+                    )?;
                 ent_data.next_ent_n = new_base_ent_n;
                 if group_i == 0 {
                     ent_data.wires.push([3, WIRE_OUT_R, in_ent_n, WIRE_R]); // Connect timer
@@ -279,34 +276,25 @@ impl<'a> BlueprintGenerator<'a> {
         let frames_per_cb = self.frames_per_cb;
         let (full_width, full_height) = (self.full_width, self.full_height);
         let gray_bits = self.args.grayscale_bits;
-        let max_cols_per_grp = self.max_lamp_cols_per_grp;
+        let max_cols_per_grp = self.max_cols_per_grp;
         let (n_buf_frames, n_frames_per_chunk) = (self.n_buf_frames, self.n_frames_per_chunk);
         let n_groups = self.n_groups;
         let ticks_per_frame = self.ticks_per_frame;
         let use_delta_comp = self.use_delta_comp;
         let ticks_per_grp = ticks_per_frame * frames_per_cb;
 
-        log!("Populate");
-
         let mk_cb = |start: u32, end: u32, outputs: Vec<CombinatorOutput>| {
             ControlBehavior::from_decider_conditions(DeciderConditions {
-                conditions: vec![
-                    Condition {
-                        first_signal: Signal::new_virtual(SIG_T),
-                        constant: start as i32,
-                        comparator: COMP_GE,
-                        compare_type: None,
-                        first_signal_networks: None,
-                    },
-                    Condition {
-                        first_signal: Signal::new_virtual(SIG_T),
-                        constant: end as i32,
-                        comparator: COMP_LT,
-                        compare_type: Some(COMP_AND),
-                        first_signal_networks: None,
-                    },
-                ],
-                outputs,
+                conditions: Some(vec![
+                    Condition::new(
+                        Signal::new_virtual(Arc::clone(&SIG_T)),
+                        start as i32,
+                        COMP_GE,
+                    ),
+                    Condition::new(Signal::new_virtual(Arc::clone(&SIG_T)), end as i32, COMP_LT)
+                        .with_compare_type(COMP_AND),
+                ]),
+                outputs: Some(outputs),
             })
         };
         let mut output_ents: Vec<Entity> = Vec::with_capacity(ENCODE_CHUNK_SIZE);

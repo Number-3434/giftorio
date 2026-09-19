@@ -1,5 +1,6 @@
 mod blueprint;
 mod combinator;
+mod constants;
 pub mod encoder;
 mod lamp;
 mod macros;
