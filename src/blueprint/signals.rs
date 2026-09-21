@@ -1,4 +1,4 @@
-use crate::blueprint::{constants::*, models::Signal};
+use crate::blueprint::{constants::*, models::*};
 use crate::models::SignalSorting;
 use serde_json::Value;
 use std::sync::Arc;
@@ -14,7 +14,7 @@ use std::sync::Arc;
 ///
 /// A new vector of signal JSON objects with added quality attributes.
 pub fn get_signals_with_quality<'a>(args: &crate::models::BlueprintArgs) -> Vec<Arc<Signal>> {
-    let quals: Vec<Arc<str>> = if args.use_dlc {
+    let quals: Vec<Arc<Quality>> = if args.use_dlc {
         vec![
             Arc::clone(&QUAL_NORMAL),
             Arc::clone(&QUAL_UNCOMMON),
@@ -69,7 +69,17 @@ pub fn get_signals_with_quality<'a>(args: &crate::models::BlueprintArgs) -> Vec<
         SignalSorting::Compression => signals.sort_by_key(|s| s.name.len()),
         SignalSorting::Json => signals.sort_by_key(|s| {
             // Sort by total length of the type + name + quality (actual smallest JSON)
-            s.type_.len() + s.name.len() + s.quality.as_ref().map_or(0, |q| q.len())
+            s.quality.as_ref().map_or(0, |q| match q.as_ref() {
+                Quality::Normal => -1 * ",'quality':''".len() as i64,
+                _ => q.to_string().len() as i64,
+            }) + s.name.len() as i64
+                + s.type_.len() as i64
+                + if s.type_.as_ref() == "item" {
+                    // type defaults to "item" if not specified
+                    -1 * ",'type':''".len() as i64
+                } else {
+                    s.type_.len() as i64
+                }
         }),
         _ => {}
     }

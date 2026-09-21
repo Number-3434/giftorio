@@ -131,7 +131,7 @@ impl Iterator for FrameData<'_> {
             if self.curr_frame_idx % 1 == 0 {
                 set_progress(
                     0.00,
-                    0.67,
+                    1.00,
                     self.curr_frame_idx as f64 / self.in_n_frames as f64,
                     &format!(
                         "Streaming frame {} /{} ({})",

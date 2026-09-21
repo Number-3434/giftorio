@@ -1,12 +1,11 @@
 use crate::blueprint::{
     combinator::generate_combinators, constants::*, lamp::generate_lamps, models::*,
-    signals::get_signals_with_quality, substation::generate_substations, timer::generate_timer,
-    util::*,
+    signals::get_signals_with_quality, substation::*, timer::generate_timer, util::*,
 };
-
 use crate::image_processing::FrameData;
 use crate::macros::log;
-use std::{collections::HashSet, io, sync::Arc};
+use glam::DVec2;
+use std::{io, sync::Arc};
 use wasm_bindgen::JsValue;
 
 const ENCODE_CHUNK_SIZE: usize = 100;
@@ -21,7 +20,6 @@ pub struct BlueprintGenerator<'a> {
     full_width: u32,
     group_data_combs: Vec<Vec<Entity>>,
     max_cols_per_grp: u32,
-    max_comb_rows_per_grp: u32,
     n_buf_frames: usize,
     n_frames_per_chunk: usize,
     n_groups: u32,
@@ -75,20 +73,16 @@ impl<'a> BlueprintGenerator<'a> {
             1
         }) as usize;
         let (full_width, full_height) = frame_data.dimensions();
-        let max_lamp_cols_per_grp = (signals.len() as u32 / full_height)
-            .min(full_width)
-            .min(args.max_group_size.unwrap_or(0u32.wrapping_sub(1)));
+        let max_lamp_cols_per_grp =
+            (signals.len() as u32 / full_height).min(args.max_group_size.unwrap_or(full_width));
         if max_lamp_cols_per_grp < 1 {
             return Err(JsValue::from_str(
                 "Not enough signals for even one column of lamps!",
             ));
         }
         let n_groups = full_width.div_ceil(max_lamp_cols_per_grp);
-        let max_comb_rows_per_grp = n_scaled_frames
-            .div_ceil(max_lamp_cols_per_grp / 2)
-            .div_ceil(frames_per_cb);
 
-        log!("n_groups: {n_groups}, max_lamp_cols_per_grp: {max_lamp_cols_per_grp}, max_comb_rows_per_grp: {max_comb_rows_per_grp}");
+        log!("dim: ({full_width}, {full_height}, n_groups: {n_groups}, max_lamp_cols_per_grp: {max_lamp_cols_per_grp}");
 
         Ok(Self {
             args,
@@ -103,7 +97,6 @@ impl<'a> BlueprintGenerator<'a> {
             full_height,
             full_width,
             group_data_combs: Vec::new(),
-            max_comb_rows_per_grp,
             max_cols_per_grp: max_lamp_cols_per_grp,
             n_buf_frames,
             n_frames_per_chunk: if n_buf_frames > 1 { 1 } else { 0 },
@@ -169,38 +162,24 @@ impl<'a> BlueprintGenerator<'a> {
         let frame_data = &mut self.frame_data;
         let signals = &mut self.signals;
         let ent_data = &mut self.entity_data;
-        let gray_bits = self.args.grayscale_bits;
-        let occupied_cells: HashSet<(i32, i32)>;
         let stop = frame_data.total_frames() * self.ticks_per_frame;
         let should_generate_cbs = args.mode != Mode::LampGrid;
 
         if should_generate_cbs {
             let (ents, wires) =
                 generate_timer(stop, self.ticks_per_frame, self.frames_per_cb, &args);
-
             ent_data.next_ent_n = ents.iter().map(|e| e.entity_number).max().unwrap_or(0);
             ent_data.next_ent_n += 1;
             ent_data.ents.extend(ents);
             ent_data.wires.extend(wires);
         }
+        let mut occupied =
+            SubstationOccupied::new(DVec2::new(1.0, -1.0), args.substation_quality.clone());
 
-        let (ents, wires, cells, new_next_ent_n) = generate_substations(
-            (self.full_width, self.full_height),
-            self.max_comb_rows_per_grp
-                + match gray_bits {
-                    1 | 4 => 2,
-                    8 => 1,
-                    _ => 0,
-                },
-            ent_data.next_ent_n,
-            &args,
-        );
-        occupied_cells = cells;
-        ent_data.next_ent_n = new_next_ent_n;
-        ent_data.ents.extend(ents);
-        ent_data.wires.extend(wires);
-
-        let substation_occupied_y: HashSet<i32> = occupied_cells.iter().map(|(_, y)| *y).collect();
+        // occupied_cells = cells;
+        // ent_data.next_ent_n = new_next_ent_n;
+        // ent_data.ents.extend(ents);
+        // ent_data.wires.extend(wires);
         let mut prev_top_right_lamp_ent_n: Option<u32> = None;
 
         for group_i in 0..self.n_groups {
@@ -213,9 +192,9 @@ impl<'a> BlueprintGenerator<'a> {
                 generate_lamps(
                     &signals,
                     (grp_width, self.full_height),
-                    &occupied_cells,
+                    &mut occupied,
                     ent_data.next_ent_n,
-                    (grp_left as i32, 0),
+                    DVec2::new(grp_left as f64, 0.0),
                     &args,
                 );
             ent_data.next_ent_n = new_next_ent_n;
@@ -225,10 +204,9 @@ impl<'a> BlueprintGenerator<'a> {
                 let (other_ents, data_combs, wires, (in_ent_n, out_ent_n, new_base_ent_n)) =
                     generate_combinators(
                         self.n_scaled_frames.div_ceil(self.frames_per_cb),
-                        &substation_occupied_y,
+                        &mut occupied,
                         ent_data.next_ent_n,
-                        (grp_left as f64 + 0.5, -3.0),
-                        self.max_comb_rows_per_grp,
+                        DVec2::new(grp_left as f64, -2.0),
                         self.max_cols_per_grp,
                         args,
                     )?;
@@ -263,6 +241,10 @@ impl<'a> BlueprintGenerator<'a> {
 
             ent_data.wires.extend(grp_lamp_wires);
         }
+
+        let (ents, wires, _) = generate_substations(&mut occupied, ent_data.next_ent_n);
+        ent_data.ents.extend(ents);
+        ent_data.wires.extend(wires);
         ent_data.ents.sort_by_key(|e| e.entity_number);
         self.state = BlueprintState::Data;
         Ok(())

@@ -1,5 +1,54 @@
-use crate::blueprint::{constants::*, models::*};
-use std::{collections::HashSet, sync::Arc};
+use crate::blueprint::{constants::*, macros::*, models::*};
+use glam::{dvec2, DVec2};
+use std::sync::Arc;
+
+/// Tracks cells occupied by substations.
+pub struct SubstationOccupied {
+    pub start_pos: DVec2,
+    quality: Option<Arc<Quality>>,
+    requests: Vec<DVec2>,
+}
+impl SubstationOccupied {
+    pub fn new(start_pos: DVec2, quality: Option<Arc<Quality>>) -> Self {
+        Self {
+            start_pos,
+            requests: Vec::new(),
+            quality,
+        }
+    }
+
+    pub fn coverage(&self) -> f64 {
+        2.0 * self.quality.as_ref().map_or(0, |q| match q.as_ref() {
+            Quality::Normal => 9,
+            Quality::Uncommon => 10,
+            Quality::Rare => 11,
+            Quality::Epic => 12,
+            Quality::Legendary => 14,
+            _ => 0,
+        }) as f64
+    }
+
+    /// Requests for a substation to be placed to power the given point.
+    ///
+    /// # Returns
+    ///
+    /// A `bool` indicating whether the substation would NOT occupy the given point.
+    pub fn request(&mut self, mut point: DVec2) -> bool {
+        if self.coverage() == 0.0 {
+            return true;
+        }
+        point -= self.start_pos;
+
+        let center = (point / self.coverage()).round() * self.coverage();
+        let delta = (point - center).abs();
+
+        if !self.requests.contains(&center) {
+            self.requests.push(center);
+        }
+
+        delta.x >= 1.0 || delta.y >= 1.0
+    }
+}
 
 /// Generates substation entities and wires for powering the blueprint.
 ///
@@ -14,63 +63,42 @@ use std::{collections::HashSet, sync::Arc};
 ///
 /// A tuple with substation entities, their wires, occupied grid cells, and the next entity number.
 pub fn generate_substations(
-    lamp_dim: (u32, u32),
-    n_frames: u32,
+    occupied: &mut SubstationOccupied,
     base_ent_n: u32,
-    args: &BlueprintArgs,
-) -> (Vec<Entity>, Vec<Wire>, HashSet<(i32, i32)>, u32) {
-    if args.substation_quality == SubstationQuality::None {
-        return (Vec::new(), Vec::new(), HashSet::new(), base_ent_n);
+) -> (Vec<Entity>, Vec<Wire>, u32) {
+    let mut subs: Vec<Entity> = Vec::new();
+    let mut wires: Vec<[u32; 4]> = Vec::new();
+    let mut curr_ent_n: u32 = base_ent_n;
+    let cov = occupied.coverage();
+
+    if cov == 0.0 {
+        return (subs, wires, base_ent_n);
     }
-    let mut ents = Vec::new();
-    let mut wires = Vec::new();
-    let mut occupied = HashSet::new();
-    let mut curr_ent_n = base_ent_n;
 
-    const SUB_WIDTH: u32 = 2;
-    let half_cov: u32 = match args.substation_quality {
-        SubstationQuality::Normal => 9,
-        SubstationQuality::Uncommon => 10,
-        SubstationQuality::Rare => 11,
-        SubstationQuality::Epic => 12,
-        SubstationQuality::Legendary => 14,
-        _ => unreachable!(),
-    };
-    let cov: u32 = half_cov * 2;
+    // f64 doesn't implement Ord, so we use total_cmp (which also sorts NaN)
+    occupied.requests.sort_by(|a, b| a.y.total_cmp(&b.y)); // Group by sorted y
+    occupied.requests.sort_by(|a, b| a.x.total_cmp(&b.x)); // Preserves previous order
 
-    // Frame combs don't go on same y as subs
-    let comb_cov = cov.strict_sub(2);
+    let get_tag = |pos: DVec2| format!("sub-({},{})", pos.x, pos.y);
 
-    // Coverage for combinators.
-    let n_comb_subs = ((n_frames + comb_cov).strict_sub(half_cov)) / comb_cov;
-    let cov_margin = cov / 2 - SUB_WIDTH / 2; // they're both multiples of 2
-    let n_subs_width = 1 + (lamp_dim.0 - cov_margin).div_ceil(cov);
-    let n_subs_height = 1 + (lamp_dim.1 - cov_margin).div_ceil(cov) + n_comb_subs;
+    for req in &occupied.requests {
+        let pos = occupied.start_pos + req;
+        let tag = get_tag(pos);
+        let mut ent = Entity::new(curr_ent_n, Arc::clone(&SUBSTATION), pos);
+        ent.quality = occupied.quality.clone();
+        subs.push(ent.with_tag(&tag));
 
-    let start_x = -1;
-    let start_y = -1 - (n_comb_subs * cov) as i32;
-
-    for i in 0..n_subs_height as i32 {
-        for j in 0..n_subs_width as i32 {
-            let (x, y) = (start_x + j * cov as i32, start_y + i * cov as i32);
-            let mut ent = Entity::new(curr_ent_n, Arc::clone(&SUBSTATION), (x as f64, y as f64));
-            ent.quality = Some(args.substation_quality.to_string());
-            ents.push(ent);
-
-            // Mark occupied cells.
-            occupied.insert((x - 1, y - 1));
-            occupied.insert((x - 1, y));
-            occupied.insert((x, y - 1));
-            occupied.insert((x, y));
-
-            if i > 0 {
-                wires.push([curr_ent_n, WIRE_C, curr_ent_n - n_subs_width, WIRE_C]);
+        // Connect wires to substations above / substations to the left
+        for prev_pos in [pos - dvec2(cov, 0.0), pos - dvec2(0.0, cov)] {
+            if let Some(prev) = subs.iter().find(|e| e.position.abs_diff_eq(prev_pos, 0.01)) {
+                wires.push(mkwires!(C subs; IN get_tag(prev.position.with_y(pos.y)) => IN tag));
             }
-            if j > 0 {
-                wires.push([curr_ent_n, WIRE_C, curr_ent_n - 1, WIRE_C]);
+            if let Some(prev) = subs.iter().find(|e| e.position.abs_diff_eq(prev_pos, 0.01)) {
+                wires.push(mkwires!(C subs; IN get_tag(prev.position.with_x(pos.x)) => IN tag));
             }
-            curr_ent_n += 1;
         }
+        curr_ent_n += 1;
     }
-    return (ents, wires, occupied, curr_ent_n);
+
+    return (subs, wires, curr_ent_n);
 }

@@ -576,7 +576,7 @@ function App({ worker }: { worker: Worker }) {
             signalCompression,
             signalSorting:
               formData.signalSorting === "auto" ? (formData.outputFormat === "json" ? "json" : "compression") : `${formData.signalSorting}`,
-            substationQuality: `${formData.substationQuality}`,
+            substationQuality: formData.substationQuality === "none" ? null : `${formData.substationQuality}`,
             targetFps: +formData.targetFps,
             useDLC: !!formData.useDLC,
             useGreenLampWires: !!(formData.wireColor === "green"),

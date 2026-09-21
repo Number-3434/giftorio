@@ -1,5 +1,7 @@
 use std::sync::{Arc, LazyLock};
 
+use crate::blueprint::models::Quality;
+
 /// Timer entity positions.
 pub const TIMER1_POS: (f64, f64) = (-2.5, -3.0);
 pub const TIMER2_POS: (f64, f64) = (-1.5, -3.0);
@@ -20,31 +22,32 @@ pub const BLUEPRINT_VERSION: u64 = 562949955518464;
 /// Threshold used for binary grayscale conversion. (out of 256)
 pub const GRAYSCALE_THRESH: u8 = 128;
 
-/// Quality constants.
-pub const QUAL_NORMAL: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("normal"));
-pub const QUAL_UNCOMMON: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("uncommon"));
-pub const QUAL_RARE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("rare"));
-pub const QUAL_EPIC: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("epic"));
-pub const QUAL_LEGENDARY: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("legendary"));
-pub const QUAL_UNKNOWN: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("quality-unknown"));
-pub const QUAL_NONE: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("none"));
+macro_rules! lazy_const {
+    ($name:ident: $type:ident = $value:expr) => {
+        pub const $name: LazyLock<Arc<$type>> = LazyLock::new(|| Arc::from($value));
+    };
+}
 
-/// Entity types
-pub const DEC_CB: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("decider-combinator"));
-pub const ARI_CB: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("arithmetic-combinator"));
-pub const CONSTANT_COMB: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("constant-combinator"));
-pub const SUBSTATION: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("substation"));
-pub const LAMP: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("small-lamp"));
-pub const BLUEPRINT: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("blueprint"));
+lazy_const!(QUAL_NORMAL: Quality = Quality::Normal);
+lazy_const!(QUAL_UNCOMMON: Quality = Quality::Uncommon);
+lazy_const!(QUAL_RARE: Quality = Quality::Rare);
+lazy_const!(QUAL_EPIC: Quality = Quality::Epic);
+lazy_const!(QUAL_LEGENDARY: Quality = Quality::Legendary);
+lazy_const!(QUAL_UNKNOWN: Quality = Quality::Unknown);
 
-/// Signal types
-pub const SIG_TYPE_VIRTUAL: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("virtual"));
+lazy_const!(DEC_CB: str = "decider-combinator");
+lazy_const!(ARI_CB: str = "arithmetic-combinator");
+lazy_const!(CONSTANT_COMB: str = "constant-combinator");
+lazy_const!(SUBSTATION: str = "substation");
+lazy_const!(LAMP: str = "small-lamp");
+lazy_const!(BLUEPRINT: str = "blueprint");
 
-/// Signals
-pub const SIG_F: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("signal-F"));
-pub const SIG_S: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("signal-S"));
-pub const SIG_T: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("signal-T"));
-pub const SIG_EACH: LazyLock<Arc<str>> = LazyLock::new(|| Arc::from("signal-each"));
+lazy_const!(SIG_TYPE_VIRTUAL: str = "virtual");
+
+lazy_const!(SIG_F: str = "signal-F");
+lazy_const!(SIG_S: str = "signal-S");
+lazy_const!(SIG_T: str = "signal-T");
+lazy_const!(SIG_EACH: str = "signal-each");
 
 /// Comparators
 pub const COMP_GT: &'static str = ">";

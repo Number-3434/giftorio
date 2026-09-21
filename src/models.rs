@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{fmt::Display, sync::Arc};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BlueprintArgs {
@@ -48,41 +48,13 @@ pub struct BlueprintArgs {
     pub signal_sorting: SignalSorting,
 
     #[serde(rename = "substationQuality")]
-    pub substation_quality: SubstationQuality,
+    pub substation_quality: Option<Arc<crate::blueprint::models::Quality>>,
 
     #[serde(rename = "targetFps")]
     pub target_fps: u32,
 
     #[serde(rename = "useDLC")]
     pub use_dlc: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub enum SubstationQuality {
-    #[serde(rename = "none")]
-    None,
-    #[serde(rename = "normal")]
-    Normal,
-    #[serde(rename = "uncommon")]
-    Uncommon,
-    #[serde(rename = "rare")]
-    Rare,
-    #[serde(rename = "epic")]
-    Epic,
-    #[serde(rename = "legendary")]
-    Legendary,
-}
-impl Display for SubstationQuality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::None => write!(f, "none"),
-            Self::Normal => write!(f, "normal"),
-            Self::Uncommon => write!(f, "uncommon"),
-            Self::Rare => write!(f, "rare"),
-            Self::Epic => write!(f, "epic"),
-            Self::Legendary => write!(f, "legendary"),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -143,7 +115,7 @@ pub enum ResamplingFilter {
     Triangle,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Copy, Serialize, Deserialize, Clone, PartialEq)]
 pub enum SignalCompression {
     #[serde(rename = "temporal")]
     Temporal { window: u32 },
