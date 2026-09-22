@@ -47,8 +47,7 @@ pub fn generate_lamps(
 
         for c in 0..grid_dim.0 {
             curr_ent_n = get_ent_num(r, c);
-
-            let pos = base_pos + DVec2::new(c as f64, r as f64);
+            let pos = base_pos + dvec2(c as f64, r as f64);
             if !occupied.request(pos) {
                 continue;
             }
@@ -75,7 +74,9 @@ pub fn generate_lamps(
             if r == 0 && c > 0 {
                 if let Some(prev) = prev_ent_n {
                     wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]); // Always a data wire here
-                    wires.push([curr_ent_n, WIRE_R, prev, WIRE_R]); // Timing signals wire
+                    if args.mode != Mode::LampGrid {
+                        wires.push([curr_ent_n, WIRE_R, prev, WIRE_R]); // Timing signals wire
+                    }
                 }
                 top_right_lamp = curr_ent_n;
             } else {
@@ -110,7 +111,7 @@ pub fn generate_lamps(
         // This occurs if a substation occupies any tiles on the rightmost column.
         if !did_connect {
             for c in (0..grid_dim.0).rev() {
-                let pos = base_pos + DVec2::new(c as f64, r as f64);
+                let pos = base_pos + dvec2(c as f64, r as f64);
                 if !occupied.request(pos) {
                     continue;
                 }

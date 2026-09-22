@@ -25,9 +25,9 @@
     "streamsaver": "^2.0.6"
   },
   "prettier": {
-    "useTabs": false,
+    "useTabs": true,
     "arrowParens": "always",
     "printWidth": 140,
-    "tabWidth": 2
+    "tabWidth": 4
   }
 }

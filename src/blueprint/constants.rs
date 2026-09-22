@@ -1,6 +1,7 @@
-use std::sync::{Arc, LazyLock};
+#![allow(dead_code)]
 
 use crate::blueprint::models::Quality;
+use crate::macros::lazy_const;
 
 /// Timer entity positions.
 pub const TIMER1_POS: (f64, f64) = (-2.5, -3.0);
@@ -22,32 +23,25 @@ pub const BLUEPRINT_VERSION: u64 = 562949955518464;
 /// Threshold used for binary grayscale conversion. (out of 256)
 pub const GRAYSCALE_THRESH: u8 = 128;
 
-macro_rules! lazy_const {
-    ($name:ident: $type:ident = $value:expr) => {
-        pub const $name: LazyLock<Arc<$type>> = LazyLock::new(|| Arc::from($value));
-    };
-}
+lazy_const!(pub QUAL_NORMAL     : Quality = Quality :: Normal      );
+lazy_const!(pub QUAL_UNCOMMON   : Quality = Quality :: Uncommon    );
+lazy_const!(pub QUAL_RARE       : Quality = Quality :: Rare        );
+lazy_const!(pub QUAL_EPIC       : Quality = Quality :: Epic        );
+lazy_const!(pub QUAL_LEGENDARY  : Quality = Quality :: Legendary   );
+lazy_const!(pub QUAL_UNKNOWN    : Quality = Quality :: Unknown     );
 
-lazy_const!(QUAL_NORMAL: Quality = Quality::Normal);
-lazy_const!(QUAL_UNCOMMON: Quality = Quality::Uncommon);
-lazy_const!(QUAL_RARE: Quality = Quality::Rare);
-lazy_const!(QUAL_EPIC: Quality = Quality::Epic);
-lazy_const!(QUAL_LEGENDARY: Quality = Quality::Legendary);
-lazy_const!(QUAL_UNKNOWN: Quality = Quality::Unknown);
+lazy_const!(pub DEC_CB          : str     = "decider-combinator"   );
+lazy_const!(pub ARI_CB          : str     = "arithmetic-combinator");
+lazy_const!(pub CONSTANT_COMB   : str     = "constant-combinator"  );
+lazy_const!(pub SUBSTATION      : str     = "substation"           );
+lazy_const!(pub LAMP            : str     = "small-lamp"           );
+lazy_const!(pub BLUEPRINT       : str     = "blueprint"            );
 
-lazy_const!(DEC_CB: str = "decider-combinator");
-lazy_const!(ARI_CB: str = "arithmetic-combinator");
-lazy_const!(CONSTANT_COMB: str = "constant-combinator");
-lazy_const!(SUBSTATION: str = "substation");
-lazy_const!(LAMP: str = "small-lamp");
-lazy_const!(BLUEPRINT: str = "blueprint");
-
-lazy_const!(SIG_TYPE_VIRTUAL: str = "virtual");
-
-lazy_const!(SIG_F: str = "signal-F");
-lazy_const!(SIG_S: str = "signal-S");
-lazy_const!(SIG_T: str = "signal-T");
-lazy_const!(SIG_EACH: str = "signal-each");
+lazy_const!(pub SIG_TYPE_VIRTUAL: str     = "virtual"              );
+lazy_const!(pub SIG_F           : str     = "signal-F"             );
+lazy_const!(pub SIG_S           : str     = "signal-S"             );
+lazy_const!(pub SIG_T           : str     = "signal-T"             );
+lazy_const!(pub SIG_EACH        : str     = "signal-each"          );
 
 /// Comparators
 pub const COMP_GT: &'static str = ">";

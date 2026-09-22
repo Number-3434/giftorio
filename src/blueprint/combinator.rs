@@ -1,7 +1,5 @@
-use crate::{
-    blueprint::{constants::*, macros::*, models::*, substation::*, util::*},
-    macros::log,
-};
+use crate::blueprint::{constants::*, macros::*, models::*, substation::*, util::*};
+use crate::models::ImageRotation::*;
 use glam::{dvec2, DVec2, IVec2};
 use std::{collections::HashMap, io::Read, sync::Arc};
 use wasm_bindgen::*;
@@ -32,6 +30,8 @@ pub fn generate_combinators(
     max_cols_per_grp: u32,
     args: &BlueprintArgs,
 ) -> Result<(Vec<Entity>, Vec<Entity>, Vec<Wire>, (u32, u32, u32)), JsValue> {
+    // Positions for combinators, for different widths.
+    // TODO: Don't recalculate this for every group
     let mut comb_pos_data =
         load_combinator_positions_json(include_str!("../data/combinator-positions.json"))?;
 
@@ -43,7 +43,7 @@ pub fn generate_combinators(
     // Sort by height, descending
     comb_pos_data.sort_by_key(|d| d.dim.x as i32);
 
-    for d in comb_pos_data.iter() {
+    for d in &comb_pos_data {
         if d.dim.x <= max_cols_per_grp as f64
             && Some(d.compression) == args.signal_compression
             && d.grayscale_bits.contains(&args.grayscale_bits)
@@ -51,7 +51,6 @@ pub fn generate_combinators(
             best_pos_data = Some(d);
         }
     }
-
     if let Some(d) = best_pos_data {
         for en in d.blueprint.blueprint.entities.iter() {
             if let Some(tag) = en.player_description.as_ref() {
@@ -75,6 +74,8 @@ pub fn generate_combinators(
 
     base_pos.y -= height; // Set offset for combinators
 
+    // Finds the position for the combinator with the given tag, based off the blueprint string
+    // we decoded earlier
     let get_pos = |tag: &str| {
         let mut pos = pos_dict.get(tag).unwrap().position + base_offset;
         pos.y -= height;
@@ -177,7 +178,6 @@ pub fn generate_combinators(
     } else {
         dvec2(1.0, -0.5) // Base position for horizontal layout
     };
-    let mut did_connect = false;
     let mut offset: DVec2;
     let mut curr_pos: DVec2;
     let mut grid_pos = IVec2::ZERO; // Current grid position (not absolute, multiplied by combinator's bounding box)
@@ -189,75 +189,51 @@ pub fn generate_combinators(
             offset = cb_midpoint * DVec2::from(1 + 2 * grid_pos); // Set target midpoint
             curr_pos = base_pos + offset;
 
-            log!("curr_pos: {curr_pos}, offset: {offset}, grid_pos: {grid_pos}");
+            let mut req = |pos: DVec2| occupied.request(pos);
 
             if offset.x + cb_midpoint.x > max_cols_per_grp as f64 {
                 grid_pos.x = 0;
                 grid_pos.y += 1;
-                did_connect = false;
-                continue;
             } else if {
                 use_compact_layout
-                    && (!occupied.request(curr_pos - dvec2(0.0, 0.5))
-                        || !occupied.request(curr_pos + dvec2(0.0, 0.5)))
-                    || (!occupied.request(curr_pos - dvec2(0.5, 0.0))
-                        || !occupied.request(curr_pos + dvec2(0.5, 0.0)))
+                    && (!req(curr_pos - dvec2(0.0, 0.5)) || !req(curr_pos + dvec2(0.0, 0.5)))
+                    || (!req(curr_pos - dvec2(0.5, 0.0)) || !req(curr_pos + dvec2(0.5, 0.0)))
             } {
                 grid_pos.x += 1;
-                continue;
             } else {
                 break;
             }
         }
-        let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), curr_pos).with_direction(DIR_R);
 
+        let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), curr_pos).with_direction(DIR_R);
         if chunk_i == 0 {
             en = en.with_tag("first data comb");
             if use_delta_comp {
-                wires.push([
-                    curr_ent_n,
-                    WIRE_OUT_G,
-                    entity_idx_by_tag!(other_ents, "memory comb").expect("No memory combinator!"),
-                    WIRE_G,
-                ]);
+                let ent_n = entity_idx_by_tag!(other_ents, "memory comb").expect("No memory comb!");
+                wires.push([curr_ent_n, WIRE_OUT_G, ent_n, WIRE_G]);
             } else if gray_bits > 0 {
-                wires.push([
-                    curr_ent_n,
-                    WIRE_OUT_G,
-                    entity_idx_by_tag!(other_ents, ">> comb").expect("No bitshift combinator!"),
-                    WIRE_G,
-                ]);
+                let ent_n = entity_idx_by_tag!(other_ents, ">> comb").expect("No >> comb!");
+                wires.push([curr_ent_n, WIRE_OUT_G, ent_n, WIRE_G]);
             }
         }
         data_cbs.push(en);
 
-        let mut connection_positions: Vec<DVec2> = Vec::new();
-        let prefer_horizontal = false;
+        let prefer_horizontal = true ^ matches!(args.image_rotation, Deg0 | Deg180);
+        let mut cands: Vec<usize> = Vec::new();
 
-        if prefer_horizontal {
-            // Always connect left combinator
-            connection_positions.push(curr_pos - dvec2(2.0 * cb_midpoint.x, 0.0));
-            if !did_connect || grid_pos.x == 0 {
-                // Only connect lower combinator if we're currently in the first column
-                connection_positions.push(curr_pos - dvec2(0.0, 2.0 * cb_midpoint.y));
-            }
-        } else {
-            // Always connect lower combinator
-            connection_positions.push(curr_pos - dvec2(0.0, 2.0 * cb_midpoint.y));
-            if !did_connect || grid_pos.y == 0 {
-                // Only connect left combinator if we're currently in the first row
-                connection_positions.push(curr_pos - dvec2(2.0 * cb_midpoint.x, 0.0));
+        if grid_pos.y > 0 && (!prefer_horizontal || grid_pos.x == 0) {
+            cands.push(grid_pos.x as usize); // Vertical connection
+        }
+        if grid_pos.x > 0 && (prefer_horizontal || grid_pos.y == 0) {
+            cands.push(grid_pos.x as usize - 1); // Horizontal connection
+        }
+        for i in cands {
+            if let Some(prev) = prev_ents_n[i] {
+                wires.push([prev, WIRE_R, curr_ent_n, WIRE_R]); // Timing signals wire
+                wires.push([prev, WIRE_OUT_G, curr_ent_n, WIRE_OUT_G]); // Lamp data wire
             }
         }
 
-        for pos in connection_positions {
-            // Find if a combinator does exist with the same position (within 0.01 units)
-            if let Some(prev) = data_cbs.iter().find(|c| c.position.abs_diff_eq(pos, 0.01)) {
-                wires.push([prev.entity_number, WIRE_R, curr_ent_n, WIRE_R]);
-                wires.push([prev.entity_number, WIRE_OUT_G, curr_ent_n, WIRE_OUT_G]);
-                did_connect = true;
-            }
-        }
         prev_ents_n[grid_pos.x as usize] = Some(curr_ent_n);
         curr_ent_n += 1;
         grid_pos.x += 1;

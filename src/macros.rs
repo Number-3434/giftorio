@@ -8,5 +8,17 @@ macro_rules! log {
     }};
 }
 
+macro_rules! lazy_const {
+    (pub $name:ident: $type:ident = $value:expr) => {
+        pub const $name: std::sync::LazyLock<std::sync::Arc<$type>> =
+            std::sync::LazyLock::new(|| std::sync::Arc::from($value));
+    };
+    ($name:ident: $type:ident = $value:expr) => {
+        const $name: std::sync::LazyLock<std::sync::Arc<$type>> =
+            std::sync::LazyLock::new(|| std::sync::Arc::from($value));
+    };
+}
+
+pub(crate) use lazy_const;
 #[allow(unused_imports)]
 pub(crate) use log;

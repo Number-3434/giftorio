@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 
 #[derive(Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct BlueprintBook {
     pub icons: Option<Vec<Icon>>,
     pub active_index: u32,
@@ -201,12 +202,6 @@ impl Entity {
         self
     }
 
-    fn is_none_or_normal(value: &Option<String>) -> bool {
-        match value {
-            None => true,
-            Some(s) => s == "normal",
-        }
-    }
     fn is_none_or_0(value: &Option<u32>) -> bool {
         match value {
             None | Some(0) => true,
@@ -341,28 +336,6 @@ impl Condition {
         }
     }
 
-    pub fn default() -> Self {
-        Self {
-            first_signal: None,
-            constant: None,
-            comparator: None,
-            compare_type: None,
-            first_signal_networks: None,
-        }
-    }
-
-    pub fn with_first_signal(mut self, signal: Signal) -> Self {
-        self.first_signal = Some(signal);
-        self
-    }
-    pub fn with_constant(mut self, constant: i32) -> Self {
-        self.constant = Some(constant);
-        self
-    }
-    pub fn with_comparator(mut self, comparator: &str) -> Self {
-        self.comparator = Some(comparator.to_owned());
-        self
-    }
     pub fn with_compare_type(mut self, compare_type: &str) -> Self {
         self.compare_type = Some(compare_type.to_owned());
         self

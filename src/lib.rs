@@ -26,29 +26,24 @@ mod streaming_writer;
 #[wasm_bindgen]
 pub async fn run_blueprint(
     options: JsValue,
-    image_data: &[u8],
+    image_data: &[u8], // note: may be empty
     send_chunk: &js_sys::Function<fn(js_sys::Uint8Array) -> js_sys::Promise>,
 ) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 
     let args: models::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
+    let mut frame_data: Option<image_processing::FrameData> = None;
 
     // Process the image to extract frames and determine the effective FPS.
-    let frame_data = image_processing::FrameData::new(image_data, args.clone())?;
+    if args.mode == models::Mode::Full {
+        frame_data = Some(image_processing::FrameData::new(image_data, &args)?);
+    }
     let mut encoder = blueprint::encoder::BlueprintEncoder::new_from_frame_data(frame_data, &args)?;
 
     while let Some(chunk) = encoder.next_chunk()? {
         let promise = send_chunk.call1(&JsValue::NULL, &js_sys::Uint8Array::from(&chunk[..]))?;
         wasm_bindgen_futures::JsFuture::from(js_sys::Promise::from(promise)).await?;
     }
-
     let obj = js_sys::Object::new();
-
-    js_sys::Reflect::set(
-        &obj,
-        &JsValue::from_str("label"),
-        &JsValue::from_str(&args.name.to_string()),
-    )?;
-
     Ok(JsValue::from(obj))
 }
