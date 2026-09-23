@@ -2,7 +2,7 @@ use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
 use crate::models::{BlueprintArgs, FlippedAxes, ImageRotation::*, ResamplingFilter};
 use crate::progress::set_progress;
-use glam::{dvec2, uvec2, DVec2, UVec2};
+use glam::{uvec2, DVec2, UVec2};
 use image::{imageops, AnimationDecoder, ImageDecoder};
 use std::{collections::VecDeque, io::Cursor, time::Duration};
 use wasm_bindgen::prelude::*;

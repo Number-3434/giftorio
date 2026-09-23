@@ -8,6 +8,7 @@ macro_rules! log {
     }};
 }
 
+/// Creates a constant value that is lazily evaluated once.
 macro_rules! lazy_const {
     (pub $name:ident: $type:ident = $value:expr) => {
         pub const $name: std::sync::LazyLock<std::sync::Arc<$type>> =

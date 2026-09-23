@@ -288,6 +288,8 @@ impl<'a> BlueprintGenerator<'a> {
     fn populate_data(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
         let info = self.frame_info.as_mut().unwrap();
 
+        log!("Populating data");
+
         let group_data_combs = &mut info.group_data_combs;
         let frame_data = &mut info.frame_data;
         let signals = &mut self.signals;
