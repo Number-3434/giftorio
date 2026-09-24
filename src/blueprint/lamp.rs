@@ -102,7 +102,7 @@ pub fn generate_lamps(
                 if c > 0 || grid_dim.x == 1 {
                     top_right_lamp_ent_n = curr_ent_n; // Handle case where there's only one column
                 }
-            } else if c == 0 {
+            } else {
                 if prefer_horizontal_wires {
                     if let Some(prev) = prev_ent_n {
                         wires.push([curr_ent_n, WIRE_G, prev, WIRE_G]); // horizontal data wire
