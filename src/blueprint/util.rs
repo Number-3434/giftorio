@@ -52,13 +52,13 @@ pub fn invert_wires(ents: &mut Vec<Entity>, wires: &mut Vec<Wire>) {
 ///
 /// A vector of CombinatorOutputs for the frame
 pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, JsValue> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let rgba = frame.to_rgba8();
-        Ok(unsafe { rgba_to_rgb_simd(rgba.as_raw()) })
-    }
+    // #[cfg(target_arch = "wasm32")]
+    // {
+    //     let rgba = frame.to_rgba8();
+    //     Ok(unsafe { rgba_to_rgb_simd(rgba.as_raw()) })
+    // }
 
-    #[cfg(not(target_arch = "wasm32"))] // scalar fallback
+    // #[cfg(not(target_arch = "wasm32"))] // scalar fallback
     {
         use crate::image_processing::rgb_to_int;
         let rgb = frame.to_rgb8();

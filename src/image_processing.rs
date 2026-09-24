@@ -1,17 +1,26 @@
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
+use crate::macros::lazy_const;
 use crate::models::{BlueprintArgs, FlippedAxes, ImageRotation::*, ResamplingFilter};
 use crate::progress::set_progress;
 use glam::{uvec2, DVec2, UVec2};
 use image::{imageops, AnimationDecoder, ImageDecoder};
 use std::{collections::VecDeque, io::Cursor, time::Duration};
 use wasm_bindgen::prelude::*;
+use web_sys::Performance;
+
+lazy_const!(PERF_OBJ: Performance = js_sys::Reflect::get(&js_sys::global(), &"performance".into()).unwrap().unchecked_into::<web_sys::Performance>());
+
+fn now_ms() -> f64 {
+    PERF_OBJ.now()
+}
 
 pub struct FrameData<'a> {
     args: &'a BlueprintArgs,
     buf: Vec<(image::Frame, u32)>,
     curr_frame_idx: u32,
     curr_n_ms: u32,
+    fps_timer: f64,
     frames: image::Frames<'a>,
     in_dim: UVec2,
     in_n_frames: u32,
@@ -26,7 +35,7 @@ impl FrameData<'_> {
     /// Returns the dimensions of the output frames.
     ///
     /// Note: This is truncated from the raw dimensions instead of rounded.
-    pub fn dimensions(&mut self) -> UVec2 {
+    pub fn dimensions(&self) -> UVec2 {
         let (w, h) = resize_dimensions(
             self.in_dim.x,
             self.in_dim.y,
@@ -74,6 +83,7 @@ impl<'a> FrameData<'a> {
             buf: Vec::new(),
             curr_frame_idx: 0,
             curr_n_ms: 0,
+            fps_timer: now_ms(),
             frames: frame_data.frames,
             in_dim,
             in_n_frames: n_frames,
@@ -89,6 +99,9 @@ impl Iterator for FrameData<'_> {
     type Item = Result<image::DynamicImage, JsValue>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.curr_frame_idx == 0 {
+            self.fps_timer = now_ms();
+        }
         loop {
             // Flush any remaining frames
             if let Some(frame) = self.output_frames.pop_front() {
@@ -98,8 +111,8 @@ impl Iterator for FrameData<'_> {
                     img = image::DynamicImage::ImageLuma8(img.to_luma8());
                 }
                 img = img.resize(
-                    (self.out_dim_raw.x).round() as u32,
-                    (self.out_dim_raw.y).round() as u32,
+                    self.out_dim_raw.x.round() as u32,
+                    self.out_dim_raw.y.round() as u32,
                     self.resize_filter,
                 ); // Use raw dims for max precision
                 img = match self.args.flipped_axes {
@@ -133,14 +146,13 @@ impl Iterator for FrameData<'_> {
                     1.00,
                     self.curr_frame_idx as f64 / self.in_n_frames as f64,
                     &format!(
-                        "Streaming frame {} /{} ({})",
+                        "Processing frame {} / {}  ({:.2} FPS)",
                         self.curr_frame_idx,
                         self.in_n_frames,
-                        format_duration(self.curr_n_ms as u64)
+                        1000.0 * self.curr_frame_idx as f64 / (now_ms() - self.fps_timer)
                     ),
                 );
             }
-
             let (ms, _) = frame.delay().numer_denom_ms();
             let delay = if ms == 0 { DEFAULT_FRAME_DELAY_MS } else { ms };
 

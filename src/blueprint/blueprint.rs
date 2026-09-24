@@ -276,19 +276,17 @@ impl<'a> BlueprintGenerator<'a> {
             write_json_trimmed_to(&mut writer, &grp_lamps)?;
             ent_data.wires.extend(grp_lamp_wires);
         }
-
         let (ents, wires, _) = generate_substations(&mut occupied, ent_data.next_ent_n);
         ent_data.ents.extend(ents);
         ent_data.wires.extend(wires);
         ent_data.ents.sort_by_key(|e| e.entity_number);
         self.state = BlueprintState::Data;
+
         Ok(())
     }
 
     fn populate_data(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
         let info = self.frame_info.as_mut().unwrap();
-
-        log!("Populating data");
 
         let group_data_combs = &mut info.group_data_combs;
         let frame_data = &mut info.frame_data;
@@ -320,8 +318,8 @@ impl<'a> BlueprintGenerator<'a> {
         let mut output_ents: Vec<Entity> = Vec::with_capacity(ENCODE_CHUNK_SIZE);
 
         loop {
-            let frame = &info.curr_frame;
             info.next_frame = frame_data.next().transpose()?;
+            let frame = &info.curr_frame;
             let is_last_frame = info.next_frame.is_none();
 
             for group_i in 0..n_groups as usize {
@@ -334,10 +332,6 @@ impl<'a> BlueprintGenerator<'a> {
 
                 let img = frame.crop_imm(grp_left, 0, grp_right - grp_left, self.dim.y);
                 let target_outputs_len = (img.width() * img.height()) as usize;
-
-                if use_delta_comp && state.sig_buf.len() == 0 {
-                    state.sig_buf.push(vec![0i32; target_outputs_len]); // Populate first frame with zeros
-                }
 
                 if gray_bits > 0 {
                     state.frame_buf.push(img);
@@ -356,7 +350,10 @@ impl<'a> BlueprintGenerator<'a> {
                         frame_sigs.len(),
                     )));
                 }
-                if !use_delta_comp {
+
+                if use_delta_comp && state.sig_buf.len() == 0 {
+                    state.sig_buf.push(vec![0i32; target_outputs_len]); // Populate first frame with zeros
+                } else if !use_delta_comp {
                     state.sig_buf.push(frame_sigs.clone()); // If we're using delta compression we only compare aginst the previous frame
                 }
 
@@ -454,15 +451,18 @@ impl<'a> BlueprintGenerator<'a> {
                 state.chunk_i += 1;
             }
 
-            if info.next_frame.is_none() {
+            // Note: Always advance before checking if we have max entities
+            if info.next_frame.is_some() {
+                info.curr_frame = info.next_frame.take().unwrap();
+            } else {
                 self.state = BlueprintState::Wires;
                 break;
-            } else if output_ents.len() >= ENCODE_CHUNK_SIZE {
+            }
+            if output_ents.len() >= ENCODE_CHUNK_SIZE {
                 break;
-            } else {
-                info.curr_frame = info.next_frame.take().unwrap();
             }
         }
+
         if output_ents.len() > 0 {
             write_to(&mut writer, b",")?;
             write_json_trimmed_to(&mut writer, &output_ents)?; // Remove braces
