@@ -1,4 +1,5 @@
 use crate::blueprint::{constants::*, models::*};
+use glam::DVec2;
 use std::io;
 use wasm_bindgen::*;
 
@@ -51,13 +52,13 @@ pub fn invert_wires(ents: &mut Vec<Entity>, wires: &mut Vec<Wire>) {
 ///
 /// A vector of CombinatorOutputs for the frame
 pub fn color_frame_to_outputs(frame: &image::DynamicImage) -> Result<Vec<i32>, JsValue> {
-    #[cfg(target_arch = "wasm32")]
-    {
-        let rgba = frame.to_rgba8();
-        Ok(unsafe { rgba_to_rgb_simd(rgba.as_raw()) })
-    }
+    // #[cfg(target_arch = "wasm32")]
+    // {
+    //     let rgba = frame.to_rgba8();
+    //     Ok(unsafe { rgba_to_rgb_simd(rgba.as_raw()) })
+    // }
 
-    #[cfg(not(target_arch = "wasm32"))] // scalar fallback
+    // #[cfg(not(target_arch = "wasm32"))] // scalar fallback
     {
         use crate::image_processing::rgb_to_int;
         let rgb = frame.to_rgb8();
@@ -206,6 +207,33 @@ impl<T: Clone> OneOrMany<T> {
         match self {
             Self::One(v) => vec![v.clone()],
             Self::Many(v) => v.clone(),
+        }
+    }
+}
+
+pub struct DBounds2 {
+    pub min: DVec2,
+    pub max: DVec2,
+}
+impl DBounds2 {
+    pub fn dim(&self) -> DVec2 {
+        self.max - self.min
+    }
+
+    /// Extends this bound to include the given bounds.
+    pub fn include(&mut self, other: &Self) {
+        self.min = self.min.min(other.min);
+        self.max = self.max.max(other.max);
+    }
+
+    pub fn offset(&self) -> DVec2 {
+        -self.min
+    }
+
+    pub fn default() -> Self {
+        Self {
+            min: DVec2::INFINITY,
+            max: DVec2::NEG_INFINITY,
         }
     }
 }

@@ -4,7 +4,7 @@ mod constants;
 pub mod encoder;
 mod lamp;
 mod macros;
-mod models;
+pub mod models;
 mod signals;
 mod substation;
 mod timer;

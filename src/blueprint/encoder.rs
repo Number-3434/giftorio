@@ -37,7 +37,7 @@ impl<'a> BlueprintEncoder<'a> {
     }
 
     pub fn new_from_frame_data(
-        frame_data: FrameData<'a>,
+        frame_data: Option<FrameData<'a>>,
         args: &'a BlueprintArgs,
     ) -> Result<Self, JsValue> {
         let gen = BlueprintGenerator::new(frame_data, args)?;

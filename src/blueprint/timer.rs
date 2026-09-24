@@ -22,8 +22,8 @@ pub fn generate_timer(
     args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Wire>) {
     let gray_bits = args.grayscale_bits;
-    let mut ents = Vec::new();
-    let mut wires = Vec::new();
+    let mut ents: Vec<Entity> = Vec::new();
+    let mut wires: Vec<[u32; 4]> = Vec::new();
 
     let ent = Entity::new(1, Arc::clone(&CONSTANT_COMB), TIMER1_POS).with_direction(DIR_R);
     ents.push(ent.with_control_behavior(ControlBehavior::Constant {

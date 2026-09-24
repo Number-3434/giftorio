@@ -1,9 +1,11 @@
 use crate::blueprint::{constants::*, util::*};
 pub use crate::models::*;
+use glam::DVec2;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, LazyLock};
 
 #[derive(Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct BlueprintBook {
     pub icons: Option<Vec<Icon>>,
     pub active_index: u32,
@@ -46,6 +48,39 @@ pub struct Icon {
     pub index: u32,
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
+pub enum Quality {
+    #[serde(rename = "quality-unknown")]
+    Unknown,
+    #[serde(rename = "normal")]
+    Normal,
+    #[serde(rename = "uncommon")]
+    Uncommon,
+    #[serde(rename = "rare")]
+    Rare,
+    #[serde(rename = "epic")]
+    Epic,
+    #[serde(rename = "legendary")]
+    Legendary,
+}
+impl Quality {
+    fn is_none_or_normal(value: &Option<Arc<Quality>>) -> bool {
+        value.as_ref().is_none_or(|v| **v == Quality::Normal)
+    }
+}
+impl std::fmt::Display for Quality {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Normal => write!(f, "normal"),
+            Self::Uncommon => write!(f, "uncommon"),
+            Self::Rare => write!(f, "rare"),
+            Self::Epic => write!(f, "epic"),
+            Self::Legendary => write!(f, "legendary"),
+            Self::Unknown => write!(f, "unknown"),
+        }
+    }
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Signal {
     #[serde(
@@ -55,8 +90,8 @@ pub struct Signal {
     )]
     pub type_: Arc<str>,
     pub name: Arc<str>,
-    #[serde(skip_serializing_if = "Signal::is_none_or_default_quality")]
-    pub quality: Option<Arc<str>>,
+    #[serde(skip_serializing_if = "Quality::is_none_or_normal")]
+    pub quality: Option<Arc<Quality>>,
 }
 impl Signal {
     pub fn new_virtual(name: Arc<str>) -> Self {
@@ -75,27 +110,48 @@ impl Signal {
     fn is_default_signal_type(value: &Arc<str>) -> bool {
         value.to_string() == "item"
     }
-
-    fn is_none_or_default_quality(value: &Option<Arc<str>>) -> bool {
-        value.as_ref().is_none_or(|v| v.to_string() == "normal")
-    }
 }
 
 pub type Wire = [u32; 4];
 
+mod dvec2_xy {
+    use glam::DVec2;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize)]
+    struct XY {
+        x: f64,
+        y: f64,
+    }
+
+    pub fn serialize<S>(v: &DVec2, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        XY { x: v.x, y: v.y }.serialize(serializer)
+    }
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DVec2, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let xy = XY::deserialize(deserializer)?;
+        Ok(DVec2::new(xy.x, xy.y))
+    }
+}
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub entity_number: u32,
     pub name: Arc<str>,
-    pub position: Position,
+    #[serde(with = "dvec2_xy")]
+    pub position: DVec2,
     #[serde(skip_serializing_if = "Entity::is_none_or_0")]
     pub direction: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub control_behavior: Option<ControlBehavior>,
     #[serde(skip_serializing_if = "is_none_or_empty_string")]
     pub player_description: Option<String>,
-    #[serde(skip_serializing_if = "Entity::is_none_or_normal")]
-    pub quality: Option<String>,
+    #[serde(skip_serializing_if = "Quality::is_none_or_normal")]
+    pub quality: Option<Arc<Quality>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub always_on: Option<bool>,
     #[serde(skip)]
@@ -103,7 +159,7 @@ pub struct Entity {
 }
 impl Entity {
     /// Create a new entity with default None values for optional fields
-    pub fn new(entity_number: u32, name: Arc<str>, position: impl Into<Position>) -> Self {
+    pub fn new(entity_number: u32, name: Arc<str>, position: impl Into<DVec2>) -> Self {
         Entity {
             entity_number,
             name,
@@ -146,45 +202,11 @@ impl Entity {
         self
     }
 
-    fn is_none_or_normal(value: &Option<String>) -> bool {
-        match value {
-            None => true,
-            Some(s) => s == "normal",
-        }
-    }
     fn is_none_or_0(value: &Option<u32>) -> bool {
         match value {
             None | Some(0) => true,
             _ => false,
         }
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Position {
-    pub x: f64,
-    pub y: f64,
-}
-impl Position {
-    pub fn new(x: f64, y: f64) -> Self {
-        Self { x, y }
-    }
-}
-impl From<(f64, f64)> for Position {
-    fn from((x, y): (f64, f64)) -> Self {
-        Self::new(x, y)
-    }
-}
-impl std::ops::Add for Position {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::new(self.x + rhs.x, self.y + rhs.y)
-    }
-}
-impl std::ops::Sub for Position {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self::new(self.x - rhs.x, self.y - rhs.y)
     }
 }
 
@@ -260,7 +282,7 @@ pub struct Filter {
     pub type_: Arc<str>,
     pub name: Arc<str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub quality: Option<Arc<str>>,
+    pub quality: Option<Arc<Quality>>, // Note: MUST use Option::is_none, NOT Signal::is_none_or_normal
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comparator: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -314,28 +336,6 @@ impl Condition {
         }
     }
 
-    pub fn default() -> Self {
-        Self {
-            first_signal: None,
-            constant: None,
-            comparator: None,
-            compare_type: None,
-            first_signal_networks: None,
-        }
-    }
-
-    pub fn with_first_signal(mut self, signal: Signal) -> Self {
-        self.first_signal = Some(signal);
-        self
-    }
-    pub fn with_constant(mut self, constant: i32) -> Self {
-        self.constant = Some(constant);
-        self
-    }
-    pub fn with_comparator(mut self, comparator: &str) -> Self {
-        self.comparator = Some(comparator.to_owned());
-        self
-    }
     pub fn with_compare_type(mut self, compare_type: &str) -> Self {
         self.compare_type = Some(compare_type.to_owned());
         self

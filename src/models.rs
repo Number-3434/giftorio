@@ -1,88 +1,46 @@
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct BlueprintArgs {
-    pub name: String,
-
+    pub name: Option<String>,
+    #[serde(rename = "customHeight")]
+    pub custom_height: Option<u32>,
+    #[serde(rename = "customWidth")]
+    pub custom_width: Option<u32>,
     #[serde(rename = "flippedAxes")]
     pub flipped_axes: FlippedAxes,
-
     #[serde(rename = "grayscaleBits")]
     pub grayscale_bits: u32,
-
     #[serde(rename = "imageRotation")]
     pub image_rotation: ImageRotation,
-
     #[serde(rename = "imageType")]
-    pub image_type: String,
-
+    pub image_type: Option<String>,
     #[serde(rename = "includeLastFrame")]
     pub last_frame: bool,
-
     #[serde(rename = "maxSize")]
     pub max_size: u32,
-
     #[serde(rename = "mode")]
     pub mode: Mode,
-
     #[serde(rename = "outputFormat")]
     pub output_format: OutputFormat,
-
     #[serde(rename = "maxGroupSize")]
     pub max_group_size: Option<u32>,
-
     #[serde(rename = "useGreenLampWires")]
     pub prefer_green_wires: bool,
-
     #[serde(rename = "useHorizontalLampWires")]
     pub prefer_horizontal_wires: bool,
-
     #[serde(rename = "resamplingFilter")]
     pub sampling_filter: ResamplingFilter,
-
     #[serde(rename = "signalCompression")]
     pub signal_compression: Option<SignalCompression>,
-
     #[serde(rename = "signalSorting")]
     pub signal_sorting: SignalSorting,
-
     #[serde(rename = "substationQuality")]
-    pub substation_quality: SubstationQuality,
-
+    pub substation_quality: Option<std::sync::Arc<crate::blueprint::models::Quality>>,
     #[serde(rename = "targetFps")]
     pub target_fps: u32,
-
     #[serde(rename = "useDLC")]
     pub use_dlc: bool,
-}
-
-#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
-pub enum SubstationQuality {
-    #[serde(rename = "none")]
-    None,
-    #[serde(rename = "normal")]
-    Normal,
-    #[serde(rename = "uncommon")]
-    Uncommon,
-    #[serde(rename = "rare")]
-    Rare,
-    #[serde(rename = "epic")]
-    Epic,
-    #[serde(rename = "legendary")]
-    Legendary,
-}
-impl Display for SubstationQuality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::None => write!(f, "none"),
-            Self::Normal => write!(f, "normal"),
-            Self::Uncommon => write!(f, "uncommon"),
-            Self::Rare => write!(f, "rare"),
-            Self::Epic => write!(f, "epic"),
-            Self::Legendary => write!(f, "legendary"),
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -143,7 +101,7 @@ pub enum ResamplingFilter {
     Triangle,
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Copy, Serialize, Deserialize, Clone, PartialEq)]
 pub enum SignalCompression {
     #[serde(rename = "temporal")]
     Temporal { window: u32 },
