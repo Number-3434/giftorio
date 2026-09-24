@@ -1,10 +1,7 @@
-use crate::{
-    blueprint::{
-        constants::*,
-        models::{ImageRotation::*, *},
-        substation::*,
-    },
-    macros::log,
+use crate::blueprint::{
+    constants::*,
+    models::{ImageRotation::*, *},
+    substation::*,
 };
 use glam::{dvec2, DVec2, UVec2};
 use std::sync::Arc;
@@ -31,11 +28,11 @@ pub fn generate_lamps(
     base_ent_n: u32,
     start_pos: DVec2,
     args: &BlueprintArgs,
-) -> (Vec<Entity>, Vec<Wire>, u32, u32) {
+) -> (Vec<Entity>, Vec<Wire>, u32, Option<u32>) {
     let mut ents = Vec::new();
     let mut wires = Vec::new();
     let mut curr_ent_n = base_ent_n;
-    let mut top_right_lamp_ent_n: u32 = 0;
+    let mut top_right_lamp_ent_n: Option<u32> = None;
 
     // Auto-rotate wires based on image rotation
     let prefer_horizontal_wires =
@@ -88,6 +85,9 @@ pub fn generate_lamps(
                 });
             }
 
+            if top_right_lamp_ent_n.is_none() && (c > 0 || grid_dim.x == 1) {
+                top_right_lamp_ent_n = Some(curr_ent_n); // Handle case where there's only one column
+            }
             if matches!(args.mode, Mode::Static { combs: false, .. }) {
                 // no wires
             } else if r == 0 {
@@ -98,9 +98,6 @@ pub fn generate_lamps(
                             wires.push([curr_ent_n, WIRE_R, prev, WIRE_R]); // Timing signals wire
                         }
                     }
-                }
-                if c > 0 || grid_dim.x == 1 {
-                    top_right_lamp_ent_n = curr_ent_n; // Handle case where there's only one column
                 }
             } else {
                 if prefer_horizontal_wires {

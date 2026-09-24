@@ -21,6 +21,7 @@ const _INITIAL_VALUES = {
 	connectionDirection: "horizontal",
 	customHeight: 100,
 	customWidth: 100,
+	displayMarginY: 2,
 	file: null as File | null,
 	flippedAxes: "none",
 	grayscaleBits: 0,
@@ -111,6 +112,7 @@ const FORM_ELEMENTS = {
 	customWidth: {
 		name: "Width",
 		type: "number",
+		compact: true,
 		scale: "ln10",
 		min: 1,
 		max: 8000,
@@ -119,6 +121,7 @@ const FORM_ELEMENTS = {
 	customHeight: {
 		name: "Height",
 		type: "number",
+		compact: true,
 		scale: "ln10",
 		min: 1,
 		max: 8000,
@@ -200,14 +203,23 @@ const FORM_ELEMENTS = {
 		splash: "Only used to resize the video to the blueprint's dimensions.",
 	},
 	maxGroupSize: {
-		name: "Max Group Size",
+		name: "Columns",
 		type: "number",
-		tooltip: `
-
-		`,
+		compact: true,
 		min: 0,
 		max: 10,
 		step: 1,
+		tooltip: `Large image / videos will be split into detached groups, with each group using their own signals. This setting sets a custom maximum size for groups. Lowering this setting can help increase compression value, but requires more space to physically place the blueprint.`,
+		splash: "If set to '0', auto-infers the maximum possible group size.",
+	},
+	displayMarginY: {
+		name: "Margin Y",
+		type: "number",
+		compact: true,
+		min: 0,
+		max: 4,
+		step: 1,
+		tooltip: `Sets the vertical margin between the top of the lamps and the bottom of the data combinators.`,
 	},
 	imageRotation: {
 		name: "Rotation",
@@ -439,11 +451,11 @@ function App({ worker }: { worker: Worker }) {
 				</div>
 			);
 		} else if (type === "number") {
-			const v = value as unknown as { min?: number; max?: number; step?: number; values?: number[] };
+			const v = value as unknown as { min?: number; max?: number; step?: number; values?: number[]; compact?: boolean };
+			const compact = v.compact ?? false;
 
 			function handleSubmit(rawValue: number) {
 				const ref = formRefs[key as keyof typeof formRefs] as HTMLInputElement;
-
 				if (v.values && !v.values.includes(rawValue)) {
 					ref.setCustomValidity(`Value must be one of: ${v.values.join(", ")}`);
 					ref.setAttribute("aria-invalid", "true");
@@ -454,13 +466,20 @@ function App({ worker }: { worker: Worker }) {
 				setFormData(key as keyof typeof formData, rawValue);
 			}
 			return (
-				<div class="mb-1 factorio-form-element" aria-disabled={value.disabled}>
-					<label class="block text-white-500 mb-0">
+				<div
+					class="mb-1 factorio-form-element"
+					aria-disabled={value.disabled}
+					classList={{
+						flex: compact,
+					}}
+				>
+					<label class="block text-white-500 mb-0 w-full">
 						{name}
 						{mkTooltip({})}
 					</label>
 					<div class="items-center gap-3 w-full">
 						<Slider
+							compact={compact}
 							id={key}
 							disabled={disabled}
 							ref={(e) => ((formRefs as any)[key] = e)}
@@ -598,6 +617,7 @@ function App({ worker }: { worker: Worker }) {
 						combinatorPositionsJson: JSON.stringify(COMB_POS_DATA), // TODO: Make this configurable???
 						customHeight: +formData.customHeight,
 						customWidth: +formData.customWidth,
+						displayMarginY: +formData.displayMarginY,
 						flippedAxes: `${formData.flippedAxes}`,
 						grayscaleBits: +formData.grayscaleBits,
 						imageMetadata: {

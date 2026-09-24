@@ -3,7 +3,6 @@ use crate::blueprint::{
     signals::get_signals_with_quality, substation::*, timer::generate_timer, util::*,
 };
 use crate::image_processing::FrameData;
-use crate::macros::log;
 use glam::{dvec2, uvec2, UVec2};
 use std::{io, sync::Arc};
 use wasm_bindgen::JsValue;
@@ -110,8 +109,6 @@ impl<'a> BlueprintGenerator<'a> {
         }
         let n_groups = frame_dim.x.div_ceil(max_lamp_cols_per_grp);
 
-        log!("dim: {frame_dim}, n_groups: {n_groups}, max_lamp_cols_per_grp: {max_lamp_cols_per_grp}");
-
         if let Some(frame_info) = frame_info.as_mut() {
             frame_info.patch_states = (0..n_groups)
                 .map(|_| GroupPatchState {
@@ -216,16 +213,14 @@ impl<'a> BlueprintGenerator<'a> {
             ent_data.ents.extend(ents);
             ent_data.wires.extend(wires);
         }
-        let mut occupied =
-            SubstationOccupied::new(dvec2(1.0, -1.0), args.substation_quality.clone());
+        let sub_base_pos = dvec2(1.0, 1.0 - args.lamp_margin_y as f64);
+        let mut occupied = SubstationOccupied::new(sub_base_pos, args.substation_quality.clone());
         let mut prev_top_right_lamp_ent_n: Option<u32> = None;
 
         for group_i in 0..self.n_groups {
             let grp_left = group_i * self.max_cols_per_grp;
             let grp_width = (self.max_cols_per_grp).min(self.dim.x - grp_left);
             let (mut cb_in_ent_n, mut cb_out_ent_n) = (0, 0);
-
-            #[allow(unused_variables)]
             let (grp_lamps, mut grp_lamp_wires, new_next_ent_n, top_right_lamp_ent_n) =
                 generate_lamps(
                     &signals,
@@ -248,7 +243,7 @@ impl<'a> BlueprintGenerator<'a> {
                         info.n_scaled_frames.div_ceil(info.frames_per_cb),
                         &mut occupied,
                         ent_data.next_ent_n,
-                        dvec2(grp_left as f64, -2.0),
+                        dvec2(grp_left as f64, -1.0 * args.lamp_margin_y as f64),
                         self.max_cols_per_grp,
                         args,
                     )?;
@@ -274,7 +269,7 @@ impl<'a> BlueprintGenerator<'a> {
             if let Some(prev) = prev_top_right_lamp_ent_n {
                 grp_lamp_wires.push([grp_lamps[0].entity_number, WIRE_R, prev, WIRE_R]);
             }
-            prev_top_right_lamp_ent_n = Some(top_right_lamp_ent_n);
+            prev_top_right_lamp_ent_n = top_right_lamp_ent_n;
 
             if group_i > 0 {
                 write_to(&mut writer, b",")?;

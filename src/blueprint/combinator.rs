@@ -184,6 +184,7 @@ pub fn generate_combinators(
     let mut curr_pos: DVec2;
     let mut grid_pos = IVec2::ZERO; // Current grid position (not absolute, multiplied by combinator's bounding box)
     let mut prev_ents_n: Vec<Option<u32>> = vec![None; max_cols_per_grp as usize];
+    let mut prev_prev_ents_n: Vec<Option<u32>> = vec![None; max_cols_per_grp as usize];
 
     // Generates combinators up to down, then left to right.
     for chunk_i in 0..ticks_per_group as usize {
@@ -220,14 +221,19 @@ pub fn generate_combinators(
         }
         data_cbs.push(en.with_direction(if use_compact_layout { DIR_U } else { DIR_R }));
 
+        let x_i = grid_pos.x as usize;
         let prefer_horizontal = true ^ matches!(args.image_rotation, Deg0 | Deg180);
         let mut cands: Vec<usize> = Vec::new();
 
         if grid_pos.y > 0 && (!prefer_horizontal || grid_pos.x == 0) {
-            cands.push(grid_pos.x as usize); // Vertical connection
+            cands.push(x_i); // Vertical connection
         }
-        if grid_pos.x > 0 && (prefer_horizontal || grid_pos.y == 0) {
-            cands.push(grid_pos.x as usize - 1); // Horizontal connection
+        if grid_pos.x > 0
+            && (prefer_horizontal
+                || prev_ents_n[x_i].is_none()
+                || prev_prev_ents_n[x_i - 1].is_none())
+        {
+            cands.push(x_i - 1); // Horizontal connection
         }
         for i in cands {
             if let Some(prev) = prev_ents_n[i] {
@@ -236,7 +242,8 @@ pub fn generate_combinators(
             }
         }
 
-        prev_ents_n[grid_pos.x as usize] = Some(curr_ent_n);
+        prev_prev_ents_n[x_i] = prev_ents_n[x_i];
+        prev_ents_n[x_i] = Some(curr_ent_n);
         curr_ent_n += 1;
         grid_pos.x += 1;
     }

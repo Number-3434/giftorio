@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 
 type SliderProps = {
+	compact?: boolean;
 	value: number;
 	disabled?: boolean;
 	values?: number[];
@@ -61,8 +62,8 @@ export function Slider(props: SliderProps) {
 	}
 
 	return (
-		<div class="flex items-center justify-between w-full">
-			<div class="flex justify-between items-center gap-3 w-full">
+		<div class="flex items-center justify-between w-full flex-1">
+			<div class="flex justify-between items-center gap-3 flex-1" classList={{ "w-full": true }}>
 				<div
 					aria-disabled={props.disabled}
 					class="factorio-slider-wrapper flex-1"

@@ -7,6 +7,7 @@ use image::{imageops, AnimationDecoder, ImageDecoder};
 use std::{collections::VecDeque, io::Cursor, time::Duration};
 use wasm_bindgen::prelude::*;
 
+#[inline(always)]
 fn now_ms() -> f64 {
     js_sys::Date::now()
 }
@@ -202,16 +203,6 @@ impl Iterator for FrameData<'_> {
             self.curr_frame_idx += 1;
         }
     }
-}
-
-fn format_duration(ms: u64) -> String {
-    let total_seconds = ms / 1000;
-    let hours = total_seconds / 3600;
-    let minutes = (total_seconds % 3600) / 60;
-    let seconds = total_seconds % 60;
-    let milliseconds = ms % 1000;
-
-    return format!("{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}");
 }
 
 pub struct ImageFrameData<'a> {

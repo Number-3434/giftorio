@@ -18,19 +18,15 @@ pub fn invert_wires(ents: &mut Vec<Entity>, wires: &mut Vec<Wire>) {
     #[inline(always)]
     fn get_swap(wire_id: u32) -> u32 {
         match wire_id {
-            1 => 2,       // circuit_green / combinator_input_green -> circuit_red / combinator_input_red
-            2 => 1, // circuit_red / combinator_input_red -> circuit_green / combinator_input_green
-            3 => 4, // combinator_output_green -> combinator_output_red
-            4 => 3, // combinator_output_red -> combinator_output_green
-            _ => wire_id, // usually just copper
+            1 => 2,
+            2 => 1,
+            3 => 4,
+            4 => 3,
+            _ => wire_id,
         }
     }
-
-    for ent in ents.iter_mut() {
-        if let Some(ControlBehavior::Decider {
-            decider_conditions, ..
-        }) = ent.control_behavior.as_mut()
-        {
+    for e in ents.iter_mut() {
+        if let Some(ControlBehavior::Decider { decider_conditions }) = e.control_behavior.as_mut() {
             decider_conditions.swap_networks();
         }
     }

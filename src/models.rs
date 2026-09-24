@@ -9,6 +9,8 @@ pub struct BlueprintArgs {
     pub custom_height: Option<u32>,
     #[serde(rename = "customWidth")]
     pub custom_width: Option<u32>,
+    #[serde(rename = "displayMarginY")]
+    pub lamp_margin_y: u32,
     #[serde(rename = "flippedAxes")]
     pub flipped_axes: FlippedAxes,
     #[serde(rename = "grayscaleBits")]
