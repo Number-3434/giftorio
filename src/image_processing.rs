@@ -1,6 +1,6 @@
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
-use crate::models::{BlueprintArgs, FlippedAxes, ImageRotation::*, ResamplingFilter};
+use crate::models::{ImageRotation::*, *};
 use crate::progress::set_progress;
 use glam::{uvec2, DVec2, UVec2};
 use image::{imageops, AnimationDecoder, ImageDecoder};
@@ -51,7 +51,7 @@ impl FrameData<'_> {
 }
 impl<'a> FrameData<'a> {
     pub fn new(image_data: &'a [u8], args: &'a BlueprintArgs) -> Result<Self, JsValue> {
-        let frame_data = get_frames(image_data, args.image_type.as_ref().expect("No image type"))?;
+        let frame_data = get_frames(image_data, &args)?;
         let in_dim = frame_data.dimensions();
         let n_frames = frame_data.n_frames();
         let scale_factor = (args.max_size as f64 / in_dim.x as f64)
@@ -63,11 +63,15 @@ impl<'a> FrameData<'a> {
         }
 
         let obj = Self {
-            out_n_frames: expected_output_frames(
-                frame_data.total_duration_ms.as_millis() as u32,
-                args.target_fps.max(1),
-                args.last_frame,
-            ),
+            out_n_frames: if matches!(args.mode, Mode::Static { .. }) {
+                1
+            } else {
+                expected_output_frames(
+                    frame_data.total_duration_ms.as_millis() as u32,
+                    args.target_fps.max(1),
+                    args.last_frame,
+                )
+            },
             resize_filter: match args.sampling_filter {
                 ResamplingFilter::Catrom => imageops::FilterType::CatmullRom,
                 ResamplingFilter::Gaussian => imageops::FilterType::Gaussian,
@@ -134,6 +138,10 @@ impl Iterator for FrameData<'_> {
                 },
                 None => return None,
             };
+            if matches!(self.args.mode, Mode::Static { .. }) {
+                self.output_frames.push_back(frame);
+                continue;
+            }
 
             // % of prime number cuz i like seeing it go through every number :D
             if self.curr_frame_idx % 1 == 0 {
@@ -233,45 +241,47 @@ impl ImageFrameData<'_> {
 /// # Returns
 ///
 /// An iterator of `Frame` objects or a JavaScript error.
-pub fn get_frames<'a>(
-    image_data: &'a [u8],
-    image_type: &str,
-) -> Result<ImageFrameData<'a>, JsValue> {
-    let cursor = Cursor::new(image_data);
+pub fn get_frames<'a>(data: &'a [u8], args: &BlueprintArgs) -> Result<ImageFrameData<'a>, JsValue> {
+    let cursor = Cursor::new(data);
     let info: AnimationInfo;
-    let dimensions: UVec2;
+    let dim: UVec2;
+    let image_type = args.image_metadata.image_type.as_ref();
 
     Ok(ImageFrameData {
-        frames: match image_type {
+        frames: match image_type.expect("image type required").as_str() {
             "gif" => {
                 let decoder = image::codecs::gif::GifDecoder::new(cursor).unwrap_throw();
-                dimensions = UVec2::from(decoder.dimensions());
-                info = animation_info(&image_data)?;
+                dim = UVec2::from(decoder.dimensions());
+                info = animation_info(&data)?;
                 decoder.into_frames()
             }
             "webp" => {
                 let decoder = image::codecs::webp::WebPDecoder::new(cursor).unwrap_throw();
-                dimensions = UVec2::from(decoder.dimensions());
-                info = animation_info(&image_data)?;
+                dim = UVec2::from(decoder.dimensions());
+                info = animation_info(&data)?;
                 decoder.into_frames()
             }
             _ => {
-                return Err(JsValue::from_str(
-                    "Unsupported image type. Only 'gif' and 'webp' are allowed.",
-                ))
+                let use_combs = matches!(args.mode, Mode::Static { combs: true, .. });
+
+                dim = UVec2::from(args.image_metadata.image_size.expect("No image size"));
+                info = AnimationInfo {
+                    frames: 1,
+                    duration: Duration::from_millis(if use_combs { 1000 } else { 0 }),
+                };
+                image::Frames::new(Box::new(std::iter::once(Ok(image::Frame::new(
+                    image::RgbaImage::from_raw(dim.x, dim.y, data.to_vec())
+                        .expect("buffer length must be width * height * 4"),
+                ))))) // bruh
             }
         },
-        dimensions,
+        dimensions: dim,
         n_frames: info.frames,
         total_duration_ms: info.duration,
     })
 }
 
 /// Converts an RGB pixel to a single 24 bit integer (inside a u32, I know...).
-///
-/// TODO: Test if this is actually needed; maybe we could use image.to_rgba8() and then
-/// chunk into 4? WASM is always little-endian, so this would behave the same across
-/// devices.
 ///
 /// # Arguments
 ///

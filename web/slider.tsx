@@ -66,9 +66,7 @@ export function Slider(props: SliderProps) {
 				<div
 					aria-disabled={props.disabled}
 					class="factorio-slider-wrapper flex-1"
-					style={{
-						"--slider-width": hasCustomValues ? "15px" : "25px",
-					}}
+					style={{ "--slider-width": hasCustomValues ? "15px" : "25px" }}
 					classList={{ "has-multiple-values": hasCustomValues }}
 				>
 					{(() => {

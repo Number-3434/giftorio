@@ -62,8 +62,8 @@ impl<'a> BlueprintGenerator<'a> {
     ) -> Result<Self, JsValue> {
         let signals: Vec<Arc<Signal>> = get_signals_with_quality(&args);
         let gray_bits = args.grayscale_bits;
-        let combinator_compression = args.signal_compression;
-        let time_comp_win = combinator_compression.map_or(0, |c| match c {
+        let comb_comp = args.signal_compression;
+        let time_comp_win = comb_comp.map_or(0, |c| match c {
             SignalCompression::Temporal { window } => window,
             _ => 0,
         });
@@ -90,17 +90,19 @@ impl<'a> BlueprintGenerator<'a> {
                 next_frame: None,
                 patch_states: Vec::new(),
                 ticks_per_frame: (60.0 / args.target_fps as f64) as u32,
-                use_delta_comp: combinator_compression
-                    .is_some_and(|c| c == SignalCompression::Delta),
-            })
+                use_delta_comp: comb_comp.is_some_and(|c| c == SignalCompression::Delta),
+            });
         } else {
             frame_dim = uvec2(
                 args.custom_width.expect("Must have width or frame data."),
                 args.custom_height.expect("Must have height or frame data."),
             );
         }
-        let max_lamp_cols_per_grp =
-            (signals.len() as u32 / frame_dim.y).min(args.max_group_size.unwrap_or(frame_dim.x));
+        let max_lamp_cols_per_grp = if matches!(args.mode, Mode::Static { combs: false, .. }) {
+            frame_dim.x
+        } else {
+            (signals.len() as u32 / frame_dim.y).min(args.max_group_size.unwrap_or(frame_dim.x))
+        };
         if max_lamp_cols_per_grp < 1 {
             return Err(JsValue::from_str(
                 "Not enough signals for even one column of lamps!",
@@ -132,7 +134,7 @@ impl<'a> BlueprintGenerator<'a> {
             max_cols_per_grp: max_lamp_cols_per_grp,
             n_groups,
             should_generate_cbs: match args.mode {
-                Mode::Lamps | Mode::LampGrid => false,
+                Mode::Static { combs: false, .. } | Mode::Lamps | Mode::LampGrid => false,
                 _ => true,
             },
             signals,
@@ -157,9 +159,10 @@ impl<'a> BlueprintGenerator<'a> {
                     }]),
                     item: BLUEPRINT.to_string(),
                     label: Some(match self.args.mode {
-                        Mode::Full => self.args.name.clone().unwrap_or("Blueprint".to_owned()),
+                        Mode::Full => self.args.name.clone().unwrap_or("GIF".to_owned()),
                         Mode::Lamps => format!("{}x{} Lamps", self.dim.x, self.dim.y),
                         Mode::LampGrid => format!("{}x{} Lamp Grid", self.dim.x, self.dim.y),
+                        Mode::Static { .. } => self.args.name.clone().unwrap_or("Image".to_owned()),
                     }),
                     version: BLUEPRINT_VERSION,
                     entities: Vec::new(),    // don't serialize
@@ -203,7 +206,7 @@ impl<'a> BlueprintGenerator<'a> {
         let signals = &mut self.signals;
         let ent_data = &mut self.entity_data;
 
-        if self.should_generate_cbs {
+        if self.should_generate_cbs && !matches!(args.mode, Mode::Static { timer: false, .. }) {
             let info = info.as_mut().unwrap();
             let stop = info.frame_data.total_frames() * info.ticks_per_frame;
             let (ents, wires) =
@@ -226,7 +229,10 @@ impl<'a> BlueprintGenerator<'a> {
             let (grp_lamps, mut grp_lamp_wires, new_next_ent_n, top_right_lamp_ent_n) =
                 generate_lamps(
                     &signals,
-                    (grp_width, self.dim.y),
+                    uvec2(grp_width, self.dim.y),
+                    matches!(self.args.mode, Mode::Static { combs: false, .. }).then(
+                        || info.as_mut().unwrap().curr_frame.clone(), // Pass image data to lamp generation
+                    ),
                     &mut occupied,
                     ent_data.next_ent_n,
                     dvec2(grp_left as f64, 0.0),

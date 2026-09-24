@@ -48,7 +48,7 @@ pub struct Icon {
     pub index: u32,
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 pub enum Quality {
     #[serde(rename = "quality-unknown")]
     Unknown,
@@ -138,6 +138,7 @@ mod dvec2_xy {
         Ok(DVec2::new(xy.x, xy.y))
     }
 }
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Entity {
     pub entity_number: u32,
@@ -156,6 +157,8 @@ pub struct Entity {
     pub always_on: Option<bool>,
     #[serde(skip)]
     pub custom_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<Color>,
 }
 impl Entity {
     /// Create a new entity with default None values for optional fields
@@ -170,6 +173,7 @@ impl Entity {
             quality: None,
             always_on: None,
             custom_tag: None,
+            color: None,
         }
     }
 
@@ -179,6 +183,10 @@ impl Entity {
 
     pub fn with_always_on(mut self, always_on: bool) -> Self {
         self.always_on = Some(always_on);
+        self
+    }
+    pub fn with_color(mut self, color: Color) -> Self {
+        self.color = Some(color);
         self
     }
     pub fn with_control_behavior(mut self, behavior: ControlBehavior) -> Self {
@@ -208,6 +216,13 @@ impl Entity {
             _ => false,
         }
     }
+}
+#[derive(Clone, Serialize, Deserialize)]
+pub struct Color {
+    pub r: f64,
+    pub g: f64,
+    pub b: f64,
+    pub a: f64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

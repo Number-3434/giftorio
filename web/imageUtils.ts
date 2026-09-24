@@ -1,3 +1,19 @@
+/**
+ * Utility function to obtain the raw image data from a static image.
+ *
+ * This gives higher compatibility with different images than using Rust.
+ * Only used for static images; videos are processed in Rust.
+ */
+export async function getRawImageData(file: File): Promise<ImageData> {
+	const bitmap = await createImageBitmap(file);
+	const ctx = new OffscreenCanvas(bitmap.width, bitmap.height).getContext("2d")!;
+	ctx.drawImage(bitmap, 0, 0);
+
+	const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height, { colorSpace: "srgb", pixelFormat: "rgba-unorm8" });
+	bitmap.close();
+	return imageData;
+}
+
 export class AnimationInfo {
 	/** Number of frames in the animation. */
 	frames: number;

@@ -5,7 +5,7 @@ const dbPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {
 	req.onerror = () => reject(req.error);
 });
 
-export async function saveFileDB(file: File, key: string): Promise<void> {
+export async function saveFileDB(file: File | null, key: string): Promise<void> {
 	const db = await dbPromise;
 	return new Promise<void>((resolve, reject) => {
 		const tx = db.transaction("files", "readwrite");

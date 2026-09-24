@@ -32,25 +32,23 @@ pub fn generate_combinators(
 ) -> Result<(Vec<Entity>, Vec<Entity>, Vec<Wire>, (u32, u32, u32)), JsValue> {
     // Positions for combinators, for different widths.
     // TODO: Don't recalculate this for every group
-    let mut comb_pos_data =
-        load_combinator_positions_json(include_str!("../data/combinator-positions.json"))?;
-
+    let comb_pos_data = load_comb_pos_json(include_str!("../data/combinator-positions.json"))?;
     let mut best_pos_data: Option<&CombinatorPositionData> = None;
     let mut pos_dict: HashMap<String, &Entity> = HashMap::new();
     let mut base_pos = start_pos;
     let use_compact_layout = max_cols_per_grp < 2;
 
-    // Sort by height, descending
-    comb_pos_data.sort_by_key(|d| d.dim.x as i32);
-
     for d in &comb_pos_data {
         if d.dim.x <= max_cols_per_grp as f64
-            && Some(d.compression) == args.signal_compression
+            && d.compression == args.signal_compression
             && d.grayscale_bits.contains(&args.grayscale_bits)
         {
-            best_pos_data = Some(d);
+            if d.dim.x > best_pos_data.map_or(0.0, |v| v.dim.x) {
+                best_pos_data = Some(d);
+            }
         }
     }
+
     if let Some(d) = best_pos_data {
         for en in d.blueprint.blueprint.entities.iter() {
             if let Some(tag) = en.player_description.as_ref() {
@@ -77,7 +75,11 @@ pub fn generate_combinators(
     // Finds the position for the combinator with the given tag, based off the blueprint string
     // we decoded earlier
     let get_pos = |tag: &str| {
-        let mut pos = pos_dict.get(tag).unwrap().position + base_offset;
+        let mut pos = pos_dict
+            .get(tag)
+            .expect(&format!("No '{tag}' entity found!"))
+            .position
+            + base_offset;
         pos.y -= height;
         return pos;
     };
@@ -205,7 +207,7 @@ pub fn generate_combinators(
             }
         }
 
-        let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), curr_pos).with_direction(DIR_R);
+        let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), curr_pos);
         if chunk_i == 0 {
             en = en.with_tag("first data comb");
             if use_delta_comp {
@@ -216,7 +218,7 @@ pub fn generate_combinators(
                 wires.push([curr_ent_n, WIRE_OUT_G, ent_n, WIRE_G]);
             }
         }
-        data_cbs.push(en);
+        data_cbs.push(en.with_direction(if use_compact_layout { DIR_U } else { DIR_R }));
 
         let prefer_horizontal = true ^ matches!(args.image_rotation, Deg0 | Deg180);
         let mut cands: Vec<usize> = Vec::new();
@@ -255,16 +257,16 @@ pub fn generate_combinators(
 
 #[derive(serde::Serialize)]
 struct CombinatorPositionData {
-    compression: SignalCompression,
+    compression: Option<SignalCompression>,
     dim: DVec2,
     grayscale_bits: Vec<u32>,
     blueprint: Blueprint,
 }
 
-fn load_combinator_positions_json(json: &str) -> Result<Vec<CombinatorPositionData>, JsValue> {
+fn load_comb_pos_json(json: &str) -> Result<Vec<CombinatorPositionData>, JsValue> {
     #[derive(serde::Deserialize)]
     struct CombinatorPositionJson {
-        compression: SignalCompression,
+        compression: Option<SignalCompression>,
         #[serde(rename = "grayscaleBits")]
         grayscale_bits: OneOrMany<u32>,
         blueprints: OneOrMany<String>,

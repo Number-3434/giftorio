@@ -1,4 +1,5 @@
 use wasm_bindgen::prelude::*;
+
 mod blueprint;
 mod constants;
 mod image_processing;
@@ -26,10 +27,14 @@ pub async fn run_blueprint(
 ) -> Result<JsValue, JsValue> {
     console_error_panic_hook::set_once();
 
-    let args: models::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
+    let mut args: models::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
     let mut frame_data: Option<image_processing::FrameData> = None;
 
-    if args.mode == models::Mode::Full {
+    if matches!(args.mode, models::Mode::Static { .. }) {
+        args.signal_compression = None;
+        args.target_fps = 1;
+    }
+    if matches!(args.mode, models::Mode::Full | models::Mode::Static { .. }) {
         // Create iterator over frames. Auto-detects the total number of frames + total duration
         // using custom byte scanning.
         frame_data = Some(image_processing::FrameData::new(image_data, &args)?);
