@@ -1,4 +1,5 @@
-import { createEffect, createSignal, onMount, For, JSXElement } from "solid-js";
+import { createEffect, createSignal, onMount, For } from "solid-js";
+import COMB_POS_DATA from "./assets/data/combinator-positions.json";
 import { createStore } from "solid-js/store";
 import Background, { BackgroundApi } from "./Background";
 import infoIcon from "./assets/img/info.png";
@@ -594,6 +595,7 @@ function App({ worker }: { worker: Worker }) {
 				generate: {
 					imageData: data,
 					args: {
+						combinatorPositionsJson: JSON.stringify(COMB_POS_DATA), // TODO: Make this configurable???
 						customHeight: +formData.customHeight,
 						customWidth: +formData.customWidth,
 						flippedAxes: `${formData.flippedAxes}`,

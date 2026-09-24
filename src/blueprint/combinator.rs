@@ -32,7 +32,7 @@ pub fn generate_combinators(
 ) -> Result<(Vec<Entity>, Vec<Entity>, Vec<Wire>, (u32, u32, u32)), JsValue> {
     // Positions for combinators, for different widths.
     // TODO: Don't recalculate this for every group
-    let comb_pos_data = load_comb_pos_json(include_str!("../data/combinator-positions.json"))?;
+    let comb_pos_data = load_comb_pos_json(&args.comb_pos_json)?;
     let mut best_pos_data: Option<&CombinatorPositionData> = None;
     let mut pos_dict: HashMap<String, &Entity> = HashMap::new();
     let mut base_pos = start_pos;
@@ -269,7 +269,14 @@ fn load_comb_pos_json(json: &str) -> Result<Vec<CombinatorPositionData>, JsValue
         compression: Option<SignalCompression>,
         #[serde(rename = "grayscaleBits")]
         grayscale_bits: OneOrMany<u32>,
-        blueprints: OneOrMany<String>,
+        blueprints: OneOrMany<PositionEntry>,
+    }
+    #[derive(Clone, serde::Deserialize)]
+    struct PositionEntry {
+        #[serde(skip)]
+        #[allow(dead_code)]
+        description: Option<String>, // for comments
+        blueprint: String,
     }
 
     fn get_bounding_box(en: &Entity) -> Result<DBounds2, JsValue> {
@@ -292,9 +299,10 @@ fn load_comb_pos_json(json: &str) -> Result<Vec<CombinatorPositionData>, JsValue
         .map_js_err("JSON error")?
         .iter()
         .flat_map(|cb| {
-            cb.blueprints.to_vec().into_iter().map(move |bp| {
+            cb.blueprints.to_vec().into_iter().map(move |entry| {
                 // Decode blueprint string (removing leading "0" prefix)
-                let b64 = base64::decode(bp[1..].as_bytes()).map_js_err("base64 error")?;
+                let b64 =
+                    base64::decode(entry.blueprint[1..].as_bytes()).map_js_err("base64 error")?;
                 let mut zlib = flate2::read::ZlibDecoder::new(&b64[..]);
                 let mut buf = String::new();
 

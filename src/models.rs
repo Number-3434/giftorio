@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BlueprintArgs {
     pub name: Option<String>,
+    #[serde(rename = "combinatorPositionsJson")]
+    pub comb_pos_json: String,
     #[serde(rename = "customHeight")]
     pub custom_height: Option<u32>,
     #[serde(rename = "customWidth")]
