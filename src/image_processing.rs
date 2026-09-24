@@ -1,18 +1,14 @@
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
-use crate::macros::lazy_const;
 use crate::models::{BlueprintArgs, FlippedAxes, ImageRotation::*, ResamplingFilter};
 use crate::progress::set_progress;
 use glam::{uvec2, DVec2, UVec2};
 use image::{imageops, AnimationDecoder, ImageDecoder};
 use std::{collections::VecDeque, io::Cursor, time::Duration};
 use wasm_bindgen::prelude::*;
-use web_sys::Performance;
-
-lazy_const!(PERF_OBJ: Performance = js_sys::Reflect::get(&js_sys::global(), &"performance".into()).unwrap().unchecked_into::<web_sys::Performance>());
 
 fn now_ms() -> f64 {
-    PERF_OBJ.now()
+    js_sys::Date::now()
 }
 
 pub struct FrameData<'a> {
