@@ -26,7 +26,6 @@ const _INITIAL_VALUES = {
 	flippedAxes: "none",
 	grayscaleBits: 0,
 	imageRotation: "none",
-	includeLastFrame: false,
 	maxGroupSize: null,
 	maxSize: 50,
 	mode: "full",
@@ -158,12 +157,6 @@ const FORM_ELEMENTS = {
 		tooltip: `Maximum framerate of the output blueprint. The blueprint will not exceed the original framerate of the GIF. Higher framerates require more frames to be generated, increasing the size of the blueprint.`,
 		splash: "Must be a factor of '60' to match Factorio's tick-rate.",
 		values: FACTORS_OF_60,
-	},
-	includeLastFrame: {
-		name: "Always Include Last Frame",
-		type: "checkbox",
-		tooltip: "If enabled, the last frame is always included, even if it would conflict wit the original timing.",
-		splash: "Usually should be disabled unless it is desirable to see the last frame of the GIF.",
 	},
 	signalSorting: {
 		name: "Signal Sorting",
@@ -625,7 +618,6 @@ function App({ worker }: { worker: Worker }) {
 							imageSize: imageData() && [imageData()!.width, imageData()!.height],
 						},
 						imageRotation: `${formData.imageRotation}`,
-						includeLastFrame: !!formData.includeLastFrame,
 						maxGroupSize: +formData.maxGroupSize! || null,
 						maxSize: +formData.maxSize,
 						mode: getMode(),

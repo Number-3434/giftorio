@@ -19,8 +19,6 @@ pub struct BlueprintArgs {
     pub image_rotation: ImageRotation,
     #[serde(rename = "imageMetadata")]
     pub image_metadata: ImageMetadata,
-    #[serde(rename = "includeLastFrame")]
-    pub last_frame: bool,
     #[serde(rename = "maxSize")]
     pub max_size: u32,
     #[serde(rename = "mode")]

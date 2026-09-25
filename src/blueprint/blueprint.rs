@@ -2,7 +2,6 @@ use crate::blueprint::{
     combinator::*, constants::*, lamp::*, models::*, signals::*, substation::*, timer::*, util::*,
 };
 use crate::image_processing::FrameData;
-use crate::macros::log;
 use glam::{dvec2, uvec2, UVec2};
 use std::{io, sync::Arc};
 use wasm_bindgen::JsValue;
@@ -214,7 +213,7 @@ impl<'a> BlueprintGenerator<'a> {
             ent_data.ents.extend(ents);
             ent_data.wires.extend(wires);
         }
-        let sub_base_pos = dvec2(1.0, 1.0 - args.lamp_margin_y as f64);
+        let sub_base_pos = dvec2(-1.0, 1.0 - args.lamp_margin_y as f64);
         let mut occupied = SubstationOccupied::new(sub_base_pos, args.substation_quality.clone());
         let mut prev_top_right_lamp_ent_n: Option<u32> = None;
 
@@ -222,20 +221,19 @@ impl<'a> BlueprintGenerator<'a> {
             let grp_left = group_i * self.max_cols_per_grp;
             let grp_width = (self.max_cols_per_grp).min(self.dim.x - grp_left);
             let (mut cb_in_ent_n, mut cb_out_ent_n) = (0, 0);
-            let (grp_lamps, mut grp_lamp_wires, new_next_ent_n, top_right_lamp_ent_n) =
-                generate_lamps(
-                    &signals,
-                    uvec2(grp_width, self.dim.y),
-                    matches!(self.args.mode, Mode::Static { combs: false, .. }).then(
-                        || info.as_mut().unwrap().curr_frame.clone(), // Pass image data to lamp generation
-                    ),
-                    &mut occupied,
-                    ent_data.next_ent_n,
-                    dvec2(grp_left as f64, 0.0),
-                    &args,
-                );
+            let (grp_lamps, mut grp_lamp_wires, new_next_ent_n, io_ents_n) = generate_lamps(
+                &signals,
+                uvec2(grp_width, self.dim.y),
+                matches!(self.args.mode, Mode::Static { combs: false, .. }).then(
+                    || info.as_mut().unwrap().curr_frame.clone(), // Pass image data to lamp generation
+                ),
+                &mut occupied,
+                ent_data.next_ent_n,
+                dvec2(grp_left as f64, 0.0),
+                &args,
+            );
+            let (top_left_lamp_ent_n, top_right_lamp_ent_n) = io_ents_n;
             ent_data.next_ent_n = new_next_ent_n;
-            let first_lamp = grp_lamps[0].entity_number;
 
             if self.should_generate_cbs {
                 let info = info.as_mut().unwrap();
@@ -260,14 +258,18 @@ impl<'a> BlueprintGenerator<'a> {
             }
 
             if self.should_generate_cbs {
-                let data_wire = [first_lamp, WIRE_R, cb_in_ent_n, WIRE_R];
-                let signal_wire = [first_lamp, WIRE_G, cb_out_ent_n, WIRE_OUT_G];
-                ent_data.wires.extend([data_wire, signal_wire]);
+                if let Some(top_left_lamp_ent_n) = top_left_lamp_ent_n {
+                    let data_wire = [top_left_lamp_ent_n, WIRE_R, cb_in_ent_n, WIRE_R];
+                    let signal_wire = [top_left_lamp_ent_n, WIRE_G, cb_out_ent_n, WIRE_OUT_G];
+                    ent_data.wires.extend([data_wire, signal_wire]);
+                }
             }
 
             // Connect previous lamps together
             if let Some(prev) = prev_top_right_lamp_ent_n {
-                grp_lamp_wires.push([grp_lamps[0].entity_number, WIRE_R, prev, WIRE_R]);
+                if let Some(top_left_lamp_ent_n) = top_left_lamp_ent_n {
+                    grp_lamp_wires.push([top_left_lamp_ent_n, WIRE_R, prev, WIRE_R]);
+                }
             }
             prev_top_right_lamp_ent_n = top_right_lamp_ent_n;
 
@@ -354,7 +356,7 @@ impl<'a> BlueprintGenerator<'a> {
                     state.sig_buf.push(frame_sigs.clone()); // If we're using delta compression we only compare aginst the previous frame
                 }
 
-                if state.sig_buf.len() < n_buf_frames as usize {
+                if state.sig_buf.len() < n_buf_frames as usize && !is_last_frame {
                     continue; // Accumulate until we have `compression_level` outputs,
                 }
 
@@ -466,14 +468,6 @@ impl<'a> BlueprintGenerator<'a> {
     fn make_wires(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
         let all_ents = &mut self.entity_data.ents;
         let all_wires = &mut self.entity_data.wires;
-
-        log!(
-            "curr_time_ms: {}",
-            self.frame_info
-                .as_ref()
-                .map(|f| f.frame_data.curr_time_ms())
-                .unwrap_or(0)
-        );
 
         // Swap all wires if requested (default uses red wires, so swap all for green).
         // Circuit network filters are already handled.

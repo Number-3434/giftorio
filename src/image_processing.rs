@@ -1,10 +1,11 @@
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
+use crate::macros::log;
 use crate::models::{ImageRotation::*, *};
 use crate::progress::set_progress;
 use glam::{uvec2, DVec2, UVec2};
 use image::{imageops, AnimationDecoder, ImageDecoder};
-use std::{collections::VecDeque, time::Duration};
+use std::time::Duration;
 use wasm_bindgen::prelude::*;
 
 #[inline(always)]
@@ -14,17 +15,16 @@ fn now_ms() -> f64 {
 
 pub struct FrameData<'a> {
     args: &'a BlueprintArgs,
-    buf: Vec<(image::Frame, u32)>,
-    curr_frame_idx: u32,
+    frame_i: u32,
     curr_n_ms: u32,
     fps_timer: f64,
     frames: image::Frames<'a>,
     in_dim: UVec2,
     in_n_frames: u32,
-    next_samp_idx: u32,
+    samp_i: u32,
     out_dim_raw: DVec2,
     out_n_frames: u32,
-    output_frames: VecDeque<image::Frame>,
+    prev_frame: Option<(image::Frame, u32)>,
     resize_filter: imageops::FilterType,
 }
 
@@ -59,18 +59,17 @@ impl<'a> FrameData<'a> {
             .min(args.max_size as f64 / in_dim.y as f64)
             .min(1.0);
 
-        fn expected_output_frames(n_ms: u32, fps: u32, include_last_frame: bool) -> u32 {
-            ((n_ms as u64 * fps as u64) / 1000) as u32 + include_last_frame as u32
+        fn expected_output_frames(n_ms: u32, fps: u32) -> u32 {
+            ((n_ms as u64 * fps as u64) / 1000) as u32 + 1
         }
 
-        let obj = Self {
+        Ok(Self {
             out_n_frames: if matches!(args.mode, Mode::Static { .. }) {
                 1
             } else {
                 expected_output_frames(
                     frame_data.total_duration_ms.as_millis() as u32,
                     args.target_fps.max(1),
-                    args.last_frame,
                 )
             },
             resize_filter: match args.sampling_filter {
@@ -81,31 +80,44 @@ impl<'a> FrameData<'a> {
                 ResamplingFilter::Triangle => imageops::FilterType::Triangle,
             },
             args,
-            buf: Vec::new(),
-            curr_frame_idx: 0,
+            frame_i: 0,
             curr_n_ms: 0,
             fps_timer: now_ms(),
             frames: frame_data.frames,
             in_dim,
             in_n_frames: n_frames,
-            next_samp_idx: 0,
+            samp_i: 0,
             out_dim_raw: scale_factor * DVec2::from(in_dim),
-            output_frames: VecDeque::new(),
-        };
-
-        Ok(obj)
+            prev_frame: None,
+        })
     }
 }
 impl Iterator for FrameData<'_> {
     type Item = Result<image::DynamicImage, JsValue>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.curr_frame_idx == 0 {
+        let mut frame: Option<image::Frame> = None;
+
+        if self.frame_i == 0 {
             self.fps_timer = now_ms();
+            if matches!(self.args.mode, Mode::Static { .. }) {
+                frame = match self.frames.next()? {
+                    Ok(frame) => Some(frame),
+                    Err(e) => return Some(Err(JsValue::from_str(&format!("Decode error: {e}")))),
+                }
+            }
         }
+
         loop {
+            if self.prev_frame.is_some() {
+                if self.out_t_ms() <= self.curr_n_ms {
+                    frame = Some(self.prev_frame.clone().unwrap().0);
+                    self.samp_i += 1;
+                }
+            }
+
             // Flush any remaining frames
-            if let Some(frame) = self.output_frames.pop_front() {
+            if let Some(frame) = frame {
                 // Decode + resize
                 let mut img = image::DynamicImage::ImageRgba8(frame.into_buffer());
                 if self.args.grayscale_bits > 0 {
@@ -131,78 +143,48 @@ impl Iterator for FrameData<'_> {
                 return Some(Ok(img));
             }
 
-            // Note that this will auto-return None if self.frames.next() is None due to the ? operator
-            let frame = match self.frames.next()? {
-                Ok(frame) => frame,
-                Err(e) => return Some(Err(JsValue::from_str(&format!("Decode error: {e}")))),
-            };
-            if matches!(self.args.mode, Mode::Static { .. }) {
-                self.output_frames.push_back(frame);
-                continue;
-            }
+            // Only get the next frame if we're past the current output time
+            if self.out_t_ms() >= self.curr_n_ms {
+                if let Some(frame) = match self.frames.next() {
+                    Some(frame) => match frame {
+                        Ok(frame) => Some(frame),
+                        Err(e) => {
+                            return Some(Err(JsValue::from_str(&format!("Decode error: {e}"))))
+                        }
+                    },
+                    None => return None,
+                } {
+                    let (ms, _) = frame.delay().numer_denom_ms(); // Delay is duration of the frame
+                    let delay = if ms == 0 { DEFAULT_FRAME_DELAY_MS } else { ms };
 
-            // % of prime number cuz i like seeing it go through every number :D
-            if self.curr_frame_idx % 1 == 0 {
-                set_progress(
-                    0.00,
-                    1.00,
-                    self.curr_frame_idx as f64 / self.in_n_frames as f64,
-                    &format!(
-                        "Processing frame {} / {}  ({:.1} FPS)",
-                        self.curr_frame_idx,
-                        self.in_n_frames,
-                        1000.0 * self.curr_frame_idx as f64 / (now_ms() - self.fps_timer)
-                    ),
-                );
-            }
-            let (ms, _) = frame.delay().numer_denom_ms();
-            let delay = if ms == 0 { DEFAULT_FRAME_DELAY_MS } else { ms };
+                    log!("DElay: {}", delay);
 
-            self.buf.push((frame, self.curr_n_ms)); // Add to rolling buffer
-            self.curr_n_ms += delay; // Increment AFTER adding to buffer (we track start time, not end time)
-
-            // Keep buffer bounded (e.g., last 0.5 seconds)
-            while let Some((_, t)) = self.buf.first() {
-                if self.curr_n_ms - *t > 500 {
-                    self.buf.remove(0);
-                } else {
-                    break;
+                    self.curr_n_ms += delay;
+                    self.prev_frame = Some((frame, self.curr_n_ms));
+                    self.frame_i += 1;
                 }
+            } else {
+                log!("Skipping frame");
             }
 
-            // Sample frames as long as we passed the next sample timestamp
-            // Note that we may return multiple frames in this loop,
-            // so we accumulate them in the output_frames deque.
-            let mut samp_ms: u32;
-
-            while {
-                samp_ms = self.next_samp_idx * MS_PER_S as u32 / self.args.target_fps; // truncate
-                samp_ms < self.curr_n_ms
-                    && (self.args.last_frame || self.next_samp_idx < self.out_n_frames)
-            } {
-                let mut best_frame: Option<&image::Frame> = None;
-                let mut best_delta = u32::MAX;
-
-                // Find the closest frame to the current sample (forwards / backwards)
-                for (img, t) in &self.buf {
-                    let delta = samp_ms.abs_diff(*t);
-                    if delta < best_delta {
-                        best_delta = delta;
-                        best_frame = Some(img);
-                    }
-                }
-                if let Some(img) = best_frame {
-                    self.output_frames.push_back(img.clone());
-                }
-                self.next_samp_idx += 1;
-            }
-            self.curr_frame_idx += 1;
+            set_progress(
+                0.00,
+                1.00,
+                self.frame_i as f64 / self.in_n_frames as f64,
+                &format!(
+                    "Processing frame {} / {}  ({:.1} FPS)",
+                    self.frame_i,
+                    self.in_n_frames,
+                    1000.0 * self.frame_i as f64 / (now_ms() - self.fps_timer)
+                ),
+            );
         }
     }
 }
 impl FrameData<'_> {
-    pub fn curr_time_ms(&self) -> u32 {
-        self.curr_n_ms
+    /// Returns the current output time in milliseconds
+    fn out_t_ms(&self) -> u32 {
+        (self.samp_i * MS_PER_S as u32) / self.args.target_fps
     }
 }
 
