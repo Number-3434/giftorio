@@ -15,6 +15,7 @@ pub struct BlueprintGenerator<'a> {
     dim: UVec2,
     max_cols_per_grp: u32,
     n_groups: u32,
+    occupied: SubstationOccupied,
     should_generate_cbs: bool,
     signals: Vec<Arc<Signal>>,
     state: BlueprintState,
@@ -116,6 +117,7 @@ impl<'a> BlueprintGenerator<'a> {
                 })
                 .collect();
         }
+        let sub_base_pos = dvec2(-1.0, 1.0 - args.lamp_margin_y as f64);
 
         Ok(Self {
             args,
@@ -128,6 +130,7 @@ impl<'a> BlueprintGenerator<'a> {
             dim: frame_dim,
             max_cols_per_grp: max_lamp_cols_per_grp,
             n_groups,
+            occupied: SubstationOccupied::new(sub_base_pos, args.substation_quality.clone()),
             should_generate_cbs: match args.mode {
                 Mode::Static { combs: false, .. } | Mode::Lamps | Mode::LampGrid => false,
                 _ => true,
@@ -146,22 +149,39 @@ impl<'a> BlueprintGenerator<'a> {
         match old_state {
             BlueprintState::Start => {
                 write_to(&mut writer, b"{\"blueprint\":{")?;
+
+                let bp_color = match self.args.grayscale_bits {
+                    0 => "#5555ff",
+                    1 => "#000000",
+                    4 => "#222222",
+                    8 => "#444444",
+                    _ => "#",
+                };
+                let name = self.args.name.clone();
+                let name = name.map(|n| format!("{n} ({}x{})", self.dim.x, self.dim.y));
                 let bp = BlueprintInner {
+                    description: None,
                     icons: Some(vec![Icon {
-                        signal: Signal::new_virtual(Arc::clone(&DEC_CB)),
+                        signal: Signal {
+                            type_: Arc::from("item"),
+                            name: Arc::clone(&LAMP),
+                            quality: None,
+                        },
                         index: 1,
                     }]),
                     item: BLUEPRINT.to_string(),
                     label: Some(match self.args.mode {
-                        Mode::Full => self.args.name.clone().unwrap_or("GIF".to_owned()),
+                        Mode::Full => name.unwrap_or("GIF".to_owned()),
                         Mode::Lamps => format!("{}x{} Lamps", self.dim.x, self.dim.y),
                         Mode::LampGrid => format!("{}x{} Lamp Grid", self.dim.x, self.dim.y),
                         Mode::Static { .. } => self.args.name.clone().unwrap_or("Image".to_owned()),
                     }),
+                    label_color: Color::from_hex(bp_color),
                     version: BLUEPRINT_VERSION,
                     entities: Vec::new(),    // don't serialize
                     wires: Some(Vec::new()), // don't serialize
                 };
+
                 write_json_trimmed_to(&mut writer, &bp)?;
                 self.state = BlueprintState::Entities;
             }
@@ -182,18 +202,62 @@ impl<'a> BlueprintGenerator<'a> {
             match self.state {
                 BlueprintState::Entities => write_to(&mut writer, b",\"entities\":[")?,
                 BlueprintState::Wires => {
+                    let ent_data = &mut self.entity_data;
+
+                    for en in ent_data.ents.iter() {
+                        self.occupied.request(en.position); // Request substations to power entities
+                    }
+                    let (ents, wires, _) =
+                        generate_substations(&mut self.occupied, ent_data.next_ent_n);
+                    ent_data.ents.extend(ents);
+                    ent_data.wires.extend(wires);
+
                     // Write remaining entities. Data combinators were NOT included in self.entity_data.ents
-                    for ents in self.entity_data.ents.chunks(ENCODE_CHUNK_SIZE) {
+                    for ents in ent_data.ents.chunks(ENCODE_CHUNK_SIZE) {
                         write_to(&mut writer, b",")?;
                         write_json_trimmed_to(&mut writer, &ents)?; // Remove braces
                     }
+
                     write_to(&mut writer, b"],\"wires\":[")?;
                 }
-                BlueprintState::Finished => write_to(&mut writer, b"]}}")?,
+                BlueprintState::Finished => {
+                    write_to(&mut writer, b"]")?;
+                    write_to(&mut writer, b",\"description\":\"")?;
+                    write_json_trimmed_to(&mut writer, &self.get_description())?;
+                    write_to(&mut writer, b"\"")?;
+                    write_to(&mut writer, b"}}")?;
+                }
                 _ => {}
             }
         }
         Ok(true)
+    }
+
+    fn get_description(&self) -> String {
+        let name = self.args.name.clone();
+        let info = self.frame_info.as_ref();
+        let n_frames = info.map_or(0, |f| f.frame_data.curr_total_frames());
+        let dim = self.dim;
+
+        let mut output: Vec<String> = Vec::new();
+
+        output.extend(vec![
+            format!("[item=small-lamp]   [font=heading-1]GIFtorio"),
+            name.map_or(format!(" Blueprint"), |n| format!(": {n}")),
+            format!("[/font]"),
+            format!("\n------------------------------------------------------"),
+            format!("\n[font=var]Dimensions[/font]: {} x {}", dim.x, dim.y),
+        ]);
+
+        if info.is_some() {
+            let duration = format_duration(info.map_or(0, |f| f.frame_data.curr_duration_ms()));
+
+            output.push(format!("\n[font=var]Frames[/font]: {n_frames}"));
+            output.push(format!("\n[font=var]Duration[/font]: {duration}"));
+        }
+        output.push(format!("\n\nThis was generated using GIFtorio."));
+
+        return output.clone().join("");
     }
 
     fn place_entities(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
@@ -213,8 +277,6 @@ impl<'a> BlueprintGenerator<'a> {
             ent_data.ents.extend(ents);
             ent_data.wires.extend(wires);
         }
-        let sub_base_pos = dvec2(-1.0, 1.0 - args.lamp_margin_y as f64);
-        let mut occupied = SubstationOccupied::new(sub_base_pos, args.substation_quality.clone());
         let mut prev_top_right_lamp_ent_n: Option<u32> = None;
 
         for group_i in 0..self.n_groups {
@@ -227,7 +289,7 @@ impl<'a> BlueprintGenerator<'a> {
                 matches!(self.args.mode, Mode::Static { combs: false, .. }).then(
                     || info.as_mut().unwrap().curr_frame.clone(), // Pass image data to lamp generation
                 ),
-                &mut occupied,
+                &mut self.occupied,
                 ent_data.next_ent_n,
                 dvec2(grp_left as f64, 0.0),
                 &args,
@@ -240,7 +302,7 @@ impl<'a> BlueprintGenerator<'a> {
                 let (other_ents, data_combs, wires, (in_ent_n, out_ent_n, new_base_ent_n)) =
                     generate_combinators(
                         info.n_scaled_frames.div_ceil(info.frames_per_cb),
-                        &mut occupied,
+                        &mut self.occupied,
                         ent_data.next_ent_n,
                         dvec2(grp_left as f64, -1.0 * args.lamp_margin_y as f64),
                         self.max_cols_per_grp,
@@ -279,9 +341,7 @@ impl<'a> BlueprintGenerator<'a> {
             write_json_trimmed_to(&mut writer, &grp_lamps)?;
             ent_data.wires.extend(grp_lamp_wires);
         }
-        let (ents, wires, _) = generate_substations(&mut occupied, ent_data.next_ent_n);
-        ent_data.ents.extend(ents);
-        ent_data.wires.extend(wires);
+
         ent_data.ents.sort_by_key(|e| e.entity_number);
         self.state = BlueprintState::Data;
 
@@ -458,6 +518,9 @@ impl<'a> BlueprintGenerator<'a> {
         }
 
         if output_ents.len() > 0 {
+            for en in output_ents.iter() {
+                self.occupied.request(en.position); // Request powerage for generated combinators
+            }
             write_to(&mut writer, b",")?;
             write_json_trimmed_to(&mut writer, &output_ents)?; // Remove braces
         }

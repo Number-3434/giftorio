@@ -1,6 +1,5 @@
 use crate::constants::{DEFAULT_FRAME_DELAY_MS, MS_PER_S};
 use crate::image_utils::{animation_info, resize_dimensions, AnimationInfo};
-use crate::macros::log;
 use crate::models::{ImageRotation::*, *};
 use crate::progress::set_progress;
 use glam::{uvec2, DVec2, UVec2};
@@ -45,6 +44,12 @@ impl FrameData<'_> {
         } else {
             uvec2(w, h)
         }
+    }
+    pub fn curr_duration_ms(&self) -> u32 {
+        self.curr_n_ms
+    }
+    pub fn curr_total_frames(&self) -> u32 {
+        self.samp_i
     }
     pub fn total_frames(&self) -> u32 {
         self.out_n_frames
@@ -157,14 +162,10 @@ impl Iterator for FrameData<'_> {
                     let (ms, _) = frame.delay().numer_denom_ms(); // Delay is duration of the frame
                     let delay = if ms == 0 { DEFAULT_FRAME_DELAY_MS } else { ms };
 
-                    log!("DElay: {}", delay);
-
                     self.curr_n_ms += delay;
                     self.prev_frame = Some((frame, self.curr_n_ms));
                     self.frame_i += 1;
                 }
-            } else {
-                log!("Skipping frame");
             }
 
             set_progress(

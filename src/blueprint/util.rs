@@ -233,3 +233,14 @@ impl DBounds2 {
         }
     }
 }
+
+pub fn format_duration(ms: u32) -> String {
+    let total_seconds = ms / 1000;
+
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+    let milliseconds = ms % 1000;
+
+    return format!("{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}");
+}

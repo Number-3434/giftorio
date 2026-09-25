@@ -32,6 +32,8 @@ impl Blueprint {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct BlueprintInner {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
     pub icons: Option<Vec<Icon>>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub entities: Vec<Entity>,
@@ -40,6 +42,8 @@ pub struct BlueprintInner {
     pub item: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label_color: Option<Color>,
     pub version: u64,
 }
 
@@ -224,6 +228,19 @@ pub struct Color {
     pub g: f64,
     pub b: f64,
     pub a: f64,
+}
+impl Color {
+    pub fn from_hex(hex: &str) -> Option<Color> {
+        let hex = hex.strip_prefix('#').unwrap_or(hex);
+        if hex.len() != 6 {
+            return None;
+        }
+        let r = u8::from_str_radix(&hex[0..2], 16).ok()? as f64 / 255.0;
+        let g = u8::from_str_radix(&hex[2..4], 16).ok()? as f64 / 255.0;
+        let b = u8::from_str_radix(&hex[4..6], 16).ok()? as f64 / 255.0;
+
+        Some(Color { r, g, b, a: 1.0 })
+    }
 }
 
 #[derive(Clone, Serialize, Deserialize)]

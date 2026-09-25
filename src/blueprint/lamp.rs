@@ -47,7 +47,7 @@ pub fn generate_lamps(
 
         for c in (0..grid_dim.x as usize).rev() {
             let pos = base_pos + dvec2(c as f64, r as f64);
-            if !occupied.request(pos) {
+            if !occupied.test(pos) {
                 continue;
             }
             let curr_ent_n = get_ent_num(r as u32, c as u32);

@@ -193,7 +193,7 @@ pub fn generate_combinators(
             offset = cb_midpoint * DVec2::from(1 + 2 * grid_pos); // Set target midpoint
             curr_pos = base_pos + offset;
 
-            let mut req = |pos: DVec2| occupied.request(pos);
+            let mut req = |pos: DVec2| occupied.test(pos);
 
             if offset.x + cb_midpoint.x > max_cols_per_grp as f64 {
                 grid_pos.x = 0;

@@ -28,7 +28,24 @@ impl SubstationOccupied {
         }) as f64
     }
 
-    /// Requests for a substation to be placed to power the given point.
+    /// Tests if it is possible to place an entity at the given point, without overlapping with a substation.
+    ///
+    /// # Returns
+    ///
+    /// A `bool` indicating whether the substation would NOT occupy the given point.
+    pub fn test(&mut self, mut point: DVec2) -> bool {
+        if self.coverage() == 0.0 {
+            return true;
+        }
+        point -= self.start_pos;
+
+        let center = (point / self.coverage()).round() * self.coverage();
+        let delta = (point - center).abs();
+
+        delta.x >= 1.0 || delta.y >= 1.0
+    }
+
+    /// Requests that a substation be placed to power the given point.
     ///
     /// # Returns
     ///
