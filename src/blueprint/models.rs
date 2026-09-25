@@ -38,6 +38,7 @@ pub struct BlueprintInner {
     #[serde(skip_serializing_if = "is_none_or_empty_vec")]
     pub wires: Option<Vec<Wire>>,
     pub item: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     pub version: u64,
 }

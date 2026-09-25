@@ -133,13 +133,13 @@ const FORM_ELEMENTS = {
 		tooltip: "(Lossless) Reduces filesize by storing unchanged pixels. May affect how the output video can be played.",
 		options: {
 			none: { name: "None", tooltip: "No compression." },
-			delta: {
-				name: "Delta (volatile)",
-				tooltip: `Stores the difference (delta) between each frame, which depends on all previous frames. Blueprints made with Delta compression cannot be seeked or paused.`,
-			},
 			temporal: {
 				name: "Temporal (static)",
 				tooltip: `Uses ~2x more combinators, but reduces filesize ~2-4x. Stores unchanged pixels in a dedicated combinator. The resulting blueprint can be paused / seeked safely without corruption, at the cost of reduced compression value in comparison to 'Delta' compression.`,
+			},
+			delta: {
+				name: "Delta (volatile)",
+				tooltip: `Stores the difference (delta) between each frame, which depends on all previous frames. Blueprints made with Delta compression cannot be seeked or paused.`,
 			},
 		},
 	},

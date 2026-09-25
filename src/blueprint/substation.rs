@@ -84,9 +84,9 @@ pub fn generate_substations(
     for req in &occupied.requests {
         let pos = occupied.start_pos + req;
         let tag = get_tag(pos);
-        let mut ent = Entity::new(curr_ent_n, Arc::clone(&SUBSTATION), pos);
-        ent.quality = occupied.quality.clone();
-        subs.push(ent.with_tag(&tag));
+        let mut en = Entity::new(curr_ent_n, Arc::clone(&SUBSTATION), pos);
+        en.quality = occupied.quality.clone();
+        subs.push(en.with_tag(&tag));
 
         // Connect wires to substations above / substations to the left
         for prev_pos in [pos - dvec2(cov, 0.0), pos - dvec2(0.0, cov)] {

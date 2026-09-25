@@ -148,7 +148,7 @@ impl Iterator for FrameData<'_> {
                     1.00,
                     self.curr_frame_idx as f64 / self.in_n_frames as f64,
                     &format!(
-                        "Processing frame {} / {}  ({:.2} FPS)",
+                        "Processing frame {} / {}  ({:.1} FPS)",
                         self.curr_frame_idx,
                         self.in_n_frames,
                         1000.0 * self.curr_frame_idx as f64 / (now_ms() - self.fps_timer)
@@ -198,6 +198,11 @@ impl Iterator for FrameData<'_> {
             }
             self.curr_frame_idx += 1;
         }
+    }
+}
+impl FrameData<'_> {
+    pub fn curr_time_ms(&self) -> u32 {
+        self.curr_n_ms
     }
 }
 

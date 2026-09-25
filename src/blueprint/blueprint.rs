@@ -2,6 +2,7 @@ use crate::blueprint::{
     combinator::*, constants::*, lamp::*, models::*, signals::*, substation::*, timer::*, util::*,
 };
 use crate::image_processing::FrameData;
+use crate::macros::log;
 use glam::{dvec2, uvec2, UVec2};
 use std::{io, sync::Arc};
 use wasm_bindgen::JsValue;
@@ -19,13 +20,14 @@ pub struct BlueprintGenerator<'a> {
     signals: Vec<Arc<Signal>>,
     state: BlueprintState,
 }
+
+/// Data only used when generating from an image or a video.
 struct FrameInfo<'a> {
     curr_frame: image::DynamicImage,
     frame_data: FrameData<'a>,
     frames_per_cb: u32,
     group_data_combs: Vec<Vec<Entity>>,
     n_buf_frames: u32,
-    n_frames_per_chunk: u32,
     n_scaled_frames: u32,
     next_frame: Option<image::DynamicImage>,
     patch_states: Vec<GroupPatchState>,
@@ -81,7 +83,6 @@ impl<'a> BlueprintGenerator<'a> {
                 group_data_combs: Vec::new(),
                 frames_per_cb,
                 n_buf_frames,
-                n_frames_per_chunk: if n_buf_frames > 1 { 1 } else { 0 },
                 n_scaled_frames,
                 next_frame: None,
                 patch_states: Vec::new(),
@@ -143,7 +144,6 @@ impl<'a> BlueprintGenerator<'a> {
 
     pub fn next_chunk(&mut self, mut writer: &mut dyn io::Write) -> Result<bool, JsValue> {
         let old_state = self.state.clone();
-
         match old_state {
             BlueprintState::Start => {
                 write_to(&mut writer, b"{\"blueprint\":{")?;
@@ -177,6 +177,8 @@ impl<'a> BlueprintGenerator<'a> {
             BlueprintState::Wires => self.make_wires(writer)?,
             BlueprintState::Finished => return Ok(false),
         }
+
+        // Properly delimit the JSON stream before the next chunks
         if old_state != self.state {
             match self.state {
                 BlueprintState::Entities => write_to(&mut writer, b",\"entities\":[")?,
@@ -208,6 +210,7 @@ impl<'a> BlueprintGenerator<'a> {
                 generate_timer(stop, info.ticks_per_frame, info.frames_per_cb, &args);
             ent_data.next_ent_n = ents.iter().map(|e| e.entity_number).max().unwrap_or(0);
             ent_data.next_ent_n += 1;
+
             ent_data.ents.extend(ents);
             ent_data.wires.extend(wires);
         }
@@ -293,7 +296,7 @@ impl<'a> BlueprintGenerator<'a> {
         let frames_per_cb = info.frames_per_cb;
         let gray_bits = self.args.grayscale_bits;
         let max_cols_per_grp = self.max_cols_per_grp;
-        let (n_buf_frames, n_frames_per_chunk) = (info.n_buf_frames, info.n_frames_per_chunk);
+        let n_buf_frames = info.n_buf_frames;
         let n_groups = self.n_groups;
         let ticks_per_frame = info.ticks_per_frame;
         let use_delta_comp = info.use_delta_comp;
@@ -351,7 +354,7 @@ impl<'a> BlueprintGenerator<'a> {
                     state.sig_buf.push(frame_sigs.clone()); // If we're using delta compression we only compare aginst the previous frame
                 }
 
-                if state.sig_buf.len() < n_buf_frames as usize && !is_last_frame {
+                if state.sig_buf.len() < n_buf_frames as usize {
                     continue; // Accumulate until we have `compression_level` outputs,
                 }
 
@@ -463,6 +466,14 @@ impl<'a> BlueprintGenerator<'a> {
     fn make_wires(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
         let all_ents = &mut self.entity_data.ents;
         let all_wires = &mut self.entity_data.wires;
+
+        log!(
+            "curr_time_ms: {}",
+            self.frame_info
+                .as_ref()
+                .map(|f| f.frame_data.curr_time_ms())
+                .unwrap_or(0)
+        );
 
         // Swap all wires if requested (default uses red wires, so swap all for green).
         // Circuit network filters are already handled.
