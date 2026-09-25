@@ -40,7 +40,8 @@ pub fn generate_combinators(
 
     for d in &comb_pos_data {
         if d.dim.x <= max_cols_per_grp as f64
-            && d.compression == args.signal_compression
+            && ((d.compression == Some(SignalCompression::Delta))
+                == (args.signal_compression == Some(SignalCompression::Delta)))
             && d.grayscale_bits.contains(&args.grayscale_bits)
         {
             if d.dim.x > best_pos_data.map_or(0.0, |v| v.dim.x) {

@@ -4,7 +4,7 @@ use crate::models::{ImageRotation::*, *};
 use crate::progress::set_progress;
 use glam::{uvec2, DVec2, UVec2};
 use image::{imageops, AnimationDecoder, ImageDecoder};
-use std::{collections::VecDeque, io::Cursor, time::Duration};
+use std::{collections::VecDeque, time::Duration};
 use wasm_bindgen::prelude::*;
 
 #[inline(always)]
@@ -131,13 +131,10 @@ impl Iterator for FrameData<'_> {
                 return Some(Ok(img));
             }
 
-            // Streaming loop
-            let frame = match self.frames.next() {
-                Some(frame) => match frame {
-                    Ok(frame) => frame,
-                    Err(e) => return Some(Err(JsValue::from_str(&format!("Decode error: {e}")))),
-                },
-                None => return None,
+            // Note that this will auto-return None if self.frames.next() is None due to the ? operator
+            let frame = match self.frames.next()? {
+                Ok(frame) => frame,
+                Err(e) => return Some(Err(JsValue::from_str(&format!("Decode error: {e}")))),
             };
             if matches!(self.args.mode, Mode::Static { .. }) {
                 self.output_frames.push_back(frame);
@@ -176,12 +173,11 @@ impl Iterator for FrameData<'_> {
             // Sample frames as long as we passed the next sample timestamp
             // Note that we may return multiple frames in this loop,
             // so we accumulate them in the output_frames deque.
-            let mut sample_ms: u32;
+            let mut samp_ms: u32;
 
             while {
-                sample_ms =
-                    (self.next_samp_idx as f64 * MS_PER_S / self.args.target_fps as f64) as u32;
-                sample_ms < self.curr_n_ms
+                samp_ms = self.next_samp_idx * MS_PER_S as u32 / self.args.target_fps; // truncate
+                samp_ms < self.curr_n_ms
                     && (self.args.last_frame || self.next_samp_idx < self.out_n_frames)
             } {
                 let mut best_frame: Option<&image::Frame> = None;
@@ -189,7 +185,7 @@ impl Iterator for FrameData<'_> {
 
                 // Find the closest frame to the current sample (forwards / backwards)
                 for (img, t) in &self.buf {
-                    let delta = sample_ms.abs_diff(*t);
+                    let delta = samp_ms.abs_diff(*t);
                     if delta < best_delta {
                         best_delta = delta;
                         best_frame = Some(img);
@@ -233,7 +229,7 @@ impl ImageFrameData<'_> {
 ///
 /// An iterator of `Frame` objects or a JavaScript error.
 pub fn get_frames<'a>(data: &'a [u8], args: &BlueprintArgs) -> Result<ImageFrameData<'a>, JsValue> {
-    let cursor = Cursor::new(data);
+    let cursor = std::io::Cursor::new(data);
     let info: AnimationInfo;
     let dim: UVec2;
     let image_type = args.image_metadata.image_type.as_ref();
@@ -253,13 +249,11 @@ pub fn get_frames<'a>(data: &'a [u8], args: &BlueprintArgs) -> Result<ImageFrame
                 decoder.into_frames()
             }
             _ => {
+                let frames = 1;
                 let use_combs = matches!(args.mode, Mode::Static { combs: true, .. });
-
+                let duration = Duration::from_millis(if use_combs { 1000 } else { 0 });
                 dim = UVec2::from(args.image_metadata.image_size.expect("No image size"));
-                info = AnimationInfo {
-                    frames: 1,
-                    duration: Duration::from_millis(if use_combs { 1000 } else { 0 }),
-                };
+                info = AnimationInfo { frames, duration };
                 image::Frames::new(Box::new(std::iter::once(Ok(image::Frame::new(
                     image::RgbaImage::from_raw(dim.x, dim.y, data.to_vec())
                         .expect("buffer length must be width * height * 4"),
@@ -273,6 +267,8 @@ pub fn get_frames<'a>(data: &'a [u8], args: &BlueprintArgs) -> Result<ImageFrame
 }
 
 /// Converts an RGB pixel to a single 24 bit integer (inside a u32, I know...).
+///
+/// Note: This is a fallback implementation for when the SIMD-accelerated version is not available.
 ///
 /// # Arguments
 ///

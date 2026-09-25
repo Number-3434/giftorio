@@ -82,7 +82,7 @@ const FORM_ELEMENTS = {
 			["none", "None"],
 		],
 		tooltip: "The quality level of the substations.",
-		splash: "Usable 'Use Space Age DLC?' is enabled.",
+		splash: "Usable if 'Use Space Age DLC?' is enabled.",
 	},
 	mode: {
 		name: "Mode",
@@ -497,7 +497,7 @@ function App({ worker }: { worker: Worker }) {
 	worker.onmessage = async (event) => {
 		if (event.data.progress) {
 			const { percentage, status } = event.data.progress;
-			formRefs.progressBar.style.width = `${percentage}%`;
+			formRefs.progressBar.style.setProperty("--progress", `${percentage}%`);
 			formRefs.progressStatus.textContent = status;
 		} else if (event.data.blueprintMetadata) {
 			const { blueprintMetadata } = event.data;
@@ -572,7 +572,7 @@ function App({ worker }: { worker: Worker }) {
 		formRefs.blueprintResult.classList.add("hidden");
 
 		// Reset progress bar and status text explicitly
-		formRefs.progressBar.style.width = "0%";
+		formRefs.progressBar.style.setProperty("--progress", "0%");
 		formRefs.progressStatus.textContent = "Starting...";
 
 		if (formData.mode === "full" && !formData.file) {
@@ -1016,12 +1016,7 @@ function App({ worker }: { worker: Worker }) {
 							</p>
 							<div class="progress-bar-container">
 								<div class="progress-bar-wrapper">
-									<div
-										ref={(el) => (formRefs.progressBar = el)}
-										id="progressBar"
-										class="progress-bar"
-										style="width: 0%"
-									></div>
+									<div ref={(el) => (formRefs.progressBar = el)} id="progressBar" class="progress-bar"></div>
 								</div>
 							</div>
 						</div>

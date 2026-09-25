@@ -526,6 +526,8 @@ input[type="checkbox"]:checked ~ .checkbox {
 }
 
 .progress-container {
+	--progress-color: #00f300;
+
 	margin-top: 5px;
 	margin-left: 14px;
 	margin-right: 14px;
@@ -550,10 +552,18 @@ input[type="checkbox"]:checked ~ .checkbox {
 			min-width: 25vw;
 
 			.progress-bar {
+				position: relative;
 				left: 0;
 				top: 0;
+				width: 100%;
 				height: 100%;
-				background: #00f300;
+				background: linear-gradient(
+					to right,
+					var(--progress-color) 0%,
+					var(--progress-color) calc(var(--progress) - 1px),
+					color-mix(in srgb, var(--progress-color) 50%, transparent) var(--progress),
+					transparent calc(var(--progress) + 1px)
+				); /* Render anti-aliased for smooth transitions */
 			}
 
 			&::after {
