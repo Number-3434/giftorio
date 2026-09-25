@@ -150,12 +150,41 @@ impl<'a> BlueprintGenerator<'a> {
             BlueprintState::Start => {
                 write_to(&mut writer, b"{\"blueprint\":{")?;
 
+                // let mut attributes: Vec<String> = Vec::new();
+
+                // // Generate attributes
+                // if self.args.use_dlc {
+                //     attributes.push("[space-age]".to_owned());
+                // }
+                // if self.args.image_rotation != ImageRotation::Deg0 {
+                //     let (sig, rotation) = match self.args.image_rotation {
+                //         ImageRotation::Deg0 => ("signal-clockwise-circle-arrow", "0°"),
+                //         ImageRotation::Deg90 => ("signal-clockwise-circle-arrow", "90°"),
+                //         ImageRotation::Deg180 => ("signal-clockwise-circle-arrow", "180°"),
+                //         ImageRotation::Deg270 => ("signal-anticlockwise-circle-arrow", "90°"),
+                //     };
+                //     attributes.push(format!("[virtual-signal={sig}] {rotation}"));
+                // }
+                // if self.args.prefer_green_wires {
+                //     attributes.push("[item=green-wire]".to_owned());
+                // } else {
+                //     attributes.push("[item=red-wire]".to_owned());
+                // }
+                // if let Some(q) = self.args.substation_quality.clone() {
+                //     attributes.push(format!("[item=copper-wire,quality={q}]"));
+                // }
+                // if self.args.flipped_axes != FlippedAxes::None {
+                //     attributes.push(match self.args.flipped_axes {
+                // 		FlippedAxes::X => "[virtual-signal=signal-left-right-arrow]",
+                // 		FlippedAxes::Y => "[virtual-signal=signal-up-down-arrow]",
+                // 		FlippedAxes::Both => "[virtual-signal=signal-left-right-arrow] [virtual-signal=signal-up-down-arrow]",
+                // 		_ => unreachable!(),
+                // 	}.to_owned());
+                // }
+
                 let bp_color = match self.args.grayscale_bits {
-                    0 => "#5555ff",
-                    1 => "#000000",
-                    4 => "#222222",
-                    8 => "#444444",
-                    _ => "#",
+                    0 => "#8888ff",
+                    _ => "#888888",
                 };
                 let name = self.args.name.clone();
                 let name = name.map(|n| format!("{n} ({}x{})", self.dim.x, self.dim.y));
@@ -202,8 +231,15 @@ impl<'a> BlueprintGenerator<'a> {
             match self.state {
                 BlueprintState::Entities => write_to(&mut writer, b",\"entities\":[")?,
                 BlueprintState::Wires => {
-                    let ent_data = &mut self.entity_data;
+                    // Set description of constant combinator
+                    if let Some(incrementer) = self.entity_data.ents.get(0) {
+                        if incrementer.has_tag("incrementer".to_owned()) {
+                            let desc = &self.get_description();
+                            self.entity_data.ents[0] = incrementer.clone().with_description(desc);
+                        }
+                    }
 
+                    let ent_data = &mut self.entity_data;
                     for en in ent_data.ents.iter() {
                         self.occupied.request(en.position); // Request substations to power entities
                     }
@@ -236,28 +272,55 @@ impl<'a> BlueprintGenerator<'a> {
     fn get_description(&self) -> String {
         let name = self.args.name.clone();
         let info = self.frame_info.as_ref();
-        let n_frames = info.map_or(0, |f| f.frame_data.curr_total_frames());
         let dim = self.dim;
 
         let mut output: Vec<String> = Vec::new();
+        let name = match self.args.mode {
+            Mode::LampGrid => format!("{}x{} Lamp Grid", dim.x, dim.y),
+            Mode::Lamps => format!("{}x{} Lamps", dim.x, dim.y),
+            _ => name.unwrap_or("Blueprint".to_owned()),
+        };
 
-        output.extend(vec![
-            format!("[item=small-lamp]   [font=heading-1]GIFtorio"),
-            name.map_or(format!(" Blueprint"), |n| format!(": {n}")),
-            format!("[/font]"),
-            format!("\n------------------------------------------------------"),
-            format!("\n[font=var]Dimensions[/font]: {} x {}", dim.x, dim.y),
+        output.extend([
+            format!("\n[img=item.small-lamp]  [font=compi]{name}[/font]"),
+            format!("\n"),
+            format!("\n[font=var]Dimensions[/font]:    {}x{}", dim.x, dim.y),
         ]);
 
-        if info.is_some() {
-            let duration = format_duration(info.map_or(0, |f| f.frame_data.curr_duration_ms()));
+        if let Some(fd) = info.map(|x| &x.frame_data) {
+            let duration = format_duration(fd.curr_duration_ms());
+            let color_format = match self.args.grayscale_bits {
+                0 => "Full Color (RGB8)",
+                1 => "Black & White",
+                4 => "4-bit Grayscale (16 colors)",
+                8 => "8-bit Grayscale (256 colors)",
+                x => &format!("{x}"),
+            };
+            let n_frames = fd.curr_total_frames();
+            let fps = self.args.target_fps;
 
-            output.push(format!("\n[font=var]Frames[/font]: {n_frames}"));
-            output.push(format!("\n[font=var]Duration[/font]: {duration}"));
+            output.push(format!("\n[font=var]Color Format[/font]:   {color_format}"));
+            if let Some(compression) = self.args.signal_compression {
+                let compression = match compression {
+                    SignalCompression::Delta => "Delta",
+                    SignalCompression::Temporal { window } => &format!("Temporal ({window}ms)"),
+                };
+                output.push(format!("\n[font=var]Compression[/font]:  {compression}"));
+            }
+            output.extend([
+                format!("\n[font=var]Duration[/font]:   {duration}"),
+                format!("\n[font=var]Frames[/font]:     {n_frames} ({fps} FPS)"),
+            ]);
         }
-        output.push(format!("\n\nThis was generated using GIFtorio."));
 
-        return output.clone().join("");
+        if self.args.use_dlc {
+            output.push("\n\n[space-age]".to_owned());
+        }
+
+        let footer = "Generated using GIFtorio.";
+        output.push(format!("\n\n[font=default-small-semibold]{footer}[/font]"));
+
+        return output.join("");
     }
 
     fn place_entities(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
@@ -335,6 +398,9 @@ impl<'a> BlueprintGenerator<'a> {
             }
             prev_top_right_lamp_ent_n = top_right_lamp_ent_n;
 
+            for lamp in grp_lamps.iter() {
+                self.occupied.request(lamp.position); // Request powerage for lamps
+            }
             if group_i > 0 {
                 write_to(&mut writer, b",")?;
             }

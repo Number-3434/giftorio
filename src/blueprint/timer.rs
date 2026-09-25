@@ -27,7 +27,7 @@ pub fn generate_timer(
     let mut ents: Vec<Entity> = Vec::new();
     let mut wires: Vec<[u32; 4]> = Vec::new();
 
-    let en = Entity::new(1, Arc::clone(&CONSTANT_COMB), TIMER1_POS).with_direction(DIR_R);
+    let mut en = Entity::new(1, Arc::clone(&CONSTANT_COMB), TIMER1_POS).with_direction(DIR_R);
     let sections = Sections {
         sections: vec![Section {
             index: 1,
@@ -41,7 +41,8 @@ pub fn generate_timer(
             }],
         }],
     };
-    ents.push(en.with_control_behavior(ControlBehavior::Constant { sections }));
+    en = en.with_control_behavior(ControlBehavior::Constant { sections });
+    ents.push(en.with_tag("incrementer"));
 
     let mut en = Entity::new(2, Arc::clone(&DEC_CB), TIMER2_POS).with_direction(DIR_R);
     let decider_conditions = DeciderConditions {

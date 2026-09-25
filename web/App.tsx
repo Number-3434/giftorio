@@ -84,7 +84,7 @@ const FORM_ELEMENTS = {
 		splash: "Usable if 'Use Space Age DLC?' is enabled.",
 	},
 	mode: {
-		name: "Mode",
+		name: "Output Mode",
 		type: "select",
 		options: {
 			full: { name: "Everything", tooltip: "(Recommended) The full package." },
@@ -111,7 +111,6 @@ const FORM_ELEMENTS = {
 	customWidth: {
 		name: "Width",
 		type: "number",
-		compact: true,
 		scale: "ln10",
 		min: 1,
 		max: 8000,
@@ -120,7 +119,6 @@ const FORM_ELEMENTS = {
 	customHeight: {
 		name: "Height",
 		type: "number",
-		compact: true,
 		scale: "ln10",
 		min: 1,
 		max: 8000,
