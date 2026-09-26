@@ -9,24 +9,26 @@ pub struct BlueprintArgs {
     pub custom_height: Option<u32>,
     #[serde(rename = "customWidth")]
     pub custom_width: Option<u32>,
-    #[serde(rename = "displayMarginY")]
-    pub lamp_margin_y: u32,
     #[serde(rename = "flippedAxes")]
     pub flipped_axes: FlippedAxes,
     #[serde(rename = "grayscaleBits")]
     pub grayscale_bits: u32,
-    #[serde(rename = "imageRotation")]
-    pub image_rotation: ImageRotation,
+    #[serde(rename = "imageFilters")]
+    pub image_filters: Vec<ImageFilter>,
     #[serde(rename = "imageMetadata")]
     pub image_metadata: ImageMetadata,
+    #[serde(rename = "imageRotation")]
+    pub image_rotation: ImageRotation,
+    #[serde(rename = "displayMarginY")]
+    pub lamp_margin_y: u32,
+    #[serde(rename = "maxGroupSize")]
+    pub max_group_size: Option<u32>,
     #[serde(rename = "maxSize")]
     pub max_size: u32,
     #[serde(rename = "mode")]
     pub mode: Mode,
     #[serde(rename = "outputFormat")]
     pub output_format: OutputFormat,
-    #[serde(rename = "maxGroupSize")]
-    pub max_group_size: Option<u32>,
     #[serde(rename = "useGreenLampWires")]
     pub prefer_green_wires: bool,
     #[serde(rename = "useHorizontalLampWires")]
@@ -43,6 +45,21 @@ pub struct BlueprintArgs {
     pub target_fps: u32,
     #[serde(rename = "useDLC")]
     pub use_dlc: bool,
+}
+
+#[derive(Copy, Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(untagged)]
+pub enum ImageFilter {
+    #[serde(rename = "blur")]
+    Blur(f32),
+    #[serde(rename = "brightness")]
+    Brightness(i32),
+    #[serde(rename = "contrast")]
+    Contrast(f32),
+    #[serde(rename = "hueRotate")]
+    HueRotate(i32),
+    #[serde(rename = "unsharpen")]
+    Unsharpen(f32, i32),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -77,7 +94,7 @@ pub enum FlippedAxes {
     Both = 3,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Copy, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum Mode {
     #[serde(rename = "full")]
     Full,
@@ -88,7 +105,7 @@ pub enum Mode {
     #[serde(rename = "staticImage")]
     Static {
         #[serde(rename = "useConstantCombinators")]
-        const_combs: bool,
+        const_cb: bool,
         #[serde(rename = "useCombinators")]
         combs: bool,
         #[serde(rename = "useTimer")]
@@ -106,7 +123,7 @@ pub enum SignalSorting {
     Json,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Copy, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub enum ResamplingFilter {
     #[serde(rename = "catrom")]
     Catrom,
@@ -118,6 +135,8 @@ pub enum ResamplingFilter {
     Nearest,
     #[serde(rename = "triangle")]
     Triangle,
+    #[serde(rename = "thumbnail")]
+    Thumbnail,
 }
 
 #[derive(Debug, Copy, Serialize, Deserialize, Clone, PartialEq)]

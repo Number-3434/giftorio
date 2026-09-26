@@ -217,9 +217,9 @@ impl<'a> BlueprintGenerator<'a> {
             BlueprintState::Entities => self.place_entities(writer)?,
             BlueprintState::Data => {
                 if self.should_generate_cbs {
-                    self.populate_data(writer)?
+                    self.populate_data(writer)?;
                 } else {
-                    self.state = BlueprintState::Wires
+                    self.state = BlueprintState::Wires;
                 }
             }
             BlueprintState::Wires => self.make_wires(writer)?,
@@ -383,10 +383,19 @@ impl<'a> BlueprintGenerator<'a> {
             }
 
             if self.should_generate_cbs {
+                let wires = &mut ent_data.wires;
                 if let Some(top_left_lamp_ent_n) = top_left_lamp_ent_n {
-                    let data_wire = [top_left_lamp_ent_n, WIRE_R, cb_in_ent_n, WIRE_R];
-                    let signal_wire = [top_left_lamp_ent_n, WIRE_G, cb_out_ent_n, WIRE_OUT_G];
-                    ent_data.wires.extend([data_wire, signal_wire]);
+                    if !matches!(args.mode, Mode::Static { timer: false, .. }) {
+                        // Timing wire
+                        wires.push([top_left_lamp_ent_n, WIRE_R, cb_in_ent_n, WIRE_R]);
+                    }
+
+                    // Data wire
+                    if matches!(args.mode, Mode::Static { const_cb: true, .. }) {
+                        wires.push([top_left_lamp_ent_n, WIRE_G, cb_out_ent_n, WIRE_G]);
+                    } else {
+                        wires.push([top_left_lamp_ent_n, WIRE_G, cb_out_ent_n, WIRE_OUT_G]);
+                    }
                 }
             }
 
@@ -429,16 +438,36 @@ impl<'a> BlueprintGenerator<'a> {
         let ticks_per_frame = info.ticks_per_frame;
         let use_delta_comp = info.use_delta_comp;
         let ticks_per_grp = ticks_per_frame * frames_per_cb;
+        let mode = self.args.mode;
 
         let mk_cb = |start: u32, end: u32, outputs: Vec<CombinatorOutput>| {
-            let sig = Signal::new_virtual(Arc::clone(&SIG_T));
-            ControlBehavior::from_decider_conditions(DeciderConditions {
-                conditions: Some(vec![
-                    Condition::new(sig.clone(), start as i32, COMP_GE),
-                    Condition::new(sig, end as i32, COMP_LT).with_compare_type(COMP_AND),
-                ]),
-                outputs: Some(outputs),
-            })
+            if matches!(mode, Mode::Static { const_cb: true, .. }) {
+                let filters = outputs.iter().enumerate().map(|(i, o)| {
+                    let sig = o.signal.as_ref().unwrap();
+                    Filter {
+                        index: i as u32 + 1,
+                        type_: Arc::clone(&sig.type_),
+                        name: Arc::clone(&sig.name),
+                        quality: sig.quality.clone(),
+                        comparator: Some(COMP_EQ.to_owned()),
+                        count: o.constant,
+                    }
+                });
+                let filters = filters.collect();
+                let sections = Sections {
+                    sections: vec![Section { index: 1, filters }],
+                };
+                ControlBehavior::Constant { sections }
+            } else {
+                let timing_sig = Signal::new_virtual(Arc::clone(&SIG_T));
+                ControlBehavior::from_decider_conditions(DeciderConditions {
+                    conditions: Some(vec![
+                        Condition::new(timing_sig.clone(), start as i32, COMP_GE),
+                        Condition::new(timing_sig, end as i32, COMP_LT).with_compare_type(COMP_AND),
+                    ]),
+                    outputs: Some(outputs),
+                })
+            }
         };
         let mut output_ents: Vec<Entity> = Vec::with_capacity(ENCODE_CHUNK_SIZE);
 

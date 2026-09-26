@@ -6,6 +6,7 @@ import infoIcon from "./assets/img/info.png";
 import { loadFileDB, saveFileDB } from "./fileUtils";
 import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
 import { Slider } from "./slider";
+import ImageFilters from "./imageFilters";
 
 const isTyping = () => document.activeElement?.matches("input, textarea, select, [contenteditable]");
 const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60] as const;
@@ -25,6 +26,7 @@ const _INITIAL_VALUES = {
 	file: null as File | null,
 	flippedAxes: "none",
 	grayscaleBits: 0,
+	imageFilters: [],
 	imageRotation: "none",
 	maxGroupSize: null,
 	maxSize: 50,
@@ -73,12 +75,12 @@ const FORM_ELEMENTS = {
 		name: "Substation Quality",
 		type: "select",
 		options: [
+			["none", "None"],
 			["normal", "Normal"],
 			["uncommon", "Uncommon"],
 			["rare", "Rare"],
 			["epic", "Epic"],
 			["legendary", "Legendary"],
-			["none", "None"],
 		],
 		tooltip: "The quality level of the substations.",
 		splash: "Usable if 'Use Space Age DLC?' is enabled.",
@@ -190,6 +192,7 @@ const FORM_ELEMENTS = {
 			gaussian: { name: "Gaussian", tooltip: "Smooth; very stable; no aliasing, but may blur pixel art." },
 			lanczos3: { name: "Lanczos3", tooltip: "Crisp detail; sharper edges; may shimmer / have aliasing." },
 			nearest: { name: "Nearest", tooltip: "Sharp and 'blocky'. Great for pixel art." },
+			thumbnail: { name: "Thumbnail", tooltip: "Fastest; optimized, but low quality." },
 		},
 		splash: "Only used to resize the video to the blueprint's dimensions.",
 	},
@@ -433,7 +436,6 @@ function App({ worker }: { worker: Worker }) {
 						ref={(e) => ((formRefs as any)[k] = e)}
 						id={k}
 						name={k}
-						class="bg-gray-100 font-semibold border focus:outline-none focus:ring"
 						value={formData[k] as unknown as string}
 						onChange={(e) => setFormData(k, e.currentTarget.value)}
 					>
@@ -615,6 +617,7 @@ function App({ worker }: { worker: Worker }) {
 							imageType: formData.file?.type.substring(6 /* image/ */),
 							imageSize: imageData() && [imageData()!.width, imageData()!.height],
 						},
+						imageFilters: formData.imageFilters,
 						imageRotation: `${formData.imageRotation}`,
 						maxGroupSize: +formData.maxGroupSize! || null,
 						maxSize: +formData.maxSize,
@@ -853,6 +856,7 @@ function App({ worker }: { worker: Worker }) {
 	return (
 		<>
 			<Background ref={(api) => (refBackground = api)} />
+
 			{isMobile() && (
 				<div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Some features may be limited on mobile.</div>
 			)}
@@ -991,6 +995,10 @@ function App({ worker }: { worker: Worker }) {
 							style={{ "max-height": "50vh" }}
 						>
 							{renderFormElements()}
+							<ImageFilters
+								defaultFilters={formData.imageFilters}
+								onChange={(filters) => setFormData("imageFilters", filters as any)}
+							/>
 						</div>
 					</div>
 

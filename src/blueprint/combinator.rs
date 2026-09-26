@@ -37,6 +37,7 @@ pub fn generate_combinators(
     let mut pos_dict: HashMap<String, &Entity> = HashMap::new();
     let mut base_pos = start_pos;
     let use_compact_layout = max_cols_per_grp < 2;
+    let each = Signal::new_virtual(Arc::clone(&SIG_EACH));
 
     for d in &comb_pos_data {
         if d.dim.x <= max_cols_per_grp as f64
@@ -75,23 +76,17 @@ pub fn generate_combinators(
 
     // Finds the position for the combinator with the given tag, based off the blueprint string
     // we decoded earlier
-    let get_pos = |tag: &str| {
-        let mut pos = pos_dict
-            .get(tag)
-            .expect(&format!("No '{tag}' entity found!"))
-            .position
-            + base_offset;
-        pos.y -= height;
-        return pos;
+    let get_pos = |tag: &str| -> DVec2 {
+        pos_dict.get(tag).expect(&format!("No '{tag}'!")).position + base_offset - height
     };
-    let get_dir = |tag: &str| pos_dict.get(tag).unwrap().direction.unwrap_or(0);
+    let get_dir = |tag: &str| -> u32 { pos_dict.get(tag).unwrap().direction.unwrap_or(0) };
 
+    // Note: signal compression is auto-disabled if generating a static image
     if use_delta_comp {
         let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), get_pos("delay"));
-        let each = Signal::new_virtual(Arc::clone(&SIG_EACH));
         let dc = DeciderConditions {
             conditions: Some(vec![Condition::new(each.clone(), 0, COMP_NE)]),
-            outputs: Some(vec![CombinatorOutput::new(Arc::from(each), None)]),
+            outputs: Some(vec![CombinatorOutput::new(Arc::from(each.clone()), None)]),
         };
         en = en.with_tag("delay comb").with_direction(get_dir("delay"));
         en = en.with_control_behavior(ControlBehavior::from_decider_conditions(dc));
@@ -103,17 +98,14 @@ pub fn generate_combinators(
         let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), get_pos("memory"));
         let dc = DeciderConditions {
             conditions: Some(vec![
-                Condition::new(Signal::new_virtual(Arc::clone(&SIG_EACH)), 0, COMP_NE)
+                Condition::new(each.clone(), 0, COMP_NE)
                     .with_first_signal_networks(NetworkFilters::green()),
                 Condition::new(Signal::new_virtual(Arc::clone(&SIG_T)), 0, COMP_NE)
                     .with_compare_type(COMP_AND)
                     .with_first_signal_networks(NetworkFilters::red()),
             ]),
-            outputs: Some(vec![CombinatorOutput::new(
-                Arc::from(Signal::new_virtual(Arc::clone(&SIG_EACH))),
-                None,
-            )
-            .with_networks(NetworkFilters::green())]),
+            outputs: Some(vec![CombinatorOutput::new(Arc::from(each.clone()), None)
+                .with_networks(NetworkFilters::green())]),
         };
         en = en.with_direction(get_dir("memory"));
         en = en.with_control_behavior(ControlBehavior::from_decider_conditions(dc));
@@ -129,11 +121,11 @@ pub fn generate_combinators(
         let mut en = Entity::new(curr_ent_n, Arc::clone(&ARI_CB), get_pos(">>"));
         let desc = "Shifts the input numbers until they are in the range of the current frame.";
         let ac = ArithmeticConditions {
-            first_signal: Some(Signal::new_virtual(Arc::clone(&SIG_EACH))),
+            first_signal: Some(each.clone()),
             second_signal: Some(Signal::new_virtual(Arc::clone(&SIG_F))),
             second_constant: None,
             operation: Some(OP_RSHIFT.to_owned()),
-            output_signal: Some(Signal::new_virtual(Arc::clone(&SIG_EACH))),
+            output_signal: Some(each.clone()),
         };
         en = en.with_tag(">> comb").with_direction(get_dir(">>"));
         en = en.with_control_behavior(ControlBehavior::from_arithmetic_conditions(ac));
@@ -176,7 +168,9 @@ pub fn generate_combinators(
     } else {
         entity_idx_by_tag!(other_ents, "memory comb").unwrap_or((curr_ent_n - 1).max(base_ent_n))
     };
-    let cb_midpoint = if use_compact_layout {
+    let cb_midpoint = if matches!(args.mode, Mode::Static { const_cb: true, .. }) {
+        dvec2(0.5, -0.5)
+    } else if use_compact_layout {
         dvec2(0.5, -1.0) // Base position for vertical layout
     } else {
         dvec2(1.0, -0.5) // Base position for horizontal layout
@@ -186,6 +180,20 @@ pub fn generate_combinators(
     let mut grid_pos = IVec2::ZERO; // Current grid position (not absolute, multiplied by combinator's bounding box)
     let mut prev_ents_n: Vec<Option<u32>> = vec![None; max_cols_per_grp as usize];
     let mut prev_prev_ents_n: Vec<Option<u32>> = vec![None; max_cols_per_grp as usize];
+    let mut req = |pos: DVec2| -> bool { occupied.test(pos) };
+
+    // Calculate the offsets to test for collisions. In Factorio, all collision boxes are rectangular.
+    let size = cb_midpoint.abs() * 2.0;
+    let x_offsets = (0..size.x as usize).map(|v| v as f64 + 0.5 - size.x / 2.0);
+    let y_offsets = (0..size.y as usize).map(|v| v as f64 + 0.5 - size.y / 2.0);
+    let y_offsets = y_offsets.collect::<Vec<_>>();
+    let hitbox_offsets = x_offsets.flat_map(|x| y_offsets.iter().map(move |&y| dvec2(x, y)));
+    let hitbox_offsets = hitbox_offsets.collect::<Vec<_>>();
+    let target_name = if matches!(args.mode, Mode::Static { const_cb: true, .. }) {
+        CONSTANT_COMB
+    } else {
+        DEC_CB
+    };
 
     // Generates combinators up to down, then left to right.
     for chunk_i in 0..ticks_per_group as usize {
@@ -193,23 +201,17 @@ pub fn generate_combinators(
             offset = cb_midpoint * DVec2::from(1 + 2 * grid_pos); // Set target midpoint
             curr_pos = base_pos + offset;
 
-            let mut req = |pos: DVec2| occupied.test(pos);
-
             if offset.x + cb_midpoint.x > max_cols_per_grp as f64 {
                 grid_pos.x = 0;
                 grid_pos.y += 1;
-            } else if {
-                use_compact_layout
-                    && (!req(curr_pos - dvec2(0.0, 0.5)) || !req(curr_pos + dvec2(0.0, 0.5)))
-                    || (!req(curr_pos - dvec2(0.5, 0.0)) || !req(curr_pos + dvec2(0.5, 0.0)))
-            } {
+            } else if hitbox_offsets.iter().any(|o| !req(curr_pos + o)) {
                 grid_pos.x += 1;
             } else {
                 break;
             }
         }
 
-        let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), curr_pos);
+        let mut en = Entity::new(curr_ent_n, Arc::clone(&target_name), curr_pos);
         if chunk_i == 0 {
             en = en.with_tag("first data comb");
             if use_delta_comp {

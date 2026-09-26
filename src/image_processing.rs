@@ -24,7 +24,6 @@ pub struct FrameData<'a> {
     out_dim_raw: DVec2,
     out_n_frames: u32,
     prev_frame: Option<(image::Frame, u32)>,
-    resize_filter: imageops::FilterType,
 }
 
 impl FrameData<'_> {
@@ -77,13 +76,6 @@ impl<'a> FrameData<'a> {
                     args.target_fps.max(1),
                 )
             },
-            resize_filter: match args.sampling_filter {
-                ResamplingFilter::Catrom => imageops::FilterType::CatmullRom,
-                ResamplingFilter::Gaussian => imageops::FilterType::Gaussian,
-                ResamplingFilter::Lanczos3 => imageops::FilterType::Lanczos3,
-                ResamplingFilter::Nearest => imageops::FilterType::Nearest,
-                ResamplingFilter::Triangle => imageops::FilterType::Triangle,
-            },
             args,
             frame_i: 0,
             curr_n_ms: 0,
@@ -123,29 +115,7 @@ impl Iterator for FrameData<'_> {
 
             // Flush any remaining frames
             if let Some(frame) = frame {
-                // Decode + resize
-                let mut img = image::DynamicImage::ImageRgba8(frame.into_buffer());
-                if self.args.grayscale_bits > 0 {
-                    img = image::DynamicImage::ImageLuma8(img.to_luma8());
-                }
-                img = img.resize(
-                    self.out_dim_raw.x.round() as u32,
-                    self.out_dim_raw.y.round() as u32,
-                    self.resize_filter,
-                ); // Use raw dims for max precision
-                img = match self.args.flipped_axes {
-                    FlippedAxes::X => img.fliph(),
-                    FlippedAxes::Y => img.flipv(),
-                    FlippedAxes::Both => img.flipv().fliph(),
-                    _ => img,
-                }; // Flip before rotate
-                img = match self.args.image_rotation {
-                    Deg90 => img.rotate90(),
-                    Deg180 => img.rotate180(),
-                    Deg270 => img.rotate270(),
-                    _ => img,
-                };
-                return Some(Ok(img));
+                return Some(self.convert_frame(frame));
             }
 
             // Only get the next frame if we're past the current output time
@@ -183,9 +153,58 @@ impl Iterator for FrameData<'_> {
     }
 }
 impl FrameData<'_> {
-    /// Returns the current output time in milliseconds
+    //// Returns the current output time in milliseconds.
     fn out_t_ms(&self) -> u32 {
         (self.samp_i * MS_PER_S as u32) / self.args.target_fps
+    }
+
+    /// Converts the input frame to the target output using the specified settings.
+    pub fn convert_frame(&self, frame: image::Frame) -> Result<image::DynamicImage, JsValue> {
+        let mut img = image::DynamicImage::ImageRgba8(frame.into_buffer());
+        let out_dim = self.out_dim_raw.round().as_uvec2();
+
+        // Apply filters
+        for &f in self.args.image_filters.iter() {
+            img = match f {
+                ImageFilter::Blur(sigma) => img.blur(sigma),
+                ImageFilter::Brightness(value) => img.brighten(value),
+                ImageFilter::Contrast(c) => img.adjust_contrast(c),
+                ImageFilter::HueRotate(value) => img.huerotate(value),
+                ImageFilter::Unsharpen(sigma, threshold) => img.unsharpen(sigma, threshold),
+            };
+        }
+
+        if self.args.grayscale_bits > 0 {
+            img = image::DynamicImage::ImageLuma8(img.to_luma8());
+        }
+        img = match self.args.sampling_filter {
+            ResamplingFilter::Thumbnail => img.thumbnail(out_dim.x, out_dim.y),
+            filter => img.resize(
+                out_dim.x,
+                out_dim.y,
+                match filter {
+                    ResamplingFilter::Catrom => imageops::FilterType::CatmullRom,
+                    ResamplingFilter::Gaussian => imageops::FilterType::Gaussian,
+                    ResamplingFilter::Lanczos3 => imageops::FilterType::Lanczos3,
+                    ResamplingFilter::Nearest => imageops::FilterType::Nearest,
+                    ResamplingFilter::Triangle => imageops::FilterType::Triangle,
+                    _ => unreachable!(),
+                },
+            ),
+        };
+        img = match self.args.flipped_axes {
+            FlippedAxes::X => img.fliph(),
+            FlippedAxes::Y => img.flipv(),
+            FlippedAxes::Both => img.flipv().fliph(),
+            _ => img,
+        }; // Flip before rotate
+        img = match self.args.image_rotation {
+            Deg90 => img.rotate90(),
+            Deg180 => img.rotate180(),
+            Deg270 => img.rotate270(),
+            _ => img,
+        };
+        Ok(img)
     }
 }
 

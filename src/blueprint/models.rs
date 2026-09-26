@@ -311,7 +311,11 @@ pub struct DeciderConditions {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Filter {
     pub index: u32,
-    #[serde(rename = "type")]
+    #[serde(
+        rename = "type",
+        default = "Signal::default_signal_type",
+        skip_serializing_if = "Signal::is_default_signal_type"
+    )]
     pub type_: Arc<str>,
     pub name: Arc<str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -319,8 +323,9 @@ pub struct Filter {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comparator: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub count: Option<u32>,
+    pub count: Option<i32>,
 }
+
 pub trait NetworkSwapper {
     fn swap_networks(&mut self);
 }
