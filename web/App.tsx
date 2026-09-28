@@ -6,7 +6,6 @@ import infoIcon from "./assets/img/info.png";
 import { loadFileDB, saveFileDB } from "./fileUtils";
 import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
 import { Slider } from "./slider";
-import ImageFilters from "./imageFilters";
 
 const isTyping = () => document.activeElement?.matches("input, textarea, select, [contenteditable]");
 const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60] as const;
@@ -617,7 +616,7 @@ function App({ worker }: { worker: Worker }) {
 							imageType: formData.file?.type.substring(6 /* image/ */),
 							imageSize: imageData() && [imageData()!.width, imageData()!.height],
 						},
-						imageFilters: formData.imageFilters,
+						imageFilters: [],
 						imageRotation: `${formData.imageRotation}`,
 						maxGroupSize: +formData.maxGroupSize! || null,
 						maxSize: +formData.maxSize,
@@ -995,10 +994,6 @@ function App({ worker }: { worker: Worker }) {
 							style={{ "max-height": "50vh" }}
 						>
 							{renderFormElements()}
-							<ImageFilters
-								defaultFilters={formData.imageFilters}
-								onChange={(filters) => setFormData("imageFilters", filters as any)}
-							/>
 						</div>
 					</div>
 
