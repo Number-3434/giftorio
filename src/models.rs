@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct BlueprintArgs {
     pub name: Option<String>,
     #[serde(rename = "combinatorPositionsJson")]
@@ -40,11 +41,19 @@ pub struct BlueprintArgs {
     #[serde(rename = "signalSorting")]
     pub signal_sorting: SignalSorting,
     #[serde(rename = "substationQuality")]
-    pub substation_quality: Option<std::sync::Arc<crate::blueprint::models::Quality>>,
+    pub substation_quality: Option<Arc<str>>,
     #[serde(rename = "targetFps")]
     pub target_fps: u32,
-    #[serde(rename = "useDLC")]
-    pub use_dlc: bool,
+
+    #[serde(rename = "timingSignals")]
+    pub timing_sigs: TimingSignals,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TimingSignals {
+    pub f: Option<crate::blueprint::models::Signal>,
+    pub s: Option<crate::blueprint::models::Signal>,
+    pub t: crate::blueprint::models::Signal,
 }
 
 #[derive(Copy, Debug, Serialize, Deserialize, Clone, PartialEq)]

@@ -53,40 +53,11 @@ pub struct Icon {
     pub index: u32,
 }
 
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
-pub enum Quality {
-    #[serde(rename = "quality-unknown")]
-    Unknown,
-    #[serde(rename = "normal")]
-    Normal,
-    #[serde(rename = "uncommon")]
-    Uncommon,
-    #[serde(rename = "rare")]
-    Rare,
-    #[serde(rename = "epic")]
-    Epic,
-    #[serde(rename = "legendary")]
-    Legendary,
-}
-impl Quality {
-    fn is_none_or_normal(value: &Option<Arc<Quality>>) -> bool {
-        value.as_ref().is_none_or(|v| **v == Quality::Normal)
-    }
-}
-impl std::fmt::Display for Quality {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Normal => write!(f, "normal"),
-            Self::Uncommon => write!(f, "uncommon"),
-            Self::Rare => write!(f, "rare"),
-            Self::Epic => write!(f, "epic"),
-            Self::Legendary => write!(f, "legendary"),
-            Self::Unknown => write!(f, "unknown"),
-        }
-    }
+pub fn is_none_or_normal_quality(value: &Option<Arc<str>>) -> bool {
+    value.as_ref().is_none_or(|v| **v == *"normal")
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Signal {
     #[serde(
         rename = "type",
@@ -95,8 +66,8 @@ pub struct Signal {
     )]
     pub type_: Arc<str>,
     pub name: Arc<str>,
-    #[serde(skip_serializing_if = "Quality::is_none_or_normal")]
-    pub quality: Option<Arc<Quality>>,
+    #[serde(skip_serializing_if = "is_none_or_normal_quality")]
+    pub quality: Option<Arc<str>>,
 }
 impl Signal {
     pub fn new_virtual(name: Arc<str>) -> Self {
@@ -156,8 +127,8 @@ pub struct Entity {
     pub control_behavior: Option<ControlBehavior>,
     #[serde(skip_serializing_if = "is_none_or_empty_string")]
     pub player_description: Option<String>,
-    #[serde(skip_serializing_if = "Quality::is_none_or_normal")]
-    pub quality: Option<Arc<Quality>>,
+    #[serde(skip_serializing_if = "is_none_or_normal_quality")]
+    pub quality: Option<Arc<str>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub always_on: Option<bool>,
     #[serde(skip)]
@@ -319,7 +290,7 @@ pub struct Filter {
     pub type_: Arc<str>,
     pub name: Arc<str>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub quality: Option<Arc<Quality>>, // Note: MUST use Option::is_none, NOT Signal::is_none_or_normal
+    pub quality: Option<Arc<str>>, // Note: MUST use Option::is_none, NOT is_none_or_normal_quality
     #[serde(skip_serializing_if = "Option::is_none")]
     pub comparator: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

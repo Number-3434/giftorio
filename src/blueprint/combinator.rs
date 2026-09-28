@@ -37,7 +37,6 @@ pub fn generate_combinators(
     let mut pos_dict: HashMap<String, &Entity> = HashMap::new();
     let mut base_pos = start_pos;
     let use_compact_layout = max_cols_per_grp < 2;
-    let each = Signal::new_virtual(Arc::clone(&SIG_EACH));
 
     for d in &comb_pos_data {
         if d.dim.x <= max_cols_per_grp as f64
@@ -85,8 +84,11 @@ pub fn generate_combinators(
     if use_delta_comp {
         let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), get_pos("delay"));
         let dc = DeciderConditions {
-            conditions: Some(vec![Condition::new(each.clone(), 0, COMP_NE)]),
-            outputs: Some(vec![CombinatorOutput::new(Arc::from(each.clone()), None)]),
+            conditions: Some(vec![Condition::new(SIG_EACH.clone(), 0, COMP_NE)]),
+            outputs: Some(vec![CombinatorOutput::new(
+                Arc::from(SIG_EACH.clone()),
+                None,
+            )]),
         };
         en = en.with_tag("delay comb").with_direction(get_dir("delay"));
         en = en.with_control_behavior(ControlBehavior::from_decider_conditions(dc));
@@ -98,14 +100,17 @@ pub fn generate_combinators(
         let mut en = Entity::new(curr_ent_n, Arc::clone(&DEC_CB), get_pos("memory"));
         let dc = DeciderConditions {
             conditions: Some(vec![
-                Condition::new(each.clone(), 0, COMP_NE)
+                Condition::new(SIG_EACH.clone(), 0, COMP_NE)
                     .with_first_signal_networks(NetworkFilters::green()),
-                Condition::new(Signal::new_virtual(Arc::clone(&SIG_T)), 0, COMP_NE)
+                Condition::new(args.timing_sigs.t.clone(), 0, COMP_NE)
                     .with_compare_type(COMP_AND)
                     .with_first_signal_networks(NetworkFilters::red()),
             ]),
-            outputs: Some(vec![CombinatorOutput::new(Arc::from(each.clone()), None)
-                .with_networks(NetworkFilters::green())]),
+            outputs: Some(vec![CombinatorOutput::new(
+                Arc::from(SIG_EACH.clone()),
+                None,
+            )
+            .with_networks(NetworkFilters::green())]),
         };
         en = en.with_direction(get_dir("memory"));
         en = en.with_control_behavior(ControlBehavior::from_decider_conditions(dc));
@@ -121,11 +126,11 @@ pub fn generate_combinators(
         let mut en = Entity::new(curr_ent_n, Arc::clone(&ARI_CB), get_pos(">>"));
         let desc = "Shifts the input numbers until they are in the range of the current frame.";
         let ac = ArithmeticConditions {
-            first_signal: Some(each.clone()),
-            second_signal: Some(Signal::new_virtual(Arc::clone(&SIG_F))),
+            first_signal: Some(SIG_EACH.clone()),
+            second_signal: args.timing_sigs.f.clone(),
             second_constant: None,
             operation: Some(OP_RSHIFT.to_owned()),
-            output_signal: Some(each.clone()),
+            output_signal: Some(SIG_EACH.clone()),
         };
         en = en.with_tag(">> comb").with_direction(get_dir(">>"));
         en = en.with_control_behavior(ControlBehavior::from_arithmetic_conditions(ac));
@@ -137,7 +142,7 @@ pub fn generate_combinators(
         curr_ent_n += 1;
 
         let mut en = Entity::new(curr_ent_n, Arc::clone(&ARI_CB), get_pos("AND"));
-        let ac = arithmetic_virtual!(SIG_EACH AND match gray_bits { 1 => 1, 4 => 15, _ => 255 } => SIG_EACH);
+        let ac = arithmetic_conds!(SIG_EACH AND match gray_bits { 1 => 1, 4 => 15, _ => 255 } => SIG_EACH);
         en = en.with_tag("AND comb").with_direction(get_dir("AND")).with_description("Filters out the bits that are not relevant for the current frame, after bit-shifting. (The value of each signal encodes multiple frames)");
         other_ents.push(en.with_control_behavior(ControlBehavior::from_arithmetic_conditions(ac)));
         wires.push(mkwires!(R other_ents; OUT ">> comb" => IN "AND comb"));
@@ -151,7 +156,7 @@ pub fn generate_combinators(
         if gray_bits == 1 || gray_bits == 4 {
             let mut en = Entity::new(curr_ent_n, Arc::clone(&ARI_CB), get_pos("*"));
             let conds =
-                arithmetic_virtual!(SIG_EACH * if gray_bits == 1 { 255 } else { 17 } => SIG_EACH);
+                arithmetic_conds!(SIG_EACH * if gray_bits == 1 { 255 } else { 17 } => SIG_EACH);
             en = en.with_tag("* comb").with_direction(get_dir("*"));
             other_ents
                 .push(en.with_control_behavior(ControlBehavior::from_arithmetic_conditions(conds)));

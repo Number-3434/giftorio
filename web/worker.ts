@@ -1,4 +1,4 @@
-import init, { run_blueprint, set_progress_callback } from "../pkg/giftorio_wasm.js";
+import init, { run_blueprint, set_progress_callback, set_signal_data } from "../pkg/giftorio_wasm.js";
 
 async function run() {
 	await init();
@@ -44,6 +44,9 @@ async function run() {
 			} catch (e) {
 				postMessage({ error: e?.toString() ?? String(e) });
 			}
+		} else if (event.data.signalData) {
+			const { signals, qualities } = event.data.signalData;
+			set_signal_data(signals, qualities);
 		}
 	});
 }

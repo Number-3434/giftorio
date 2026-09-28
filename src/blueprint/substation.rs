@@ -5,11 +5,11 @@ use std::sync::Arc;
 /// Tracks cells occupied by substations.
 pub struct SubstationOccupied {
     pub start_pos: DVec2,
-    quality: Option<Arc<Quality>>,
+    quality: Option<Arc<str>>,
     requests: Vec<DVec2>,
 }
 impl SubstationOccupied {
-    pub fn new(start_pos: DVec2, quality: Option<Arc<Quality>>) -> Self {
+    pub fn new(start_pos: DVec2, quality: Option<Arc<str>>) -> Self {
         Self {
             start_pos,
             requests: Vec::new(),
@@ -19,11 +19,11 @@ impl SubstationOccupied {
 
     pub fn coverage(&self) -> f64 {
         2.0 * self.quality.as_ref().map_or(0, |q| match q.as_ref() {
-            Quality::Normal => 9,
-            Quality::Uncommon => 10,
-            Quality::Rare => 11,
-            Quality::Epic => 12,
-            Quality::Legendary => 14,
+            "normal" => 9,
+            "uncommon" => 10,
+            "rare" => 11,
+            "epic" => 12,
+            "legendary" => 14,
             _ => 0,
         }) as f64
     }

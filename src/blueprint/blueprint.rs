@@ -58,7 +58,7 @@ struct GroupPatchState {
 
 impl<'a> BlueprintGenerator<'a> {
     pub fn new(data: Option<FrameData<'a>>, args: &'a BlueprintArgs) -> Result<Self, JsValue> {
-        let signals: Vec<Arc<Signal>> = get_signals_with_quality(&args);
+        let signals: Vec<Arc<Signal>> = Self::get_signal_data(&args);
         let gray_bits = args.grayscale_bits;
         let comb_comp = args.signal_compression;
         let time_comp_win = comb_comp.map_or(0, |c| match c {
@@ -138,6 +138,44 @@ impl<'a> BlueprintGenerator<'a> {
             signals,
             state: BlueprintState::Start,
         })
+    }
+
+    fn get_signal_data(args: &BlueprintArgs) -> Vec<Arc<Signal>> {
+        let blacklist_signals: Vec<Arc<Signal>> = [
+            args.timing_sigs.f.clone(),
+            args.timing_sigs.s.clone(),
+            Some(args.timing_sigs.t.clone()),
+        ]
+        .iter()
+        .filter(|x| x.is_some())
+        .map(|x| Arc::from(x.clone().unwrap()))
+        .collect();
+
+        let mut signals = SIGNALS.with_borrow(|data| {
+            data.iter()
+                .filter(|&v| blacklist_signals.contains(v))
+                .cloned()
+                .collect::<Vec<_>>()
+        });
+        match args.signal_sorting {
+            // Only sort by name (compressor really likes this)
+            SignalSorting::Compression => signals.sort_by_key(|s| s.name.len()),
+            SignalSorting::Json => signals.sort_by_key(|s| {
+                // Sort by total length of the type + name + quality (actual smallest JSON)
+                s.quality.as_ref().map_or(0, |q| match q.as_ref() {
+                    "normal" => -1 * ",'quality':''".len() as i64,
+                    _ => q.to_string().len() as i64,
+                }) + s.name.len() as i64
+                    + s.type_.len() as i64
+                    + if s.type_.as_ref() == "item" {
+                        -1 * ",'type':''".len() as i64 // type defaults to "item" if not specified
+                    } else {
+                        s.type_.len() as i64
+                    }
+            }),
+            _ => {}
+        };
+        signals
     }
 
     pub fn done(&mut self) -> bool {
@@ -313,10 +351,6 @@ impl<'a> BlueprintGenerator<'a> {
             ]);
         }
 
-        if self.args.use_dlc {
-            output.push("\n\n[space-age]".to_owned());
-        }
-
         let footer = "Generated using GIFtorio.";
         output.push(format!("\n\n[font=default-small-semibold]{footer}[/font]"));
 
@@ -439,6 +473,7 @@ impl<'a> BlueprintGenerator<'a> {
         let use_delta_comp = info.use_delta_comp;
         let ticks_per_grp = ticks_per_frame * frames_per_cb;
         let mode = self.args.mode;
+        let sig_t = self.args.timing_sigs.t.clone();
 
         let mk_cb = |start: u32, end: u32, outputs: Vec<CombinatorOutput>| {
             if matches!(mode, Mode::Static { const_cb: true, .. }) {
@@ -459,11 +494,11 @@ impl<'a> BlueprintGenerator<'a> {
                 };
                 ControlBehavior::Constant { sections }
             } else {
-                let timing_sig = Signal::new_virtual(Arc::clone(&SIG_T));
                 ControlBehavior::from_decider_conditions(DeciderConditions {
                     conditions: Some(vec![
-                        Condition::new(timing_sig.clone(), start as i32, COMP_GE),
-                        Condition::new(timing_sig, end as i32, COMP_LT).with_compare_type(COMP_AND),
+                        Condition::new(sig_t.clone(), start as i32, COMP_GE),
+                        Condition::new(sig_t.clone(), end as i32, COMP_LT)
+                            .with_compare_type(COMP_AND),
                     ]),
                     outputs: Some(outputs),
                 })

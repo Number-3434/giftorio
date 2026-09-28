@@ -51,3 +51,18 @@ pub async fn run_blueprint(
     let obj = js_sys::Object::new(); // Technically redundant but allows adding metadata
     Ok(JsValue::from(obj))
 }
+
+/// Sets the list of signals and qualities available for use in the blueprint.
+///
+/// # Arguments
+///
+/// * `signals_csv` - The raw CSV string of signals, as a Uint8Array.
+/// * `qualities_csv` - Raw CSV string of qualities, as a Uint8Array.
+///
+/// # Returns
+/// Nothing.
+#[wasm_bindgen]
+pub fn set_signal_data(signals_csv: &[u8], qualities_csv: &[u8]) -> Result<(), JsValue> {
+    blueprint::signals::load_signal_data(signals_csv, qualities_csv);
+    Ok(())
+}

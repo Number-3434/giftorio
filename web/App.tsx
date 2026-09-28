@@ -14,6 +14,19 @@ const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60] as const;
 const LAST_FILE_KEY = "last-file-user-uploaded";
 const FORM_DATA_KEY = "giftorio-form-data";
 const SHOW_ADVANCED_KEY = "giftorio-form-data-show-advanced";
+const SIGNAL_DATA_PRESET_KEY = "giftorio-signal-data-preset";
+
+interface SignalPreset {
+	currentPreset: string;
+	presets: {
+		[key: string]: {
+			name: string;
+			description: string;
+			signalsCSV: string;
+			qualitiesCSV: string;
+		};
+	}[];
+}
 
 // Note: contains the default values. Any fields not included in this object will be removed from the
 // localStorage form cache, and any new fields will be automatically added to the form.
@@ -39,7 +52,6 @@ const _INITIAL_VALUES = {
 	substationQuality: "normal",
 	targetFps: 15,
 	temporalCompressionWindow: 300,
-	useDLC: false,
 	wireColor: "green",
 };
 
@@ -64,12 +76,6 @@ function formatFileSize(bytes: number) {
 }
 
 const FORM_ELEMENTS = {
-	useDLC: {
-		name: "Use Space Age DLC?",
-		type: "checkbox",
-		tooltip: `If enabled, dramatically increases the number of available signals, reducing the number of combinators in the blueprint by ~15x. It also allows for higher quality substations.`,
-		splash: `Requires the Space Age DLC (v2.0.77 or later).`,
-	},
 	substationQuality: {
 		name: "Substation Quality",
 		type: "select",
@@ -335,6 +341,9 @@ function App({ worker }: { worker: Worker }) {
 	const [showAdvanced, setShowAdvanced] = createSignal(false);
 	const [isMobile, setIsMobile] = createSignal(false);
 	const [imageData, setImageData] = createSignal<ImageData>();
+	const [qualities, setQualities] = createSignal<string[]>();
+	const [signalsCSV, setSignalsCSV] = createSignal<Uint8Array>();
+	const [signalDataPreset, setSignalDataPreset] = createSignal<SignalPreset>();
 
 	let form: HTMLDivElement = null!;
 	let refBackground: BackgroundApi = null!;
@@ -356,48 +365,56 @@ function App({ worker }: { worker: Worker }) {
 		disabled?: boolean;
 		name: string;
 		splash?: string;
-		tooltip?: string | null | undefined;
+		tooltip?: string;
 		type: string;
 	};
 
-	function makeFormElement({ key, value }: { key: string; value: FormElementValue }) {
-		type SelectOption = string | { name: string; tooltip?: string };
-		const { disabled = false, name, tooltip, splash, type } = value;
-
-		function mkTooltip({ options }: { options?: [string, SelectOption][] }) {
-			let hasOptionTip = false;
-
-			const optionSection = options?.map(([_, v]) => {
-				if (typeof v === "string") return;
-				hasOptionTip = true;
-				return (
-					<div class="my-0.75">
-						<span class="font-semibold text-tan-500">{v.name}:</span> <span class="text-white font-light">{v.tooltip}</span>
-					</div>
-				);
-			});
-
+	type SelectOption = string | { name: string; tooltip?: string };
+	function mkTooltip({
+		name,
+		tooltip,
+		options,
+		splash,
+	}: {
+		name: string;
+		tooltip?: string;
+		options?: [string, SelectOption][];
+		splash?: string;
+	}) {
+		let hasOptionTip = false;
+		const optionSection = options?.map(([_, v]) => {
+			if (typeof v === "string") return;
+			hasOptionTip = true;
 			return (
-				<>
-					<img src={infoIcon} class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-					<div class="tooltip">
-						<div class="tooltip-header">{name}</div>
-
-						{tooltip && <div>{tooltip}</div>}
-						{hasOptionTip && [<br />]}
-						{optionSection}
-						{splash && (
-							<>
-								<br />
-								<div class="text-tan-500" style="opacity:0.6;">
-									{splash}
-								</div>
-							</>
-						)}
-					</div>
-				</>
+				<div class="my-0.75">
+					<span class="font-semibold text-tan-500">{v.name}:</span> <span class="text-white font-light">{v.tooltip}</span>
+				</div>
 			);
-		}
+		});
+
+		return (
+			<>
+				<img src={infoIcon} class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
+				<div class="tooltip">
+					<div class="tooltip-header">{name}</div>
+					{tooltip && <div>{tooltip}</div>}
+					{hasOptionTip && [<br />]}
+					{optionSection}
+					{splash && (
+						<>
+							<br />
+							<div class="text-tan-500" style="opacity:0.6;">
+								{splash}
+							</div>
+						</>
+					)}
+				</div>
+			</>
+		);
+	}
+
+	function makeFormElement({ key, value }: { key: string; value: FormElementValue }) {
+		const { disabled = false, name, tooltip, splash, type } = value;
 
 		if (type === "checkbox") {
 			return (
@@ -412,7 +429,7 @@ function App({ worker }: { worker: Worker }) {
 						<div class="checkbox"></div>
 						<div class="ml-3 text-white-500">
 							{name}
-							{mkTooltip({})}
+							{mkTooltip({ name, tooltip, splash })}
 						</div>
 					</label>
 				</div>
@@ -429,7 +446,7 @@ function App({ worker }: { worker: Worker }) {
 				>
 					<label class="block text-white-500" for={k.toString()}>
 						{name}
-						{mkTooltip({ options })}
+						{mkTooltip({ name, tooltip, splash, options })}
 					</label>
 					<select
 						ref={(e) => ((formRefs as any)[k] = e)}
@@ -467,7 +484,7 @@ function App({ worker }: { worker: Worker }) {
 				>
 					<label class="block text-white-500 mb-0 w-full">
 						{name}
-						{mkTooltip({})}
+						{mkTooltip({ name, tooltip, splash })}
 					</label>
 					<div class="items-center gap-3 w-full">
 						<Slider
@@ -752,10 +769,23 @@ function App({ worker }: { worker: Worker }) {
 				console.error("Failed to load file:", err);
 				setToast({ show: true, message: "Failed to load file", isError: true });
 			});
+		setSignalDataPreset(() => {
+			const rawData = localStorage.getItem(SIGNAL_DATA_PRESET_KEY);
+			try {
+				return JSON.parse(rawData ?? "{}");
+			} catch (e) {
+				console.error("Failed to parse signal preset:", e);
+				console.log(rawData);
+
+				const data: SignalPreset = { currentPreset: "base", presets: [] };
+				localStorage.setItem(SIGNAL_DATA_PRESET_KEY, JSON.stringify(data));
+				return data;
+			}
+		});
 	});
 
 	createEffect(() => {
-		if (!formData.useDLC && !["none", "normal"].includes(formData.substationQuality)) {
+		if (!["none", "normal"].includes(formData.substationQuality)) {
 			setFormData("substationQuality", "normal");
 		}
 		if (formData.mode !== "full") {
@@ -765,8 +795,46 @@ function App({ worker }: { worker: Worker }) {
 		}
 		setInitialValues(formData);
 	});
-
 	createEffect(() => localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced().toString()));
+	createEffect(() => {
+		if (signalsCSV()?.length && qualitiesCSV()?.length) {
+			worker.postMessage({ signalData: { signals: signalsCSV(), qualities: qualitiesCSV() } });
+		}
+	});
+	createEffect(() => {
+		if (!signalDataPreset()) return;
+
+		// Note: We need to explicitly use the `import()` syntax 4 times so vite can bundle and resolve the URLs
+		const presetMap = {
+			base: {
+				getSignalsUrl: () => import("./assets/data/presets/base/signals.csv?url"),
+				getQualitiesUrl: () => import("./assets/data/presets/base/qualities.csv?url"),
+			},
+			dlc: {
+				getSignalsUrl: () => import("./assets/data/presets/dlc/signals.csv?url"),
+				getQualitiesUrl: () => import("./assets/data/presets/dlc/qualities.csv?url"),
+			},
+		};
+		const key = signalDataPreset().currentPreset;
+
+		if (key in presetMap) {
+			const preset = presetMap[key as keyof typeof presetMap];
+			preset
+				.getSignalsUrl()
+				.then((v) => fetch(v.default))
+				.then((v) => v.arrayBuffer())
+				.then(setSignalsCSV)
+				.catch((err) => console.error("Failed to load signals:", err));
+			preset
+				.getQualitiesUrl()
+				.then((v) => fetch(v.default))
+				.then((v) => v.text())
+				.then((v) => setQualities(v.split(",").map((v) => v.trim())))
+				.catch((err) => console.error("Failed to load qualities:", err));
+		} else {
+			console.error("Invalid signal preset key:", key);
+		}
+	});
 
 	function renderAnimationInfo() {
 		const info = animationInfo();
@@ -855,7 +923,6 @@ function App({ worker }: { worker: Worker }) {
 	return (
 		<>
 			<Background ref={(api) => (refBackground = api)} />
-
 			{isMobile() && (
 				<div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Some features may be limited on mobile.</div>
 			)}
@@ -919,7 +986,6 @@ function App({ worker }: { worker: Worker }) {
 									/>
 								</div>
 							</div>
-
 							{renderAnimationInfo()}
 
 							{/* Max Size Input */}
@@ -929,17 +995,11 @@ function App({ worker }: { worker: Worker }) {
 							>
 								<label class="text-white-500" for="maxsize">
 									Max Size
-									<img src={infoIcon} class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-									<span class="tooltip">
-										Maximum size of the longest side (length or width) of the output image in tiles.
-										<br />
-										<br />
-										Larger values create higher resolution blueprints but take longer to generate and import, and can
-										negatively impact on game performance.
-										<br />
-										<br />
-										Blueprint size increases x4 for a x2 increase in max size.
-									</span>
+									{mkTooltip({
+										tooltip: `Maximum size of the longest side (length or width) of the output image in tiles. Larger values create higher resolution blueprints but take longer to generate and import, and can negatively impact on game performance.`,
+										name: "Max Size",
+										splash: "Blueprint size increases x4 for a x2 increase in max size.",
+									})}
 								</label>
 
 								<input
@@ -993,6 +1053,16 @@ function App({ worker }: { worker: Worker }) {
 							class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto"
 							style={{ "max-height": "50vh" }}
 						>
+							<div>
+								<label class="text-white-500" for="maxsize">
+									Signal Preset
+									{mkTooltip({
+										tooltip: `A preset list of all the available signals.`,
+										name: "Signal Preset",
+										splash: "Blueprint size increases x4 for a x2 increase in max size.",
+									})}
+								</label>
+							</div>
 							{renderFormElements()}
 						</div>
 					</div>
