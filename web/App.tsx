@@ -1,332 +1,27 @@
 import { createEffect, createSignal, onMount, For } from "solid-js";
 import COMB_POS_DATA from "./assets/data/combinator-positions.json";
 import { createStore } from "solid-js/store";
-import Background, { BackgroundApi } from "./Background";
-import infoIcon from "./assets/img/info.png";
+import Background, { BackgroundApi } from "./components/Background";
 import { loadFileDB, saveFileDB } from "./fileUtils";
 import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
-import { Slider } from "./slider";
+import { FactorioSlider } from "./components/FactorioSlider";
+import {
+	CURR_SIGNAL_PRESET_KEY,
+	DEFAULT_SIGNAL_PRESET,
+	FORM_ELEMENTS,
+	INITIAL_VALUES,
+	LAST_FILE_KEY,
+	setInitialValues,
+	SHOW_ADVANCED_KEY,
+	SIGNAL_PRESETS_KEY,
+	SignalPreset,
+} from "./data";
+import { formatDuration, formatFileSize } from "./utils";
+import { FactorioSelect, SelectOption } from "./components/FactorioSelect";
+import { Tooltip } from "./components/Tooltip";
+import { FormElementValue } from "./types";
 
 const isTyping = () => document.activeElement?.matches("input, textarea, select, [contenteditable]");
-const FACTORS_OF_60 = [1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60] as const;
-
-// Constants
-const LAST_FILE_KEY = "last-file-user-uploaded";
-const FORM_DATA_KEY = "giftorio-form-data";
-const SHOW_ADVANCED_KEY = "giftorio-form-data-show-advanced";
-const SIGNAL_DATA_PRESET_KEY = "giftorio-signal-data-preset";
-
-interface SignalPreset {
-	currentPreset: string;
-	presets: {
-		[key: string]: {
-			name: string;
-			description: string;
-			signalsCSV: string;
-			qualitiesCSV: string;
-		};
-	}[];
-}
-
-// Note: contains the default values. Any fields not included in this object will be removed from the
-// localStorage form cache, and any new fields will be automatically added to the form.
-const _INITIAL_VALUES = {
-	connectionDirection: "horizontal",
-	customHeight: 100,
-	customWidth: 100,
-	displayMarginY: 2,
-	file: null as File | null,
-	flippedAxes: "none",
-	grayscaleBits: 0,
-	imageFilters: [],
-	imageRotation: "none",
-	maxGroupSize: null,
-	maxSize: 50,
-	mode: "full",
-	outputFormat: "blueprint",
-	resamplingFilter: "triangle",
-	rotation: 0,
-	signalCompressionType: "none",
-	signalSorting: "none",
-	staticImageMode: "constant",
-	substationQuality: "normal",
-	targetFps: 15,
-	temporalCompressionWindow: 300,
-	wireColor: "green",
-};
-
-function formatDuration(totalMs: number): string {
-	const totalS = Math.floor(totalMs / 1000);
-
-	const h = Math.floor(totalS / 3600).toString();
-	const m = Math.floor((totalS % 3600) / 60).toString();
-	const s = (totalS % 60).toString().padStart(2, "0");
-	const ms = (totalMs % 1000).toString().padStart(3, "0");
-
-	return `${h.padStart(2, "0")}:${m.padStart(2, "0")}:${s.padStart(2, "0")}.${ms.padStart(3, "0")}`;
-}
-function formatFileSize(bytes: number) {
-	if (bytes === 0) return "0 Bytes";
-
-	const units = ["Bytes", "KB", "MB", "GB", "TB"];
-	const i = Math.floor(Math.log(bytes) / Math.log(1024));
-	const value = bytes / 1024 ** i;
-
-	return `${+value.toFixed(2)} ${units[i]}`;
-}
-
-const FORM_ELEMENTS = {
-	substationQuality: {
-		name: "Substation Quality",
-		type: "select",
-		options: [
-			["none", "None"],
-			["normal", "Normal"],
-			["uncommon", "Uncommon"],
-			["rare", "Rare"],
-			["epic", "Epic"],
-			["legendary", "Legendary"],
-		],
-		tooltip: "The quality level of the substations.",
-		splash: "Usable if 'Use Space Age DLC?' is enabled.",
-	},
-	mode: {
-		name: "Output Mode",
-		type: "select",
-		options: {
-			full: { name: "Everything", tooltip: "(Recommended) The full package." },
-			lamps: { name: "Lamps Only", tooltip: "Generate only lamps for the blueprint, with the wires. No image data." },
-			lampGrid: { name: "Lamp Grid", tooltip: "Generate a grid of lamps, with each section internally connected by wires." },
-		},
-		tooltip: "The blueprint parts to include. Changes if the input file is an image or a video.",
-		splash: "Modes other than 'Everything' will not use the input video / image.",
-	},
-	staticImageMode: {
-		name: "Static Image Mode",
-		type: "select",
-		options: {
-			constant: { name: "Constant", tooltip: "Use constant combinators for all lamps, with no timing signals." },
-			decider: { name: "Decider", tooltip: "Use decider combinators for all lamps, with no timing signals." },
-			lamps: {
-				name: "Lamps Only",
-				tooltip: `Use only lamps for the image. This reduces filesize, but colour depth is greatly reduced as lamps cannot be fully black unless they use signals from the circuit network.`,
-			},
-			video: { name: "1 Frame", tooltip: `Renders the input image as a 1 FPS, 1-second video with 1 frame.` },
-		},
-		tooltip: "The blueprint parts to include. Changes if the input file is an image or a video.",
-	},
-	customWidth: {
-		name: "Width",
-		type: "number",
-		scale: "ln10",
-		min: 1,
-		max: 8000,
-		tooltip: "Sets a custom width (in pixels) for the the lamps.",
-	},
-	customHeight: {
-		name: "Height",
-		type: "number",
-		scale: "ln10",
-		min: 1,
-		max: 8000,
-		tooltip: "Sets a custom height (in pixels) for the the lamps.",
-	},
-	signalCompressionType: {
-		name: "Compression",
-		type: "select",
-		tooltip: "(Lossless) Reduces filesize by storing unchanged pixels. May affect how the output video can be played.",
-		options: {
-			none: { name: "None", tooltip: "No compression." },
-			temporal: {
-				name: "Temporal (static)",
-				tooltip: `Uses ~2x more combinators, but reduces filesize ~2-4x. Stores unchanged pixels in a dedicated combinator. The resulting blueprint can be paused / seeked safely without corruption, at the cost of reduced compression value in comparison to 'Delta' compression.`,
-			},
-			delta: {
-				name: "Delta (volatile)",
-				tooltip: `Stores the difference (delta) between each frame, which depends on all previous frames. Blueprints made with Delta compression cannot be seeked or paused.`,
-			},
-		},
-	},
-	temporalCompressionWindow: {
-		name: "Compression Window (ms)",
-		type: "number",
-		tooltip: `This setting should be fine-tuned to the amount of movement in the GIF. Larger windows can give greater compression, but if large portions of the GIF are moving, less compression is possible in comparison to using shorter sampling times.`,
-		min: 100,
-		max: 5000,
-		step: 100,
-		splash: "Only applicable to 'Temporal Compression'.",
-	},
-	targetFps: {
-		name: "Framerate (FPS)",
-		type: "number",
-		tooltip: `Maximum framerate of the output blueprint. The blueprint will not exceed the original framerate of the GIF. Higher framerates require more frames to be generated, increasing the size of the blueprint.`,
-		splash: "Must be a factor of '60' to match Factorio's tick-rate.",
-		values: FACTORS_OF_60,
-	},
-	signalSorting: {
-		name: "Signal Sorting",
-		type: "select",
-		options: {
-			auto: { name: "Auto", tooltip: "Auto-select the best sorting method based on the output format." },
-			none: { name: "Compatibility", tooltip: "Sort signals as they appear in Factorio v2.0.77." },
-			compression: { name: "Compression", tooltip: "Minimize blueprint file size, but JSON may be larger." },
-			json: { name: "Best JSON", tooltip: "Minimize raw JSON size, but reduces compression value." },
-		},
-		tooltip: "Affects ordering of lamp and data signals. Does not alter in-game performance.",
-		splash: "Determines how (and if) internal field names are sorted to reduce file size.",
-	},
-	grayscaleBits: {
-		name: "Color Format",
-		type: "select",
-		tooltip: "The color format used to store the image. Greatly affects the blueprint size.",
-		options: [
-			["0", { name: "Full Color", tooltip: "Approximate the original GIF colors to RGB8." }],
-			["8", { name: "8-bit Grayscale", tooltip: "256 shades of gray; reduces blueprint size up to 4x." }],
-			["4", { name: "4-bit Grayscale", tooltip: "16 shades of gray; reduces blueprint size up to 8x." }],
-			["1", { name: "Black & White", tooltip: "2 shades of gray; educes blueprint size up to 32x." }],
-		],
-		splash: "Using 'Grayscale' can reduce the blueprint size by 75-95%, but removes all color.",
-	},
-	resamplingFilter: {
-		name: "Resize Filter",
-		type: "select",
-		tooltip: "The filter used to resample the image.",
-		options: {
-			triangle: { name: "Triangle", tooltip: "Fast; CPU friendly; good for most videos." },
-			catrom: { name: "Catmull-Rom", tooltip: "Consistent; good sharpness and stability." },
-			gaussian: { name: "Gaussian", tooltip: "Smooth; very stable; no aliasing, but may blur pixel art." },
-			lanczos3: { name: "Lanczos3", tooltip: "Crisp detail; sharper edges; may shimmer / have aliasing." },
-			nearest: { name: "Nearest", tooltip: "Sharp and 'blocky'. Great for pixel art." },
-			thumbnail: { name: "Thumbnail", tooltip: "Fastest; optimized, but low quality." },
-		},
-		splash: "Only used to resize the video to the blueprint's dimensions.",
-	},
-	maxGroupSize: {
-		name: "Columns",
-		type: "number",
-		compact: true,
-		min: 0,
-		max: 10,
-		step: 1,
-		tooltip: `Large image / videos will be split into detached groups, with each group using their own signals. This setting sets a custom maximum size for groups. Lowering this setting can help increase compression value, but requires more space to physically place the blueprint.`,
-		splash: "If set to '0', auto-infers the maximum possible group size.",
-	},
-	displayMarginY: {
-		name: "Margin Y",
-		type: "number",
-		compact: true,
-		min: 0,
-		max: 4,
-		step: 1,
-		tooltip: `Sets the vertical margin between the top of the lamps and the bottom of the data combinators.`,
-	},
-	imageRotation: {
-		name: "Rotation",
-		type: "select",
-		tooltip: `Rotates the GIF before processing it, whilst keeping data combinators in the same location. This can be used to change the location of data combinators; e.g. to put combinatorson the left side instead of the right, set this to 90°, and then inside Factorio, rotate the blueprint by -90° to match the original GIF.`,
-		options: {
-			none: "None",
-			deg90: "90° Clockwise",
-			deg180: "180° Clockwise",
-			deg270: "270° Clockwise",
-		},
-		splash: "Wire connections will maintain the same rotation relative to the GIF. Combinators will always appear in the top-left corner.",
-	},
-	flippedAxes: {
-		name: "Flip Axes",
-		type: "select",
-		tooltip: `Mirrors the GIF before processing it, whilst keeping data combinators in the same location. This can be utilised to change the location of data combinators. E.g. to put combinators on the right of the top side instead of the right, set this to 'X', and then inside Factorio, flip the blueprint horizontally to match the original GIF.`,
-		options: {
-			none: "None",
-			x: "X",
-			y: "Y",
-			both: "Both",
-		},
-		splash: "Combinators will always appear in the top-left corner.",
-	},
-	wireColor: {
-		name: "Primary Wire Color",
-		type: "select",
-		tooltip: "The color of the wires used to connect the lamps.",
-		options: {
-			green: {
-				name: "Green",
-				tooltip: "Usually recommended as green wires connect horizontally in straight lines and take up less space.",
-			},
-			red: {
-				name: "Red",
-				tooltip: `Wires are darker and harder to see but take up more screen space as the wire does not connect straight, and may obscure the video more.`,
-			},
-		},
-		splash: `The wire color used will slightly tint the image the same color. Note that changing this setting will completely flip all wires (all red wires become green, all green wires become red, and vice versa).`,
-	},
-	connectionDirection: {
-		name: "Wire Direction",
-		type: "select",
-		tooltip: "Whether the majority of lamp wires should connect horizontally or vertically.",
-		options: {
-			horizontal: {
-				name: "Horizontal",
-				tooltip: `Recommended as they take minimal screen space, but will require vertical connections between groups that can be quite visible. Seams can be removed by setting 'Rotation' to '90° clockwise'.`,
-			},
-			vertical: {
-				name: "Vertical",
-				tooltip: "(Not recommended) Connections are much more noticeable.",
-			},
-		},
-		splash: `Horizontal wires are recommended for most GIFs as they are more obscure. If 'Rotation' is set, wires will still connect in the same direction relative to the original GIF's rotation.`,
-	},
-	outputFormat: {
-		name: "Output Format",
-		type: "select",
-		tooltip: "Selects the format of the output file. If Factorio has issues importing blueprint strings, try using the JSON format.",
-		options: {
-			blueprint: {
-				name: "Blueprint",
-				tooltip: "The typical Factorio blueprint format. Can be copy-pasted into the 'Import Blueprint String' dialog.",
-			},
-			json: {
-				name: "Raw JSON",
-				tooltip: "The raw JSON (uncompressed) blueprint file. Can also be imported in the 'Import Blueprint String' dialog.",
-			},
-		},
-		splash: `Tip: From Factorio v2.0.25 onwards, JSON and blueprint files can be imported directly into the game via drag-and-drop.`,
-	},
-};
-
-function setInitialValues(values: object) {
-	localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
-}
-const INITIAL_VALUES: typeof _INITIAL_VALUES = (() => {
-	const prev = localStorage.getItem(FORM_DATA_KEY);
-
-	if (prev) {
-		const cached = JSON.parse(prev);
-		let changed = false;
-
-		for (const k of Object.keys(cached)) {
-			if (!(k in _INITIAL_VALUES)) {
-				delete cached[k];
-				changed = true;
-			}
-		}
-		for (const [k, v] of Object.entries(_INITIAL_VALUES)) {
-			if (!(k in cached)) {
-				cached[k] = v;
-				changed = true;
-			}
-		}
-
-		if (changed) {
-			setInitialValues(cached);
-		}
-		console.log(cached);
-		return cached;
-	}
-
-	setInitialValues(_INITIAL_VALUES);
-	return { ..._INITIAL_VALUES };
-})();
 
 function App({ worker }: { worker: Worker }) {
 	// State
@@ -343,7 +38,10 @@ function App({ worker }: { worker: Worker }) {
 	const [imageData, setImageData] = createSignal<ImageData>();
 	const [qualities, setQualities] = createSignal<string[]>();
 	const [signalsCSV, setSignalsCSV] = createSignal<Uint8Array>();
-	const [signalDataPreset, setSignalDataPreset] = createSignal<SignalPreset>();
+	const [signalPresets, setSignalPresets] = createSignal<Record<string, SignalPreset>>();
+	const [currSignalPresetKey, setCurrSignalPresetKey] = createSignal<string>(
+		localStorage.getItem(CURR_SIGNAL_PRESET_KEY) ?? DEFAULT_SIGNAL_PRESET,
+	);
 
 	let form: HTMLDivElement = null!;
 	let refBackground: BackgroundApi = null!;
@@ -361,60 +59,9 @@ function App({ worker }: { worker: Worker }) {
 		submitButton: HTMLButtonElement;
 	} = {} as any;
 
-	type FormElementValue = {
-		disabled?: boolean;
-		name: string;
-		splash?: string;
-		tooltip?: string;
-		type: string;
-	};
-
-	type SelectOption = string | { name: string; tooltip?: string };
-	function mkTooltip({
-		name,
-		tooltip,
-		options,
-		splash,
-	}: {
-		name: string;
-		tooltip?: string;
-		options?: [string, SelectOption][];
-		splash?: string;
-	}) {
-		let hasOptionTip = false;
-		const optionSection = options?.map(([_, v]) => {
-			if (typeof v === "string") return;
-			hasOptionTip = true;
-			return (
-				<div class="my-0.75">
-					<span class="font-semibold text-tan-500">{v.name}:</span> <span class="text-white font-light">{v.tooltip}</span>
-				</div>
-			);
-		});
-
-		return (
-			<>
-				<img src={infoIcon} class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger" alt="Info" />
-				<div class="tooltip">
-					<div class="tooltip-header">{name}</div>
-					{tooltip && <div>{tooltip}</div>}
-					{hasOptionTip && [<br />]}
-					{optionSection}
-					{splash && (
-						<>
-							<br />
-							<div class="text-tan-500" style="opacity:0.6;">
-								{splash}
-							</div>
-						</>
-					)}
-				</div>
-			</>
-		);
-	}
-
 	function makeFormElement({ key, value }: { key: string; value: FormElementValue }) {
 		const { disabled = false, name, tooltip, splash, type } = value;
+		const tooltipProps = { name, tooltip, splash };
 
 		if (type === "checkbox") {
 			return (
@@ -429,7 +76,7 @@ function App({ worker }: { worker: Worker }) {
 						<div class="checkbox"></div>
 						<div class="ml-3 text-white-500">
 							{name}
-							{mkTooltip({ name, tooltip, splash })}
+							<Tooltip {...tooltipProps} />
 						</div>
 					</label>
 				</div>
@@ -438,26 +85,16 @@ function App({ worker }: { worker: Worker }) {
 			const k = key as keyof typeof FORM_ELEMENTS;
 			const { options: _opt } = value as unknown as { options: [string, SelectOption][] | Record<string, SelectOption> };
 			const options: [string, SelectOption][] = Array.isArray(_opt) ? _opt : Object.entries(_opt);
-
 			return (
-				<div
-					class="mt-1 mb-1 flex items-center justify-between factorio-form-element factorio-select-container"
-					aria-disabled={value.disabled}
-				>
-					<label class="block text-white-500" for={k.toString()}>
-						{name}
-						{mkTooltip({ name, tooltip, splash, options })}
-					</label>
-					<select
-						ref={(e) => ((formRefs as any)[k] = e)}
-						id={k}
-						name={k}
-						value={formData[k] as unknown as string}
-						onChange={(e) => setFormData(k, e.currentTarget.value)}
-					>
-						<For each={options}>{([k, v]) => <option value={k}>{(v as any).name ?? v}</option>}</For>
-					</select>
-				</div>
+				<FactorioSelect
+					ref={(e) => ((formRefs as any)[k] = e)}
+					formArgs={value}
+					initialValue={formData[key as keyof typeof formData] as string}
+					key={k}
+					onChange={(v) => setFormData(k, v)}
+					options={options}
+					{...tooltipProps}
+				/>
 			);
 		} else if (type === "number") {
 			const v = value as unknown as { min?: number; max?: number; step?: number; values?: number[]; compact?: boolean };
@@ -484,10 +121,10 @@ function App({ worker }: { worker: Worker }) {
 				>
 					<label class="block text-white-500 mb-0 w-full">
 						{name}
-						{mkTooltip({ name, tooltip, splash })}
+						<Tooltip {...tooltipProps} />
 					</label>
 					<div class="items-center gap-3 w-full">
-						<Slider
+						<FactorioSlider
 							compact={compact}
 							id={key}
 							disabled={disabled}
@@ -651,7 +288,6 @@ function App({ worker }: { worker: Worker }) {
 								: `${formData.signalSorting}`,
 						substationQuality: formData.substationQuality === "none" ? null : `${formData.substationQuality}`,
 						targetFps: +formData.targetFps,
-						useDLC: !!formData.useDLC,
 						useGreenLampWires: !!(formData.wireColor === "green"),
 						useHorizontalLampWires: !!(formData.connectionDirection === "horizontal"),
 					},
@@ -761,7 +397,6 @@ function App({ worker }: { worker: Worker }) {
 					getRawImageData(file).then((v) => {
 						setAnimationInfo(new AnimationInfo(0, 0, v.width, v.height));
 						setImageData(v);
-						console.log(v);
 					});
 				}
 			})
@@ -769,19 +404,6 @@ function App({ worker }: { worker: Worker }) {
 				console.error("Failed to load file:", err);
 				setToast({ show: true, message: "Failed to load file", isError: true });
 			});
-		setSignalDataPreset(() => {
-			const rawData = localStorage.getItem(SIGNAL_DATA_PRESET_KEY);
-			try {
-				return JSON.parse(rawData ?? "{}");
-			} catch (e) {
-				console.error("Failed to parse signal preset:", e);
-				console.log(rawData);
-
-				const data: SignalPreset = { currentPreset: "base", presets: [] };
-				localStorage.setItem(SIGNAL_DATA_PRESET_KEY, JSON.stringify(data));
-				return data;
-			}
-		});
 	});
 
 	createEffect(() => {
@@ -797,27 +419,45 @@ function App({ worker }: { worker: Worker }) {
 	});
 	createEffect(() => localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced().toString()));
 	createEffect(() => {
-		if (signalsCSV()?.length && qualitiesCSV()?.length) {
-			worker.postMessage({ signalData: { signals: signalsCSV(), qualities: qualitiesCSV() } });
+		if (signalsCSV()?.length && qualities()?.length) {
+			worker.postMessage({ signalData: { signals: signalsCSV(), qualities: qualities() } });
 		}
 	});
+
+	onMount(() => {
+		setSignalPresets(() => {
+			const rawData = localStorage.getItem(SIGNAL_PRESETS_KEY);
+			if (rawData) {
+				try {
+					return JSON.parse(rawData || "");
+				} catch (e) {}
+			}
+			const data = {
+				"base-2.0.77": { description: "Signals from the base game (v2.0.77).", isDefault: true },
+				"space-age-2.0.77": { description: "Signals from the Space Age DLC (v2.0.77).", isDefault: true },
+			};
+			localStorage.setItem(SIGNAL_PRESETS_KEY, JSON.stringify(data));
+			return data;
+		});
+	});
+
 	createEffect(() => {
-		if (!signalDataPreset()) return;
+		if (!signalPresets()) return;
 
 		// Note: We need to explicitly use the `import()` syntax 4 times so vite can bundle and resolve the URLs
 		const presetMap = {
-			base: {
-				getSignalsUrl: () => import("./assets/data/presets/base/signals.csv?url"),
-				getQualitiesUrl: () => import("./assets/data/presets/base/qualities.csv?url"),
+			"base-2.0.77": {
+				getSignalsUrl: () => import("./assets/data/presets/base-2.0.77/signals.csv?url"),
+				getQualitiesUrl: () => import("./assets/data/presets/base-2.0.77/qualities.csv?url"),
 			},
-			dlc: {
-				getSignalsUrl: () => import("./assets/data/presets/dlc/signals.csv?url"),
-				getQualitiesUrl: () => import("./assets/data/presets/dlc/qualities.csv?url"),
+			"space-age-2.0.77": {
+				getSignalsUrl: () => import("./assets/data/presets/space-age-2.0.77/signals.csv?url"),
+				getQualitiesUrl: () => import("./assets/data/presets/space-age-2.0.77/qualities.csv?url"),
 			},
 		};
-		const key = signalDataPreset().currentPreset;
+		const key = currSignalPresetKey();
 
-		if (key in presetMap) {
+		if (key && key in presetMap) {
 			const preset = presetMap[key as keyof typeof presetMap];
 			preset
 				.getSignalsUrl()
@@ -920,6 +560,73 @@ function App({ worker }: { worker: Worker }) {
 		});
 	}
 
+	function renderSignalPresets() {
+		const defaultPresets = {
+			"base-2.0.77": { description: "Signals from the base game (v2.0.77).", isDefault: true },
+			"space-age-2.0.77": { description: "Signals from the Space Age DLC (v2.0.77).", isDefault: true },
+		};
+		const presets = signalPresets();
+		if (!presets) {
+			return;
+		}
+		const preset = presets[currSignalPresetKey()];
+		const PREFIX = "signal-preset-";
+		console.log(currSignalPresetKey());
+
+		return (
+			<div class="mt-1 mb-1 flex items-center justify-between factorio-form-element factorio-select-container">
+				<label class="text-white-500" for="maxsize">
+					Signal Preset
+					<Tooltip
+						tooltip={"A preset list of all available signals." + "\n\n" + `Current preset: ${currSignalPresetKey()}`}
+						name="Signal Preset"
+						splash={preset?.description}
+					/>
+				</label>
+				{preset && (
+					<select
+						ref={(e) => ((formRefs as any)["signalPreset"] = e)}
+						id="signalPreset"
+						name="signalPreset"
+						value={PREFIX + currSignalPresetKey()}
+						onChange={(e) => {
+							const presetKey = e.currentTarget.value.replace(PREFIX, "");
+							console.log(presetKey);
+							if (presetKey === "add-preset") {
+								const newKey = prompt("Enter a name for the new preset:");
+								if (!newKey) return;
+
+								import("./assets/data/generate-signals.lua?url").then(async ({ default: url }) => {
+									const script = await fetch(url).then((v) => v.text());
+									const signalsCSV = prompt(
+										[
+											`/c ${script}`,
+											"\n\n",
+											"Copy the above Lua code, and paste it into the Factorio console.",
+											"Note: you may need to enable Editor mode.\n\nThen enter the signals CSV:",
+										].join(" "),
+									);
+									setCurrSignalPresetKey(newKey);
+								});
+
+								return;
+							} else {
+								setCurrSignalPresetKey(presetKey);
+							}
+						}}
+					>
+						<For each={Object.entries({ ...defaultPresets, ...presets })}>
+							{([k, v]) => {
+								return <option value={PREFIX + k}>{k}</option>;
+							}}
+						</For>
+						<option value="add-preset">New preset...</option>
+					</select>
+				)}
+			</div>
+		);
+	}
+
 	return (
 		<>
 			<Background ref={(api) => (refBackground = api)} />
@@ -995,11 +702,11 @@ function App({ worker }: { worker: Worker }) {
 							>
 								<label class="text-white-500" for="maxsize">
 									Max Size
-									{mkTooltip({
-										tooltip: `Maximum size of the longest side (length or width) of the output image in tiles. Larger values create higher resolution blueprints but take longer to generate and import, and can negatively impact on game performance.`,
-										name: "Max Size",
-										splash: "Blueprint size increases x4 for a x2 increase in max size.",
-									})}
+									<Tooltip
+										tooltip="Maximum size of the longest side (length or width) of the output image in tiles. Larger values create higher resolution blueprints but take longer to generate and import, and can negatively impact on game performance."
+										name="Max Size"
+										splash="Blueprint size increases x4 for a x2 increase in max size."
+									/>
 								</label>
 
 								<input
@@ -1021,6 +728,7 @@ function App({ worker }: { worker: Worker }) {
 									{makeFormElement({ key: "customWidth", value: FORM_ELEMENTS.customWidth })}
 								</>
 							)}
+							{signalPresets() && renderSignalPresets()}
 
 							<div class="mb-4" />
 
@@ -1053,16 +761,6 @@ function App({ worker }: { worker: Worker }) {
 							class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto"
 							style={{ "max-height": "50vh" }}
 						>
-							<div>
-								<label class="text-white-500" for="maxsize">
-									Signal Preset
-									{mkTooltip({
-										tooltip: `A preset list of all the available signals.`,
-										name: "Signal Preset",
-										splash: "Blueprint size increases x4 for a x2 increase in max size.",
-									})}
-								</label>
-							</div>
 							{renderFormElements()}
 						</div>
 					</div>

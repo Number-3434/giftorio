@@ -45,8 +45,8 @@ async function run() {
 				postMessage({ error: e?.toString() ?? String(e) });
 			}
 		} else if (event.data.signalData) {
-			const { signals, qualities } = event.data.signalData;
-			set_signal_data(signals, qualities);
+			const { signals, qualities }: { signals: Uint8Array; qualities: string[] } = event.data.signalData;
+			set_signal_data(signals, new TextEncoder().encode(qualities.join(",")));
 		}
 	});
 }

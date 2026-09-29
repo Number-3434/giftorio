@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 
-type SliderProps = {
+export interface FactorioSliderProps {
 	compact?: boolean;
 	value: number;
 	disabled?: boolean;
@@ -12,9 +12,9 @@ type SliderProps = {
 	step?: number;
 	onSubmit(value: number): void;
 	ref?(el: HTMLInputElement): void;
-};
+}
 
-export function Slider(props: SliderProps) {
+export function FactorioSlider(props: FactorioSliderProps) {
 	let { value, values, min = 0, max = Infinity, step, scale = "linear", onSubmit, ref } = props;
 	const hasCustomValues = !!values;
 	const [currValue, setCurrValue] = createSignal(value);

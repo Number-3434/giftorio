@@ -1,8 +1,8 @@
 local p = game.player;
 local t = {};
 local function add(p, typ)
-    for n, _ in pairs(p)
-        do t[#t+1] = typ..","..n
+    for n, _ in pairs(p) do
+        t[#t + 1] = typ .. "," .. n
     end
 end;
 

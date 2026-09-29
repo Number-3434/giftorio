@@ -6,5 +6,5 @@ export default defineConfig({
 	plugins: [solidPlugin(), viteStaticCopy({ targets: [{ src: "robots.txt", dest: "." }] })],
 	server: { host: "0.0.0.0", port: 3000 },
 	build: { target: "esnext" },
-	assetsInclude: ["**/*.csv", "**/*.png", "**/*.jpg", "**/*.gif", "**/*.jpeg", "**/*.txt"],
+	assetsInclude: ["**/*.csv", "**/*.png", "**/*.jpg", "**/*.gif", "**/*.jpeg", "**/*.lua"],
 });

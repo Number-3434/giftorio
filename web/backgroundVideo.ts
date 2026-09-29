@@ -38,6 +38,4 @@ class BackgroundVideoManager {
 }
 
 // Initialize when the DOM is loaded
-document.addEventListener("DOMContentLoaded", () => {
-	new BackgroundVideoManager();
-});
+document.addEventListener("DOMContentLoaded", () => new BackgroundVideoManager());
