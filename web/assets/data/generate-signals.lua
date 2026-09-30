@@ -1,10 +1,15 @@
 local p = game.player;
-local t = {};
+local sigs = {};
+local quals = {};
 local function add(p, typ)
-    for n, _ in pairs(p) do
-        t[#t + 1] = typ .. "," .. n
+    for name, _ in pairs(p) do
+        sigs[#sigs + 1] = string.format('    { "type": "%s", "name": "%s" }', typ, name)
     end
 end;
+
+for name, quality in pairs(prototypes.quality) do
+    quals[#quals + 1] = '"' .. name .. '"'
+end
 
 add(prototypes.item, "item");
 add(prototypes.fluid, "fluid");
@@ -33,7 +38,12 @@ else
     f.auto_center = true;
     f.add{type="label", caption="Select the signals below and press Ctrl+C to copy it."};
 
-    local t = f.add{type="text-box", name="bp_text", text=table.concat(t,"\n")};
+    local text = string.format(
+        '{\n    "signals": [\n    %s\n    ],\n    "qualities": [%s]\n}',
+        table.concat(sigs, ",\n    "),
+        table.concat(quals, ", ")
+    );
+    local t = f.add{type="text-box", name="bp_text", text=text};
     t.style.width = 600;
     t.style.height = 600;
     t.read_only = true;

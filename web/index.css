@@ -236,8 +236,24 @@ h3 {
 	@apply font-semibold mb-3 cursor-default text-xl;
 }
 
+.backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgb(0 0 0 / 50%);
+
+	display: flex;
+	align-items: center;
+	justify-content: center;
+
+	z-index: 1000;
+}
+
+::selection {
+	background: #f1be64;
+}
+
 .button {
-	@apply bg-gray-100 font-semibold min-w-[128px] border-none whitespace-nowrap cursor-pointer select-none h-9 text-center;
+	@apply bg-gray-100 font-bold min-w-[128px] border-none whitespace-nowrap cursor-pointer select-none h-9 text-center;
 	position: relative;
 	line-height: inherit;
 	box-shadow:

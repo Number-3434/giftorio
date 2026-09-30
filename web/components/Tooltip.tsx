@@ -1,5 +1,5 @@
-import { SelectOption } from "./FactorioSelect";
 import infoIcon from "../assets/img/info.png";
+import { SelectOption } from "./FactorioSelect";
 
 export interface TooltipProps {
 	name: string;

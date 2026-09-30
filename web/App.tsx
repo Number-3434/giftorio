@@ -1,10 +1,10 @@
-import { createEffect, createSignal, onMount, For } from "solid-js";
-import COMB_POS_DATA from "./assets/data/combinator-positions.json";
+import { createEffect, createSignal, For, onMount } from "solid-js";
 import { createStore } from "solid-js/store";
+import COMB_POS_DATA from "./assets/data/combinator-positions.json";
 import Background, { BackgroundApi } from "./components/Background";
-import { loadFileDB, saveFileDB } from "./fileUtils";
-import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
+import { FactorioSelect, SelectOption } from "./components/FactorioSelect";
 import { FactorioSlider } from "./components/FactorioSlider";
+import { Tooltip } from "./components/Tooltip";
 import {
 	CURR_SIGNAL_PRESET_KEY,
 	DEFAULT_SIGNAL_PRESET,
@@ -13,13 +13,13 @@ import {
 	LAST_FILE_KEY,
 	setInitialValues,
 	SHOW_ADVANCED_KEY,
-	SIGNAL_PRESETS_KEY,
 	SignalPreset,
 } from "./data";
-import { formatDuration, formatFileSize } from "./utils";
-import { FactorioSelect, SelectOption } from "./components/FactorioSelect";
-import { Tooltip } from "./components/Tooltip";
+import { loadFileDB, saveFileDB } from "./db";
+import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
 import { FormElementValue } from "./types";
+import { formatDuration, formatFileSize } from "./utils";
+import { SignalPresetSelect } from "./components/signalPresetSelect";
 
 const isTyping = () => document.activeElement?.matches("input, textarea, select, [contenteditable]");
 
@@ -36,12 +36,7 @@ function App({ worker }: { worker: Worker }) {
 	const [showAdvanced, setShowAdvanced] = createSignal(false);
 	const [isMobile, setIsMobile] = createSignal(false);
 	const [imageData, setImageData] = createSignal<ImageData>();
-	const [qualities, setQualities] = createSignal<string[]>();
-	const [signalsCSV, setSignalsCSV] = createSignal<Uint8Array>();
-	const [signalPresets, setSignalPresets] = createSignal<Record<string, SignalPreset>>();
-	const [currSignalPresetKey, setCurrSignalPresetKey] = createSignal<string>(
-		localStorage.getItem(CURR_SIGNAL_PRESET_KEY) ?? DEFAULT_SIGNAL_PRESET,
-	);
+	const [currSignalPreset, setCurrSignalPreset] = createSignal<SignalPreset | null>(null);
 
 	let form: HTMLDivElement = null!;
 	let refBackground: BackgroundApi = null!;
@@ -419,60 +414,8 @@ function App({ worker }: { worker: Worker }) {
 	});
 	createEffect(() => localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced().toString()));
 	createEffect(() => {
-		if (signalsCSV()?.length && qualities()?.length) {
-			worker.postMessage({ signalData: { signals: signalsCSV(), qualities: qualities() } });
-		}
-	});
-
-	onMount(() => {
-		setSignalPresets(() => {
-			const rawData = localStorage.getItem(SIGNAL_PRESETS_KEY);
-			if (rawData) {
-				try {
-					return JSON.parse(rawData || "");
-				} catch (e) {}
-			}
-			const data = {
-				"base-2.0.77": { description: "Signals from the base game (v2.0.77).", isDefault: true },
-				"space-age-2.0.77": { description: "Signals from the Space Age DLC (v2.0.77).", isDefault: true },
-			};
-			localStorage.setItem(SIGNAL_PRESETS_KEY, JSON.stringify(data));
-			return data;
-		});
-	});
-
-	createEffect(() => {
-		if (!signalPresets()) return;
-
-		// Note: We need to explicitly use the `import()` syntax 4 times so vite can bundle and resolve the URLs
-		const presetMap = {
-			"base-2.0.77": {
-				getSignalsUrl: () => import("./assets/data/presets/base-2.0.77/signals.csv?url"),
-				getQualitiesUrl: () => import("./assets/data/presets/base-2.0.77/qualities.csv?url"),
-			},
-			"space-age-2.0.77": {
-				getSignalsUrl: () => import("./assets/data/presets/space-age-2.0.77/signals.csv?url"),
-				getQualitiesUrl: () => import("./assets/data/presets/space-age-2.0.77/qualities.csv?url"),
-			},
-		};
-		const key = currSignalPresetKey();
-
-		if (key && key in presetMap) {
-			const preset = presetMap[key as keyof typeof presetMap];
-			preset
-				.getSignalsUrl()
-				.then((v) => fetch(v.default))
-				.then((v) => v.arrayBuffer())
-				.then(setSignalsCSV)
-				.catch((err) => console.error("Failed to load signals:", err));
-			preset
-				.getQualitiesUrl()
-				.then((v) => fetch(v.default))
-				.then((v) => v.text())
-				.then((v) => setQualities(v.split(",").map((v) => v.trim())))
-				.catch((err) => console.error("Failed to load qualities:", err));
-		} else {
-			console.error("Invalid signal preset key:", key);
+		if (currSignalPreset()) {
+			worker.postMessage({ signalPreset: currSignalPreset() });
 		}
 	});
 
@@ -506,7 +449,6 @@ function App({ worker }: { worker: Worker }) {
 	}
 	function renderFormElements() {
 		const isStaticImage = formData.file && !["image/gif", "image/webp"].includes(formData.file.type);
-
 		return Object.entries(FORM_ELEMENTS).map(([k, v]) => {
 			if (["mode", "customWidth", "customHeight"].includes(k)) return null;
 			else if (k === "staticImageMode" && !isStaticImage) return null;
@@ -558,73 +500,6 @@ function App({ worker }: { worker: Worker }) {
 			setNeedsTooltipUpdate(true);
 			return makeFormElement({ key: k, value: v });
 		});
-	}
-
-	function renderSignalPresets() {
-		const defaultPresets = {
-			"base-2.0.77": { description: "Signals from the base game (v2.0.77).", isDefault: true },
-			"space-age-2.0.77": { description: "Signals from the Space Age DLC (v2.0.77).", isDefault: true },
-		};
-		const presets = signalPresets();
-		if (!presets) {
-			return;
-		}
-		const preset = presets[currSignalPresetKey()];
-		const PREFIX = "signal-preset-";
-		console.log(currSignalPresetKey());
-
-		return (
-			<div class="mt-1 mb-1 flex items-center justify-between factorio-form-element factorio-select-container">
-				<label class="text-white-500" for="maxsize">
-					Signal Preset
-					<Tooltip
-						tooltip={"A preset list of all available signals." + "\n\n" + `Current preset: ${currSignalPresetKey()}`}
-						name="Signal Preset"
-						splash={preset?.description}
-					/>
-				</label>
-				{preset && (
-					<select
-						ref={(e) => ((formRefs as any)["signalPreset"] = e)}
-						id="signalPreset"
-						name="signalPreset"
-						value={PREFIX + currSignalPresetKey()}
-						onChange={(e) => {
-							const presetKey = e.currentTarget.value.replace(PREFIX, "");
-							console.log(presetKey);
-							if (presetKey === "add-preset") {
-								const newKey = prompt("Enter a name for the new preset:");
-								if (!newKey) return;
-
-								import("./assets/data/generate-signals.lua?url").then(async ({ default: url }) => {
-									const script = await fetch(url).then((v) => v.text());
-									const signalsCSV = prompt(
-										[
-											`/c ${script}`,
-											"\n\n",
-											"Copy the above Lua code, and paste it into the Factorio console.",
-											"Note: you may need to enable Editor mode.\n\nThen enter the signals CSV:",
-										].join(" "),
-									);
-									setCurrSignalPresetKey(newKey);
-								});
-
-								return;
-							} else {
-								setCurrSignalPresetKey(presetKey);
-							}
-						}}
-					>
-						<For each={Object.entries({ ...defaultPresets, ...presets })}>
-							{([k, v]) => {
-								return <option value={PREFIX + k}>{k}</option>;
-							}}
-						</For>
-						<option value="add-preset">New preset...</option>
-					</select>
-				)}
-			</div>
-		);
 	}
 
 	return (
@@ -728,7 +603,7 @@ function App({ worker }: { worker: Worker }) {
 									{makeFormElement({ key: "customWidth", value: FORM_ELEMENTS.customWidth })}
 								</>
 							)}
-							{signalPresets() && renderSignalPresets()}
+							<SignalPresetSelect ref={(el) => ((formRefs as any).signalPreset = el)} setToast={setToast} />
 
 							<div class="mb-4" />
 

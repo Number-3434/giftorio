@@ -1,4 +1,5 @@
 import init, { run_blueprint, set_progress_callback, set_signal_data } from "../pkg/giftorio_wasm.js";
+import { SignalPreset } from "./data.jsx";
 
 async function run() {
 	await init();
@@ -44,9 +45,11 @@ async function run() {
 			} catch (e) {
 				postMessage({ error: e?.toString() ?? String(e) });
 			}
-		} else if (event.data.signalData) {
-			const { signals, qualities }: { signals: Uint8Array; qualities: string[] } = event.data.signalData;
-			set_signal_data(signals, new TextEncoder().encode(qualities.join(",")));
+		} else if (event.data.signalPreset) {
+			const { signalsCSV, qualitiesCSV }: SignalPreset = event.data.signalPreset;
+			set_signal_data(signalsCSV, qualitiesCSV).then(() => {
+				console.log("set_signal_data");
+			});
 		}
 	});
 }

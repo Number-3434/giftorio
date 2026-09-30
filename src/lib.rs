@@ -62,7 +62,7 @@ pub async fn run_blueprint(
 /// # Returns
 /// Nothing.
 #[wasm_bindgen]
-pub fn set_signal_data(signals_csv: &[u8], qualities_csv: &[u8]) -> Result<(), JsValue> {
+pub async fn set_signal_data(signals_csv: &[u8], qualities_csv: &[u8]) -> Result<(), JsValue> {
     blueprint::signals::load_signal_data(signals_csv, qualities_csv);
     Ok(())
 }

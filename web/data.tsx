@@ -1,5 +1,5 @@
-import _INITIAL_VALUES from "./initialValues.json";
 import FORM_ELEMENTS from "./formElements.json";
+import _INITIAL_VALUES from "./initialValues.json";
 
 export { FORM_ELEMENTS };
 
@@ -8,14 +8,13 @@ export const DEFAULT_SIGNAL_PRESET = "base-2.0.77";
 export const LAST_FILE_KEY = "last-file-user-uploaded";
 export const FORM_DATA_KEY = "giftorio-form-data";
 export const SHOW_ADVANCED_KEY = "giftorio-form-data-show-advanced";
-export const CURR_SIGNAL_PRESET_KEY = "giftorio-curr-preset-key";
-export const SIGNAL_PRESETS_KEY = "giftorio-signal-presets";
+export const CURR_SIGNAL_PRESET_KEY = "giftorio-curr-signal-preset-key";
 
 export interface SignalPreset {
 	description: string;
 	isDefault?: boolean;
-	signalsCSV: string;
-	qualitiesCSV: string;
+	signalsCSV: Uint8Array;
+	qualitiesCSV: Uint8Array;
 }
 
 export function setInitialValues(values: object) {
