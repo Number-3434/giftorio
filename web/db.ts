@@ -1,20 +1,17 @@
 import { gunzipSync, gzipSync } from "fflate";
-import { SignalPreset } from "./data";
+import { SignalData, SignalPreset } from "./data";
 
 const APP_STORAGE_KEY = "app-storage";
 const FILE_STORAGE_KEY = "file-storage";
 const SIGNAL_PRESETS_STORAGE_KEY = "signal-data-presets";
 
-// Note: We need to explicitly use the `import()` syntax 4 times so vite can bundle and resolve the URLs
 const PRESET_MAP = {
 	"base-2.0.77": {
-		getSignalsUrl: () => import("./assets/data/presets/base-2.0.77/signals.csv?url"),
-		getQualitiesUrl: () => import("./assets/data/presets/base-2.0.77/qualities.csv?url"),
+		import: () => import("./assets/data/presets/base-2.0.77.json") as Promise<SignalData>,
 		description: "Signals from the base game (v2.0.77).",
 	},
 	"space-age-2.0.77": {
-		getSignalsUrl: () => import("./assets/data/presets/space-age-2.0.77/signals.csv?url"),
-		getQualitiesUrl: () => import("./assets/data/presets/space-age-2.0.77/qualities.csv?url"),
+		import: () => import("./assets/data/presets/space-age-2.0.77.json") as Promise<SignalData>,
 		description: "Signals from the Space Age DLC (v2.0.77).",
 	},
 };
@@ -78,16 +75,7 @@ export async function getSignalPreset(name: string): Promise<SignalPreset | null
 		const preset = PRESET_MAP[name as keyof typeof PRESET_MAP];
 		return {
 			description: preset.description,
-			signalsCSV: await preset
-				.getSignalsUrl()
-				.then((v) => fetch(v.default))
-				.then((v) => v.arrayBuffer())
-				.then((v) => new Uint8Array(v)),
-			qualitiesCSV: await preset
-				.getQualitiesUrl()
-				.then((v) => fetch(v.default))
-				.then((v) => v.arrayBuffer())
-				.then((v) => new Uint8Array(v)),
+			...(await preset.import()),
 		} satisfies SignalPreset;
 	}
 

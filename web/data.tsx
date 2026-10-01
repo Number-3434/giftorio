@@ -1,3 +1,4 @@
+import { Ajv, JSONSchemaType } from "ajv";
 import FORM_ELEMENTS from "./formElements.json";
 import _INITIAL_VALUES from "./initialValues.json";
 
@@ -10,12 +11,36 @@ export const FORM_DATA_KEY = "giftorio-form-data";
 export const SHOW_ADVANCED_KEY = "giftorio-form-data-show-advanced";
 export const CURR_SIGNAL_PRESET_KEY = "giftorio-curr-signal-preset-key";
 
-export interface SignalPreset {
-	description: string;
-	isDefault?: boolean;
-	signalsCSV: Uint8Array;
-	qualitiesCSV: Uint8Array;
+export interface SignalData {
+	signals: { type: string; name: string }[];
+	qualities: string[];
 }
+export interface SignalPreset extends SignalData {
+	description: string;
+}
+const SIGNAL_DATA_SCHEMA = {
+	type: "object",
+	properties: {
+		signals: {
+			type: "array",
+			items: {
+				type: "object",
+				properties: {
+					type: { type: "string" },
+					name: { type: "string" },
+				},
+				required: ["type", "name"],
+			},
+		},
+		qualities: {
+			type: "array",
+			items: { type: "string" },
+		},
+	},
+	required: ["signals", "qualities"],
+	additionalProperties: false,
+} satisfies JSONSchemaType<SignalData>;
+const ajv = new Ajv();
 
 export function setInitialValues(values: object) {
 	localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
@@ -49,3 +74,5 @@ export const INITIAL_VALUES: Omit<typeof _INITIAL_VALUES, "file"> & { file: File
 	setInitialValues(_INITIAL_VALUES);
 	return { ..._INITIAL_VALUES };
 })();
+
+export const validateSignalData = ajv.compile(SIGNAL_DATA_SCHEMA);

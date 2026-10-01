@@ -23,10 +23,6 @@ async function run() {
 			try {
 				if (outputFormat === "blueprint") {
 					postMessage({ type: "start", filename: "blueprint.bp" });
-					// Add Factorio verson prefix
-					const id = nextWriteId++;
-					const data = new TextEncoder().encode("0");
-					postMessage({ chunk: { id, data } }, { targetOrigin: "*", transfer: [data.buffer] });
 				} else {
 					postMessage({ type: "start", filename: "blueprint.json" });
 				}

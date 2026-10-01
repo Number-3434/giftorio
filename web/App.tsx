@@ -1,34 +1,23 @@
-import { createEffect, createSignal, For, onMount } from "solid-js";
+import { createEffect, createSignal, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import COMB_POS_DATA from "./assets/data/combinator-positions.json";
 import Background, { BackgroundApi } from "./components/Background";
 import { FactorioSelect, SelectOption } from "./components/FactorioSelect";
 import { FactorioSlider } from "./components/FactorioSlider";
+import { KeyboardListener } from "./components/keyboardListener";
+import { SignalPresetSelect } from "./components/signalPresetSelect";
 import { Tooltip } from "./components/Tooltip";
-import {
-	CURR_SIGNAL_PRESET_KEY,
-	DEFAULT_SIGNAL_PRESET,
-	FORM_ELEMENTS,
-	INITIAL_VALUES,
-	LAST_FILE_KEY,
-	setInitialValues,
-	SHOW_ADVANCED_KEY,
-	SignalPreset,
-} from "./data";
+import { FORM_ELEMENTS, INITIAL_VALUES, LAST_FILE_KEY, setInitialValues, SHOW_ADVANCED_KEY, SignalPreset } from "./data";
 import { loadFileDB, saveFileDB } from "./db";
 import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
 import { FormElementValue } from "./types";
 import { formatDuration, formatFileSize } from "./utils";
-import { SignalPresetSelect } from "./components/signalPresetSelect";
-
-const isTyping = () => document.activeElement?.matches("input, textarea, select, [contenteditable]");
 
 function App({ worker }: { worker: Worker }) {
 	// State
 	const [formData, setFormData] = createStore({ ...INITIAL_VALUES });
 	const [animationInfo, setAnimationInfo] = createSignal<Partial<AnimationInfo>>();
 	const [isGenerating, setIsGenerating] = createSignal(false);
-	const [needsTooltipUpdate, setNeedsTooltipUpdate] = createSignal(true);
 	const [toast, setToast] = createSignal({ show: false, message: "", isError: false });
 	const [isDragging, setIsDragging] = createSignal(false);
 	const [xOffset, setXOffset] = createSignal(0);
@@ -334,47 +323,6 @@ function App({ worker }: { worker: Worker }) {
 		form.style.position = "absolute";
 		form.style.left = `${bounds.left}px`;
 		form.style.top = `${bounds.top}px`;
-
-		// Add keyboard shorcut to start form
-		document.addEventListener("keydown", (evt) => {
-			if (isTyping()) return;
-			if (evt.key === "Enter" || evt.key.toLowerCase() === "e") {
-				formRefs.submitButton.click();
-			}
-		});
-	});
-
-	createEffect(() => {
-		if (!needsTooltipUpdate()) return;
-
-		document.querySelectorAll(".tooltip-trigger").forEach((trigger) => {
-			(trigger as HTMLElement).addEventListener("mousemove", (e) => {
-				const tooltip = trigger.nextElementSibling! as HTMLElement;
-				const rect = trigger.getBoundingClientRect();
-
-				const vpWidth = window.innerWidth;
-				const vpHeight = window.innerHeight;
-				const tooltipRect = tooltip.getBoundingClientRect();
-
-				let x = e.clientX + 10;
-				let y = e.clientY + 10;
-
-				// Check if tooltip would go off-screen to the right
-				if (x + tooltipRect.width > vpWidth) {
-					x = e.clientX - tooltipRect.width - 10;
-				}
-
-				// Check if tooltip would go off-screen at the bottom
-				if (y + tooltipRect.height > vpHeight) {
-					y = e.clientY - tooltipRect.height - 10;
-				}
-
-				tooltip.style.left = `${x}px`;
-				tooltip.style.top = `${y}px`;
-			});
-		});
-
-		setNeedsTooltipUpdate(false);
 	});
 
 	onMount(() => {
@@ -497,17 +445,17 @@ function App({ worker }: { worker: Worker }) {
 				else if (disabledKeys.includes(k)) v = { ...v, disabled: true } as any;
 			}
 
-			setNeedsTooltipUpdate(true);
 			return makeFormElement({ key: k, value: v });
 		});
 	}
 
 	return (
 		<>
+			<KeyboardListener keys={["Enter", "e", "E"]} onKeyDown={() => formRefs.submitButton.click()} />
 			<Background ref={(api) => (refBackground = api)} />
-			{isMobile() && (
+			<Show when={isMobile()}>
 				<div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Some features may be limited on mobile.</div>
-			)}
+			</Show>
 			<div class="flex flex-col items-center justify-start min-h-screen">
 				<div
 					classList={{
@@ -603,7 +551,7 @@ function App({ worker }: { worker: Worker }) {
 									{makeFormElement({ key: "customWidth", value: FORM_ELEMENTS.customWidth })}
 								</>
 							)}
-							<SignalPresetSelect ref={(el) => ((formRefs as any).signalPreset = el)} setToast={setToast} />
+							<SignalPresetSelect setToast={setToast} onChange={setCurrSignalPreset} />
 
 							<div class="mb-4" />
 
@@ -611,7 +559,7 @@ function App({ worker }: { worker: Worker }) {
 							<div>
 								<div class="flex items-center justify-between">
 									<button class="button bg-gray-100 px-4" type="button" onClick={() => setShowAdvanced(!showAdvanced())}>
-										Advanced Options
+										Settings
 									</button>
 									<button
 										class="button button-green-right"
@@ -631,7 +579,6 @@ function App({ worker }: { worker: Worker }) {
 							<h3 class="text-tan-500">Advanced Options</h3>
 							<div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
 						</div>
-
 						<div
 							class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto"
 							style={{ "max-height": "50vh" }}

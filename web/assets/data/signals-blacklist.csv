@@ -1,8 +1,0 @@
-virtual,signal-anything
-virtual,signal-each
-virtual,signal-everything
-virtual,signal-fluid-parameter
-virtual,signal-fuel-parameter
-virtual,signal-item-parameter
-virtual,signal-signal-parameter
-virtual,signal-unknown

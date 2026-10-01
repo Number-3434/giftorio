@@ -248,13 +248,39 @@ h3 {
 	z-index: 1000;
 }
 
-::selection {
-	background: #f1be64;
+input[type="text"],
+textarea {
+	@apply text-black;
+
+	background: #828282;
+	box-shadow: inset 0px 0px 3px 1px #000;
+
+	&:read-write:focus:not([aria-invalid="true"]) {
+		background: #f0dab4;
+	}
+	&[aria-invalid="true"] {
+		background: #ff9b9b;
+	}
+	&::selection {
+		background: #f1be64;
+	}
+}
+
+input[type="text"] {
+	@apply px-3;
+}
+
+textarea {
+	@apply w-full rounded p-3 text-sm;
+
+	/* max-height: 30vh; */
 }
 
 .button {
-	@apply bg-gray-100 font-bold min-w-[128px] border-none whitespace-nowrap cursor-pointer select-none h-9 text-center;
+	@apply bg-gray-100 font-bold min-w-[128px] text-xl border-none whitespace-nowrap cursor-pointer select-none h-9 text-center;
+
 	position: relative;
+	padding-bottom: 2px;
 	line-height: inherit;
 	box-shadow:
 		inset 8px 0px 4px -8px #000,

@@ -1,9 +1,13 @@
-use crate::blueprint::blueprint::BlueprintGenerator;
+use crate::blueprint::{blueprint::BlueprintGenerator, constants::*};
 use crate::image_processing::FrameData;
 use crate::models::{BlueprintArgs, OutputFormat};
 use crate::streaming_writer::{ChunkQueue, StreamingWriter};
 use crate::JsValue;
-use base64::write::EncoderWriter;
+use base64::{
+    engine::{general_purpose::STANDARD, GeneralPurpose},
+    write::EncoderWriter,
+    Engine,
+};
 use flate2::{write::ZlibEncoder, Compression};
 use std::{
     collections::VecDeque,
@@ -15,16 +19,17 @@ pub struct BlueprintEncoder<'a> {
     blueprint_generator: BlueprintGenerator<'a>,
     chunks: ChunkQueue,
     finished: bool,
-    zlib_encoder: Option<ZlibEncoder<EncoderWriter<StreamingWriter>>>,
+    started: bool,
+    zlib_encoder: Option<ZlibEncoder<EncoderWriter<'a, GeneralPurpose, StreamingWriter>>>,
 }
 impl<'a> BlueprintEncoder<'a> {
     pub fn new(blueprint_generator: BlueprintGenerator<'a>, args: &BlueprintArgs) -> Self {
         let chunks = Arc::new(Mutex::new(VecDeque::new()));
         let writer = StreamingWriter::new(Arc::clone(&chunks));
-        let mut zlib: Option<ZlibEncoder<EncoderWriter<StreamingWriter>>> = None;
+        let mut zlib: Option<ZlibEncoder<_>> = None;
 
         if args.output_format == OutputFormat::Blueprint {
-            let b64 = EncoderWriter::new(writer, base64::STANDARD);
+            let b64 = EncoderWriter::new(writer, &STANDARD);
             zlib = Some(ZlibEncoder::new(b64, Compression::best()))
         }
 
@@ -32,6 +37,7 @@ impl<'a> BlueprintEncoder<'a> {
             blueprint_generator,
             chunks,
             finished: false,
+            started: false,
             zlib_encoder: zlib,
         }
     }
@@ -45,6 +51,14 @@ impl<'a> BlueprintEncoder<'a> {
     }
 
     pub fn next_chunk(&mut self) -> Result<Option<Vec<u8>>, JsValue> {
+        // Handle Factorio version prefix
+        if !self.started {
+            self.started = true; // Set before we return to prevent infinite loop
+            if self.zlib_encoder.is_some() {
+                return Ok(Some(STANDARD.encode(FACTORIO_VERSION_PREFIX).into_bytes()));
+            }
+        }
+
         loop {
             // Return anything already produced by the previous call first
             if let Some(chunk) = self.chunks.lock().unwrap().pop_front() {

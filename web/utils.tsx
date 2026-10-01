@@ -17,3 +17,83 @@ export function formatFileSize(bytes: number) {
 
 	return `${+value.toFixed(2)} ${units[i]}`;
 }
+
+export function useErrM(el: HTMLElement) {
+	let errMsg: string | null = null;
+	function set(msg: string | null) {
+		errMsg = msg;
+	}
+	function clear() {
+		set(null);
+	}
+	function get() {
+		return errMsg;
+	}
+
+	function test() {
+		function isInput(el: HTMLElement) {
+			return (
+				el instanceof HTMLButtonElement ||
+				el instanceof HTMLInputElement ||
+				el instanceof HTMLObjectElement ||
+				el instanceof HTMLSelectElement ||
+				el instanceof HTMLTextAreaElement
+			);
+		}
+
+		if (errMsg) {
+			if (isInput(el)) {
+				el.setCustomValidity(errMsg);
+				el.reportValidity();
+			}
+			el.setAttribute("aria-invalid", "true");
+			return false;
+		} else {
+			if (isInput(el)) {
+				el.setCustomValidity("");
+				el.reportValidity();
+			}
+			el.setAttribute("aria-invalid", "false");
+			return true;
+		}
+	}
+
+	function report(msg: string) {
+		set(msg);
+		test();
+	}
+
+	return { clear, get, report, set, test };
+}
+
+export function binaryInsert<T>(arr: T[], value: T, compare: (a: T, b: T) => number): number {
+	let lo = 0;
+	let hi = arr.length;
+
+	while (lo < hi) {
+		const mid = (lo + hi) >>> 1;
+		if (compare(arr[mid], value) < 0) {
+			lo = mid + 1;
+		} else {
+			hi = mid;
+		}
+	}
+
+	arr.splice(lo, 0, value);
+	return lo;
+}
+export function binarySearch<T>(arr: T[], value: T, compare: (a: T, b: T) => number): number {
+	let lo = 0;
+	let hi = arr.length;
+
+	while (lo < hi) {
+		const mid = (lo + hi) >>> 1;
+		if (compare(arr[mid], value) < 0) {
+			lo = mid + 1;
+		} else {
+			hi = mid;
+		}
+	}
+
+	return lo < arr.length && compare(arr[lo], value) === 0 ? lo : -1;
+}

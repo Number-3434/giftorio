@@ -1,5 +1,5 @@
 use crate::blueprint::models::*;
-use std::{cell::RefCell, collections::HashMap, sync::Arc};
+use std::{cell::RefCell, sync::Arc};
 
 thread_local! {
     pub static QUALITIES: RefCell<Vec<Arc<str>>> = const {
@@ -20,38 +20,36 @@ thread_local! {
 /// # Returns
 ///
 /// A new vector of signal JSON objects with added quality attributes.
-pub fn load_signal_data(signals_csv: &[u8], qualities_csv: &[u8]) {
-    use std::str::from_utf8;
+pub fn load_signal_data(data_json: &[u8]) {
+    #[derive(serde::Deserialize)]
+    struct SignalData {
+        pub signals: Vec<Arc<Signal>>,
+        pub qualities: Vec<Arc<str>>,
+    }
+    let data: SignalData = serde_json::from_slice(data_json).unwrap();
 
-    let mut sig_types: HashMap<Box<[u8]>, Arc<str>> = HashMap::new(); // Allow "type" field to reference the same strings
-    let mut signals: Vec<Arc<Signal>> = Vec::new();
-    let qualities = qualities_csv
-        .split(|&b| b == b',')
-        .map(|q| Arc::<str>::from(from_utf8(q).unwrap()))
-        .collect::<Vec<_>>();
+    let mut sig_types: Vec<Arc<str>> = Vec::with_capacity(data.qualities.len()); // Allow "type" field to reference the same strings
+    let mut signals: Vec<Arc<Signal>> =
+        Vec::with_capacity(data.signals.len() * data.qualities.len());
 
-    for line in signals_csv.split(|&b| b == b'\n') {
-        let mut fields = line.split(|&b| b == b',');
-        let type_bytes = fields.next().unwrap();
-        let name_bytes = fields.next().unwrap();
+    for sig in data.signals.iter() {
         let type_: Arc<str>;
-
-        if let Some(value) = sig_types.get(type_bytes) {
-            type_ = Arc::clone(value);
+        if let Some(t) = sig_types.iter().rfind(|&x| *x == sig.type_) {
+            type_ = Arc::clone(t);
         } else {
-            type_ = Arc::from(from_utf8(type_bytes).unwrap());
-            sig_types.insert(type_bytes.into(), Arc::clone(&type_));
+            type_ = Arc::clone(&sig.type_);
+            sig_types.push(Arc::clone(&sig.type_));
         }
 
-        for q in qualities.iter() {
+        for q in data.qualities.iter() {
             signals.push(Arc::from(Signal {
                 type_: Arc::clone(&type_),
-                name: Arc::from(from_utf8(name_bytes).unwrap()),
+                name: Arc::clone(&sig.name),
                 quality: Some(Arc::clone(q)),
             }));
         }
     }
 
-    QUALITIES.with(|q| *q.borrow_mut() = qualities);
+    QUALITIES.with(|q| *q.borrow_mut() = data.qualities);
     SIGNALS.with(|s| *s.borrow_mut() = signals);
 }
