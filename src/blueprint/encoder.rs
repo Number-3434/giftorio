@@ -1,12 +1,12 @@
 use crate::blueprint::{blueprint::BlueprintGenerator, constants::*};
 use crate::image_processing::FrameData;
 use crate::models::{BlueprintArgs, OutputFormat};
+use crate::progress::report_progress;
 use crate::streaming_writer::{ChunkQueue, StreamingWriter};
 use crate::JsValue;
 use base64::{
     engine::{general_purpose::STANDARD, GeneralPurpose},
     write::EncoderWriter,
-    Engine,
 };
 use flate2::{write::ZlibEncoder, Compression};
 use std::{
@@ -55,7 +55,7 @@ impl<'a> BlueprintEncoder<'a> {
         if !self.started {
             self.started = true; // Set before we return to prevent infinite loop
             if self.zlib_encoder.is_some() {
-                return Ok(Some(STANDARD.encode(FACTORIO_VERSION_PREFIX).into_bytes()));
+                return Ok(Some(FACTORIO_VERSION_PREFIX.as_bytes().to_vec()));
             }
         }
 
@@ -80,6 +80,8 @@ impl<'a> BlueprintEncoder<'a> {
             } else if self.zlib_encoder.is_none() {
                 return Ok(None);
             }
+
+            report_progress(1.0, "Finishing...");
 
             let zlib = self.zlib_encoder.take().unwrap();
             let mut b64 = zlib.finish().unwrap_throw();

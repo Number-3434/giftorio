@@ -17,7 +17,7 @@
   "signalCompressionType": "none",
   "signalSorting": "none",
   "staticImageMode": "constant",
-  "substationQuality": "normal",
+  "substationQuality": null,
   "targetFps": 15,
   "temporalCompressionWindow": 300,
   "wireColor": "green"

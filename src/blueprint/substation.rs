@@ -82,6 +82,7 @@ impl SubstationOccupied {
 pub fn generate_substations(
     occupied: &mut SubstationOccupied,
     base_ent_n: u32,
+    args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Wire>, u32) {
     let mut subs: Vec<Entity> = Vec::new();
     let mut wires: Vec<[u32; 4]> = Vec::new();
@@ -97,6 +98,8 @@ pub fn generate_substations(
     occupied.requests.sort_by(|a, b| a.x.total_cmp(&b.x)); // Preserves previous order
 
     let get_tag = |pos: DVec2| format!("sub-({},{})", pos.x, pos.y);
+    let mut prev_y: Option<f64> = None;
+    let mut did_connect = false;
 
     for req in &occupied.requests {
         let pos = occupied.start_pos + req;
@@ -108,13 +111,21 @@ pub fn generate_substations(
         // Connect wires to substations above / substations to the left
         for prev_pos in [pos - dvec2(cov, 0.0), pos - dvec2(0.0, cov)] {
             if let Some(prev) = subs.iter().find(|e| e.position.abs_diff_eq(prev_pos, 0.01)) {
-                wires.push(mkwires!(C subs; IN get_tag(prev.position.with_y(pos.y)) => IN tag));
+                if !did_connect {
+                    wires.push(mkwires!(C subs; IN get_tag(prev.position.with_y(pos.y)) => IN tag));
+                }
+                if true {
+                    wires.push(mkwires!(C subs; IN get_tag(prev.position.with_x(pos.x)) => IN tag));
+                }
             }
-            if let Some(prev) = subs.iter().find(|e| e.position.abs_diff_eq(prev_pos, 0.01)) {
-                wires.push(mkwires!(C subs; IN get_tag(prev.position.with_x(pos.x)) => IN tag));
+        }
+        if let Some(prev_y) = prev_y {
+            if (prev_y - pos.y).abs() > 0.001 {
+                did_connect = false;
             }
         }
         curr_ent_n += 1;
+        prev_y = Some(pos.y);
     }
 
     return (subs, wires, curr_ent_n);

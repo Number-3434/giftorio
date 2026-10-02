@@ -4,10 +4,9 @@ import streamSaver from "streamsaver";
 import App from "./App";
 import "./index.css";
 
-streamSaver.mitm = "https://jimmywarting.github.io/StreamSaver.js/mitm.html";
+streamSaver.mitm = "/streamsaver/mitm.html";
 
 let writer: WritableStreamDefaultWriter<Uint8Array<ArrayBufferLike>> | null = null;
-let isFirst = true;
 const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
 
 worker.addEventListener("message", async (event) => {
@@ -16,14 +15,9 @@ worker.addEventListener("message", async (event) => {
     const stream = streamSaver.createWriteStream(filename);
     writer = stream.getWriter();
   } else if (event.data.chunk) {
-    if (isFirst) {
-      isFirst = false;
-      await writer!.write(new TextEncoder().encode(""));
-    }
-
     const { id, data } = event.data.chunk;
     try {
-      await writer!.write(data);
+      writer!.write(data);
       worker.postMessage({ type: "chunkWritten", id });
     } catch (e) {
       worker.postMessage({ type: "chunkWritten", id, error: e?.toString() ?? String(e) });

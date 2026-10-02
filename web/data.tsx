@@ -45,7 +45,10 @@ const ajv = new Ajv();
 export function setInitialValues(values: object) {
   localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
 }
-export const INITIAL_VALUES: Omit<typeof _INITIAL_VALUES, "file"> & { file: File | null } = (() => {
+export function getInitialValues(): Omit<typeof _INITIAL_VALUES, "file" | "substationQuality"> & {
+  file: File | null;
+  substationQuality: string | null;
+} {
   const prev = localStorage.getItem(FORM_DATA_KEY);
 
   if (prev) {
@@ -73,6 +76,6 @@ export const INITIAL_VALUES: Omit<typeof _INITIAL_VALUES, "file"> & { file: File
 
   setInitialValues(_INITIAL_VALUES);
   return { ..._INITIAL_VALUES };
-})();
+}
 
 export const validateSignalData = ajv.compile(SIGNAL_DATA_SCHEMA);

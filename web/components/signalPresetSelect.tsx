@@ -10,14 +10,14 @@ import { Tooltip } from "./Tooltip";
 export const SIGNAL_SELECTOR_KEYS = Object.freeze(["f", "s", "t"] as const);
 export type TimingSignals = Record<(typeof SIGNAL_SELECTOR_KEYS)[number], SignalData["signals"][number] & { quality: string }>;
 export interface SignalPresetSelectProps {
-  onSignalPresetChange(v: SignalPreset): void;
-  onTimingSignalsChange(v: TimingSignals): void;
+  setSignalPreset(v: SignalPreset): void;
+  setTimingSignals(v: TimingSignals): void;
   showToast(duration: number, v: { show?: boolean; message: string; isError?: boolean }): void;
 }
 
 type ExtractionStage = "copyCommand" | "pasteSignals" | "metadata" | "done";
 
-export function SignalPresetSelect({ onSignalPresetChange, onTimingSignalsChange, showToast }: SignalPresetSelectProps) {
+export function SignalPresetSelect({ setSignalPreset, setTimingSignals, showToast }: SignalPresetSelectProps) {
   const PREFIX = "signal-preset-";
   const DEFAULT_FORM_DATA = { name: "", description: "" };
 
@@ -51,8 +51,8 @@ export function SignalPresetSelect({ onSignalPresetChange, onTimingSignalsChange
     }
   });
 
-  createEffect(() => onSignalPresetChange(currPreset()!));
-  createEffect(() => onTimingSignalsChange(currTimingSignals()!));
+  createEffect(() => setSignalPreset(currPreset()!));
+  createEffect(() => setTimingSignals(currTimingSignals()!));
 
   function renderExtractionStage() {
     return (

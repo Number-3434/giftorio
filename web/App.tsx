@@ -7,7 +7,7 @@ import { FactorioSlider } from "./components/FactorioSlider";
 import { KeyboardListener } from "./components/keyboardListener";
 import { SignalPresetSelect, TimingSignals } from "./components/signalPresetSelect";
 import { Tooltip } from "./components/Tooltip";
-import { FORM_ELEMENTS, INITIAL_VALUES, LAST_FILE_KEY, setInitialValues, SHOW_ADVANCED_KEY, SignalPreset } from "./data";
+import { FORM_ELEMENTS, getInitialValues, LAST_FILE_KEY, setInitialValues, SHOW_ADVANCED_KEY, SignalPreset } from "./data";
 import { loadFileDB, saveFileDB } from "./db";
 import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
 import { FormElementValue } from "./types";
@@ -17,7 +17,7 @@ function App({ worker }: { worker: Worker }) {
   const DEFAULT_TOAST = { id: 0, show: false, message: "", isError: false };
 
   // State
-  const [formData, setFormData] = createStore({ ...INITIAL_VALUES });
+  const [formData, setFormData] = createStore(getInitialValues());
   const [animationInfo, setAnimationInfo] = createSignal<Partial<AnimationInfo>>();
   const [isGenerating, setIsGenerating] = createSignal(false);
   const [_toast, _setToast] = createSignal({ ...DEFAULT_TOAST });
@@ -143,7 +143,7 @@ function App({ worker }: { worker: Worker }) {
     if (event.data.progress) {
       const { percentage, status } = event.data.progress;
       formRefs.progressBar.style.setProperty("--progress", `${percentage}%`);
-      formRefs.progressStatus.textContent = status;
+      formRefs.progressStatus.textContent = `(${percentage.toFixed(0)}%)  ${status}`;
     } else if (event.data.blueprintMetadata) {
       const { blueprintMetadata } = event.data;
 
@@ -355,9 +355,6 @@ function App({ worker }: { worker: Worker }) {
   });
 
   createEffect(() => {
-    if (!["none", "normal"].includes(formData.substationQuality)) {
-      setFormData("substationQuality", "normal");
-    }
     if (formData.mode !== "full") {
       formRefs.fileInput.setAttribute("aria-disabled", "true");
     } else {
@@ -369,7 +366,6 @@ function App({ worker }: { worker: Worker }) {
 
   createEffect(() => {
     if (currSignalPreset()) {
-      console.log("Setting signal preset");
       worker.postMessage({ signalPreset: currSignalPreset()! });
     }
   });
@@ -409,12 +405,7 @@ function App({ worker }: { worker: Worker }) {
       else if (k === "staticImageMode" && !isStaticImage) return null;
       else if (k === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") return null;
       else if (formData.mode === "full" && (k === "customWidth" || k === "customHeight")) return null;
-      else if (k === "substationQuality") {
-        // Remove incompatible substation qualities
-        let { options } = v as (typeof FORM_ELEMENTS)["substationQuality"];
-        options = formData.useDLC ? options : options.filter(([k, ..._]) => k === "none" || k === "normal");
-        v = { ...v, options } as any;
-      } else if (formData.mode !== "full") {
+      else if (formData.mode !== "full") {
         const allowed = [
           "connectionDirection",
           "flippedAxes",
@@ -555,14 +546,7 @@ function App({ worker }: { worker: Worker }) {
                   {makeFormElement({ key: "customWidth", value: FORM_ELEMENTS.customWidth })}
                 </>
               )}
-              <SignalPresetSelect
-                showToast={showToast}
-                onSignalPresetChange={(v) => {
-                  console.log(v);
-                  setCurrSignalPreset(v);
-                }}
-                onTimingSignalsChange={setCurrTimingSignals}
-              />
+              <SignalPresetSelect showToast={showToast} setSignalPreset={setCurrSignalPreset} setTimingSignals={setCurrTimingSignals} />
 
               <div class="mb-4" />
 
@@ -586,6 +570,28 @@ function App({ worker }: { worker: Worker }) {
               <div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
             </div>
             <div class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto" style={{ "max-height": "50vh" }}>
+              <Show when={currSignalPreset()}>
+                <FactorioSelect
+                  class="text-sm"
+                  name="Substation Quality"
+                  key="substationQuality"
+                  disabled={currSignalPreset()!.qualities.length === 0}
+                  title={
+                    currSignalPreset()!.qualities.length === 0
+                      ? "Unavailable as the current signal preset does not support quality levels."
+                      : undefined // allow overwriting
+                  }
+                  options={currSignalPreset()!.qualities.map((q) => [q, { name: q, tooltip: `Maps to the internal quality "${q}".` }])}
+                  tooltip="The quality level of the substations."
+                  splash={
+                    currSignalPreset()!.qualities.length === 0
+                      ? "Unavailable as the current signal preset does not support quality levels."
+                      : ""
+                  }
+                  initialValue={formData.substationQuality ?? "None"}
+                  onChange={(v) => setFormData("substationQuality", v)}
+                />
+              </Show>
               {renderFormElements()}
             </div>
           </div>

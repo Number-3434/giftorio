@@ -427,6 +427,10 @@ select {
   padding-top: 3px;
   padding-bottom: 3px;
   letter-spacing: -0.25px;
+
+  &:disabled {
+    opacity: 0.3;
+  }
 }
 
 select option {

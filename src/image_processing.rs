@@ -138,17 +138,19 @@ impl Iterator for FrameData<'_> {
                 }
             }
 
-            set_progress(
-                0.00,
-                1.00,
-                self.frame_i as f64 / self.in_n_frames as f64,
-                &format!(
-                    "Processing frame {} / {}  ({:.1} FPS)",
-                    self.frame_i,
-                    self.in_n_frames,
-                    1000.0 * self.frame_i as f64 / (now_ms() - self.fps_timer)
-                ),
-            );
+            if self.frame_i > 0 {
+                set_progress(
+                    0.10,
+                    0.90,
+                    self.frame_i as f64 / self.in_n_frames as f64,
+                    &format!(
+                        "Processing frame {} / {}  ({:.1} FPS)",
+                        self.frame_i,
+                        self.in_n_frames,
+                        1000.0 * self.frame_i as f64 / (now_ms() - self.fps_timer)
+                    ),
+                );
+            }
         }
     }
 }

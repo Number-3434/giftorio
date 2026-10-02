@@ -2,6 +2,7 @@ use crate::blueprint::{
     combinator::*, constants::*, lamp::*, models::*, signals::*, substation::*, timer::*, util::*,
 };
 use crate::image_processing::FrameData;
+use crate::progress::set_progress;
 use glam::{dvec2, uvec2, UVec2};
 use std::{io, sync::Arc};
 use wasm_bindgen::JsValue;
@@ -95,10 +96,12 @@ impl<'a> BlueprintGenerator<'a> {
                 args.custom_height.expect("Must have height or frame data."),
             );
         }
+        let use_const_cbs = matches!(args.mode, Mode::Static { const_cb: true, .. });
         let max_lamp_cols_per_grp = if matches!(args.mode, Mode::Static { combs: false, .. }) {
             frame_dim.x
         } else {
-            (signals.len() as u32 / frame_dim.y).min(args.max_group_size.unwrap_or(frame_dim.x))
+            ((signals.len() as u32).min(if use_const_cbs { 1000 } else { u32::MAX }) / frame_dim.y)
+                .min(args.max_group_size.unwrap_or(frame_dim.x))
         };
         if max_lamp_cols_per_grp < 1 {
             return Err(JsValue::from_str(
@@ -277,7 +280,7 @@ impl<'a> BlueprintGenerator<'a> {
                         self.occupied.request(en.position); // Request substations to power entities
                     }
                     let (ents, wires, _) =
-                        generate_substations(&mut self.occupied, ent_data.next_ent_n);
+                        generate_substations(&mut self.occupied, ent_data.next_ent_n, &self.args);
                     ent_data.ents.extend(ents);
                     ent_data.wires.extend(wires);
 
@@ -370,8 +373,21 @@ impl<'a> BlueprintGenerator<'a> {
             ent_data.wires.extend(wires);
         }
         let mut prev_top_right_lamp_ent_n: Option<u32> = None;
+        let n_groups = self.n_groups;
 
-        for group_i in 0..self.n_groups {
+        for group_i in 0..n_groups {
+            let thresh = if matches!(args.mode, Mode::Static { .. }) {
+                0.60
+            } else {
+                0.10
+            };
+            set_progress(
+                0.00,
+                thresh,
+                (group_i + 1) as f64 / n_groups as f64,
+                &format!("Generating lamps (group {} / {n_groups})", group_i + 1),
+            );
+
             let grp_left = group_i * self.max_cols_per_grp;
             let grp_width = (self.max_cols_per_grp).min(self.dim.x - grp_left);
             let (mut cb_in_ent_n, mut cb_out_ent_n) = (0, 0);
@@ -507,6 +523,16 @@ impl<'a> BlueprintGenerator<'a> {
             let is_last_frame = info.next_frame.is_none();
 
             for group_i in 0..n_groups {
+                if matches!(self.args.mode, Mode::Static { const_cb: true, .. }) {
+                    let thresh = 0.60;
+                    set_progress(
+                        thresh,
+                        0.90,
+                        (group_i + 1) as f64 / n_groups as f64,
+                        &format!("Generating data (group {} / {n_groups})", group_i + 1),
+                    );
+                }
+
                 let state = &mut info.patch_states[group_i as usize]; // Individual state for each group of lamps
                 let frame_sigs: Vec<i32>;
                 let data_combs = &group_data_combs[group_i as usize];
@@ -656,6 +682,7 @@ impl<'a> BlueprintGenerator<'a> {
     fn make_wires(&mut self, mut writer: &mut dyn io::Write) -> Result<(), JsValue> {
         let all_ents = &mut self.entity_data.ents;
         let all_wires = &mut self.entity_data.wires;
+        let n_wires = all_wires.len();
 
         // Swap all wires if requested (default uses red wires, so swap all for green).
         // Circuit network filters are already handled.
@@ -663,6 +690,13 @@ impl<'a> BlueprintGenerator<'a> {
             invert_wires(all_ents, all_wires);
         }
         for (i, wires) in all_wires.chunks(ENCODE_CHUNK_SIZE).enumerate() {
+            let display_i = (i + 1) * ENCODE_CHUNK_SIZE;
+            set_progress(
+                0.90,
+                1.00,
+                display_i as f64 / n_wires as f64,
+                &format!("Generating wires ({display_i} / {n_wires})..."),
+            );
             if i > 0 {
                 write_to(&mut writer, b",")?;
             }

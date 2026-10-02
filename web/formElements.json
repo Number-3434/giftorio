@@ -1,18 +1,4 @@
 {
-  "substationQuality": {
-    "name": "Substation Quality",
-    "type": "select",
-    "options": [
-      ["none", "None"],
-      ["normal", "Normal"],
-      ["uncommon", "Uncommon"],
-      ["rare", "Rare"],
-      ["epic", "Epic"],
-      ["legendary", "Legendary"]
-    ],
-    "tooltip": "The quality level of the substations.",
-    "splash": "Usable if 'Use Space Age DLC?' is enabled."
-  },
   "mode": {
     "name": "Output Mode",
     "type": "select",

@@ -31,6 +31,12 @@ pub fn load_signal_data(data_json: &[u8]) {
     let mut sig_types: Vec<Arc<str>> = Vec::with_capacity(data.qualities.len()); // Allow "type" field to reference the same strings
     let mut signals: Vec<Arc<Signal>> =
         Vec::with_capacity(data.signals.len() * data.qualities.len());
+    let mut qualities: Vec<Option<Arc<str>>> =
+        data.qualities.iter().map(|q| Some(Arc::clone(q))).collect();
+
+    if qualities.is_empty() {
+        qualities = vec![None];
+    }
 
     for sig in data.signals.iter() {
         let type_: Arc<str>;
@@ -41,11 +47,11 @@ pub fn load_signal_data(data_json: &[u8]) {
             sig_types.push(Arc::clone(&sig.type_));
         }
 
-        for q in data.qualities.iter() {
+        for q in qualities.iter() {
             signals.push(Arc::from(Signal {
                 type_: Arc::clone(&type_),
                 name: Arc::clone(&sig.name),
-                quality: Some(Arc::clone(q)),
+                quality: q.clone(),
             }));
         }
     }

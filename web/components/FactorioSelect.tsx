@@ -13,45 +13,50 @@ export interface FactorioSelectProps extends Omit<JSX.SelectHTMLAttributes<HTMLS
   tooltip?: string;
   options: [string, string | SelectOption][];
   splash?: string;
-  ref(el: HTMLSelectElement): void;
 }
 
 export function FactorioSelect(props: FactorioSelectProps) {
-  const { formArgs, initialValue, key, name, onChange, options, tooltip, splash, ref, ...selectProps } = props;
-  const [value, setValue] = createSignal(initialValue);
+  let selectProps: JSX.SelectHTMLAttributes<HTMLSelectElement>;
+  {
+    const { formArgs, key, name, onChange, options, tooltip, splash, ref, ..._selectProps } = props;
+    selectProps = _selectProps;
+  }
+
+  const [currValue, setCurrValue] = createSignal(props.initialValue);
   const [selectTitle, setSelectTitle] = createSignal<string>();
 
   function handleChange(e: Event) {
     const target = e.currentTarget as HTMLSelectElement;
-    setValue(target.value);
-    onChange(target.value);
+    setCurrValue(target.value);
+    props.onChange(target.value);
   }
 
   createEffect(() => {
-    const currValue = value();
-    const option = options.find((v) => (typeof v === "string" ? v : v[0] === currValue));
+    const value = currValue();
+    const option = props.options.find((v) => (typeof v === "string" ? v : v[0] === value));
     if (!option) return;
 
-    const [_, info] = option;
+    const [, info] = option;
 
     if (typeof info === "string") {
-      setSelectTitle(tooltip);
+      setSelectTitle(props.tooltip);
     } else {
-      setSelectTitle(`${tooltip}\n\n${info.name}: ${info.tooltip}`);
+      setSelectTitle(`${props.tooltip}\n\n${info.name}: ${info.tooltip}`);
     }
   });
 
   return (
     <div
       class="mt-1 mb-1 flex items-center justify-between factorio-form-element factorio-select-container"
-      aria-disabled={formArgs?.disabled}
+      aria-disabled={props.formArgs?.disabled || props.disabled}
     >
-      <label class="block text-white-500" for={key}>
-        {name}
-        <Tooltip name={name} tooltip={tooltip} splash={splash} options={options} />
+      <label class="block text-white-500" for={props.key}>
+        <span classList={{ "opacity-50": props.disabled }}>{props.name}</span>
+        <Tooltip name={props.name} tooltip={props.tooltip} splash={props.splash} options={props.options} />
       </label>
-      <select ref={ref} id={key} name={key} value={value()} onChange={handleChange} title={selectTitle()} {...selectProps}>
-        <For each={options}>
+      {/* @ts-ignore */}
+      <select id={props.key} name={props.key} prop:value={currValue()} onChange={handleChange} title={selectTitle()} {...selectProps}>
+        <For each={props.options}>
           {([k, v]) => (
             <option title={typeof v === "string" ? undefined : v.tooltip} value={k}>
               {typeof v === "string" ? v : v.name}
