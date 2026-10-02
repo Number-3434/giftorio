@@ -22,7 +22,7 @@ pub fn generate_timer(
     args: &BlueprintArgs,
 ) -> (Vec<Entity>, Vec<Wire>) {
     let ts = &args.timing_sigs;
-    let (sig_f, sig_s, sig_t) = (ts.f.as_ref(), ts.s.as_ref(), &ts.t);
+    let (sig_f, sig_s, sig_t) = (&ts.f, &ts.s, &ts.t);
 
     let gray_bits = args.grayscale_bits;
     let mut ents: Vec<Entity> = Vec::new();
@@ -62,8 +62,6 @@ pub fn generate_timer(
     wires.push([2, WIRE_R, 3, WIRE_R]);
 
     if gray_bits > 0 {
-        let (sig_s, sig_f) = (sig_s.unwrap(), sig_f.unwrap());
-
         let en = Entity::new(4, Arc::clone(&ARI_CB), TIMER4_POS).with_direction(DIR_L);
         let conds = arithmetic_conds!(sig_t % (ticks_per_frame * frames_per_comb) => sig_s);
         ents.push(en.with_control_behavior(ControlBehavior::from_arithmetic_conditions(conds)));

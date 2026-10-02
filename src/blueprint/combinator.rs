@@ -127,7 +127,7 @@ pub fn generate_combinators(
         let desc = "Shifts the input numbers until they are in the range of the current frame.";
         let ac = ArithmeticConditions {
             first_signal: Some(SIG_EACH.clone()),
-            second_signal: args.timing_sigs.f.clone(),
+            second_signal: Some(args.timing_sigs.f.clone()),
             second_constant: None,
             operation: Some(OP_RSHIFT.to_owned()),
             output_signal: Some(SIG_EACH.clone()),
@@ -315,9 +315,12 @@ fn load_comb_pos_json(json: &str) -> Result<Vec<CombinatorPositionData>, JsValue
         .iter()
         .flat_map(|cb| {
             cb.blueprints.to_vec().into_iter().map(move |entry| {
+                use base64::{engine::general_purpose::STANDARD, Engine as _};
+
                 // Decode blueprint string (removing leading "0" prefix)
-                let b64 =
-                    base64::decode(entry.blueprint[1..].as_bytes()).map_js_err("base64 error")?;
+                let b64 = STANDARD
+                    .decode(entry.blueprint[1..].as_bytes())
+                    .map_js_err("base64 error")?;
                 let mut zlib = flate2::read::ZlibDecoder::new(&b64[..]);
                 let mut buf = String::new();
 

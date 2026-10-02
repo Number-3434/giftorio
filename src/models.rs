@@ -51,8 +51,8 @@ pub struct BlueprintArgs {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TimingSignals {
-    pub f: Option<crate::blueprint::models::Signal>,
-    pub s: Option<crate::blueprint::models::Signal>,
+    pub f: crate::blueprint::models::Signal,
+    pub s: crate::blueprint::models::Signal,
     pub t: crate::blueprint::models::Signal,
 }
 

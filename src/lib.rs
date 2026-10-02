@@ -9,6 +9,11 @@ mod models;
 mod progress;
 mod streaming_writer;
 
+#[wasm_bindgen]
+pub fn init() {
+    console_error_panic_hook::set_once();
+}
+
 /// Public entry point for WebAssembly.
 ///
 /// # Parameters
@@ -25,8 +30,6 @@ pub async fn run_blueprint(
     image_data: &[u8], // note: may be empty
     send_chunk: &js_sys::Function<fn(js_sys::Uint8Array) -> js_sys::Promise>,
 ) -> Result<JsValue, JsValue> {
-    console_error_panic_hook::set_once();
-
     let mut args: models::BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
     let mut frame_data: Option<image_processing::FrameData> = None;
 

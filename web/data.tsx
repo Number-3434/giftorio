@@ -12,67 +12,67 @@ export const SHOW_ADVANCED_KEY = "giftorio-form-data-show-advanced";
 export const CURR_SIGNAL_PRESET_KEY = "giftorio-curr-signal-preset-key";
 
 export interface SignalData {
-	signals: { type: string; name: string }[];
-	qualities: string[];
+  signals: { type: string; name: string }[];
+  qualities: string[];
 }
 export interface SignalPreset extends SignalData {
-	description: string;
+  description: string;
 }
 const SIGNAL_DATA_SCHEMA = {
-	type: "object",
-	properties: {
-		signals: {
-			type: "array",
-			items: {
-				type: "object",
-				properties: {
-					type: { type: "string" },
-					name: { type: "string" },
-				},
-				required: ["type", "name"],
-			},
-		},
-		qualities: {
-			type: "array",
-			items: { type: "string" },
-		},
-	},
-	required: ["signals", "qualities"],
-	additionalProperties: false,
+  type: "object",
+  properties: {
+    signals: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          type: { type: "string" },
+          name: { type: "string" },
+        },
+        required: ["type", "name"],
+      },
+    },
+    qualities: {
+      type: "array",
+      items: { type: "string" },
+    },
+  },
+  required: ["signals", "qualities"],
+  additionalProperties: false,
 } satisfies JSONSchemaType<SignalData>;
 const ajv = new Ajv();
 
 export function setInitialValues(values: object) {
-	localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
+  localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
 }
 export const INITIAL_VALUES: Omit<typeof _INITIAL_VALUES, "file"> & { file: File | null } = (() => {
-	const prev = localStorage.getItem(FORM_DATA_KEY);
+  const prev = localStorage.getItem(FORM_DATA_KEY);
 
-	if (prev) {
-		const cached = JSON.parse(prev);
-		let changed = false;
+  if (prev) {
+    const cached = JSON.parse(prev);
+    let changed = false;
 
-		for (const k of Object.keys(cached)) {
-			if (!(k in _INITIAL_VALUES)) {
-				delete cached[k];
-				changed = true;
-			}
-		}
-		for (const [k, v] of Object.entries(_INITIAL_VALUES)) {
-			if (!(k in cached)) {
-				cached[k] = v;
-				changed = true;
-			}
-		}
+    for (const k of Object.keys(cached)) {
+      if (!(k in _INITIAL_VALUES)) {
+        delete cached[k];
+        changed = true;
+      }
+    }
+    for (const [k, v] of Object.entries(_INITIAL_VALUES)) {
+      if (!(k in cached)) {
+        cached[k] = v;
+        changed = true;
+      }
+    }
 
-		if (changed) {
-			setInitialValues(cached);
-		}
-		return cached;
-	}
+    if (changed) {
+      setInitialValues(cached);
+    }
+    return cached;
+  }
 
-	setInitialValues(_INITIAL_VALUES);
-	return { ..._INITIAL_VALUES };
+  setInitialValues(_INITIAL_VALUES);
+  return { ..._INITIAL_VALUES };
 })();
 
 export const validateSignalData = ajv.compile(SIGNAL_DATA_SCHEMA);

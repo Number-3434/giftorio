@@ -141,19 +141,14 @@ impl<'a> BlueprintGenerator<'a> {
     }
 
     fn get_signal_data(args: &BlueprintArgs) -> Vec<Arc<Signal>> {
-        let blacklist_signals: Vec<Arc<Signal>> = [
-            args.timing_sigs.f.clone(),
-            args.timing_sigs.s.clone(),
-            Some(args.timing_sigs.t.clone()),
-        ]
-        .iter()
-        .filter(|x| x.is_some())
-        .map(|x| Arc::from(x.clone().unwrap()))
-        .collect();
-
+        let blacklist_signals = [
+            Arc::from(args.timing_sigs.f.clone()),
+            Arc::from(args.timing_sigs.s.clone()),
+            Arc::from(args.timing_sigs.t.clone()),
+        ];
         let mut signals = SIGNALS.with_borrow(|data| {
             data.iter()
-                .filter(|&v| blacklist_signals.contains(v))
+                .filter(|&v| !blacklist_signals.contains(v))
                 .cloned()
                 .collect::<Vec<_>>()
         });

@@ -50,6 +50,6 @@ pub fn load_signal_data(data_json: &[u8]) {
         }
     }
 
-    QUALITIES.with(|q| *q.borrow_mut() = data.qualities);
-    SIGNALS.with(|s| *s.borrow_mut() = signals);
+    QUALITIES.with_borrow_mut(|q| *q = data.qualities);
+    SIGNALS.with_borrow_mut(|s| *s = signals);
 }
