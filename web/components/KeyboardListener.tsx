@@ -10,28 +10,23 @@ export interface KeyboardListenerProps {
 
   /** A list of keys to listen for. If not provided, all keys will be listened for. */
   keys?: string[];
+
+  target?: HTMLElement | Document;
 }
 export function KeyboardListener(props: KeyboardListenerProps) {
   const { keys = null, alwaysListen = false } = props;
 
-  function handleKeyDown(e: KeyboardEvent) {
-    if (!alwaysListen && isTyping()) return;
-    if (!keys?.includes(e.key)) return;
+  function shouldFireFor(e: KeyboardEvent): boolean {
+    if (props.target && !props.target.contains(document.activeElement)) return false;
+    if (!alwaysListen && isTyping()) return false;
+    if (!keys?.includes(e.key)) return false;
 
-    props.onKeyDown?.(e);
+    return true;
   }
-  function handleKeyUp(e: KeyboardEvent) {
-    if (!alwaysListen && isTyping()) return;
-    if (!keys?.includes(e.key)) return;
 
-    props.onKeyUp?.(e);
-  }
-  function handleKeyPress(e: KeyboardEvent) {
-    if (!alwaysListen && isTyping()) return;
-    if (!keys?.includes(e.key)) return;
-
-    props.onKeyPress?.(e);
-  }
+  const handleKeyDown = (e: KeyboardEvent) => shouldFireFor(e) && props.onKeyDown?.(e);
+  const handleKeyUp = (e: KeyboardEvent) => shouldFireFor(e) && props.onKeyUp?.(e);
+  const handleKeyPress = (e: KeyboardEvent) => shouldFireFor(e) && props.onKeyPress?.(e);
 
   onMount(() => {
     document.addEventListener("keydown", handleKeyDown);

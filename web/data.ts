@@ -45,10 +45,7 @@ const ajv = new Ajv();
 export function setInitialValues(values: object) {
   localStorage.setItem(FORM_DATA_KEY, JSON.stringify(values));
 }
-export function getInitialValues(): Omit<typeof _INITIAL_VALUES, "file" | "substationQuality"> & {
-  file: File | null;
-  substationQuality: string | null;
-} {
+export function getInitialValues(): Omit<typeof _INITIAL_VALUES, "substationQuality"> & { substationQuality: string | null } {
   const prev = localStorage.getItem(FORM_DATA_KEY);
 
   if (prev) {

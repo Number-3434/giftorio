@@ -4,8 +4,8 @@ import COMB_POS_DATA from "./assets/data/combinator-positions.json";
 import Background, { BackgroundApi } from "./components/Background";
 import { FactorioSelect, SelectOption } from "./components/FactorioSelect";
 import { FactorioSlider } from "./components/FactorioSlider";
-import { KeyboardListener } from "./components/keyboardListener";
-import { SignalPresetSelect, TimingSignals } from "./components/signalPresetSelect";
+import { KeyboardListener } from "./components/KeyboardListener";
+import { SignalPresetSelect, TimingSignals } from "./components/SignalPresetSelect";
 import { Tooltip } from "./components/Tooltip";
 import { FORM_ELEMENTS, getInitialValues, LAST_FILE_KEY, setInitialValues, SHOW_ADVANCED_KEY, SignalPreset } from "./data";
 import { loadFileDB, saveFileDB } from "./db";
@@ -18,6 +18,7 @@ function App({ worker }: { worker: Worker }) {
 
   // State
   const [formData, setFormData] = createStore(getInitialValues());
+  const [currFile, setCurrFile] = createSignal<File | null>(null);
   const [animationInfo, setAnimationInfo] = createSignal<Partial<AnimationInfo>>();
   const [isGenerating, setIsGenerating] = createSignal(false);
   const [_toast, _setToast] = createSignal({ ...DEFAULT_TOAST });
@@ -58,7 +59,7 @@ function App({ worker }: { worker: Worker }) {
     setTimeout(() => _setToast((p) => (p.id === id ? { ...DEFAULT_TOAST, id } : p)), duration);
   }
 
-  function makeFormElement({ key, value }: { key: string; value: FormElementValue }) {
+  function FormElement({ key, value }: { key: string; value: FormElementValue }) {
     const { disabled = false, name, tooltip, splash, type } = value;
     const tooltipProps = { name, tooltip, splash };
 
@@ -142,6 +143,7 @@ function App({ worker }: { worker: Worker }) {
   worker.onmessage = async (event) => {
     if (event.data.progress) {
       const { percentage, status } = event.data.progress;
+      console.log(percentage, status);
       formRefs.progressBar.style.setProperty("--progress", `${percentage}%`);
       formRefs.progressStatus.textContent = `(${percentage.toFixed(0)}%)  ${status}`;
     } else if (event.data.blueprintMetadata) {
@@ -164,13 +166,13 @@ function App({ worker }: { worker: Worker }) {
 
   function setInputFile(file: File | null) {
     if (!file) {
-      setFormData("file", null);
+      setCurrFile(null);
       saveFileDB(null, LAST_FILE_KEY);
       refBackground.setImageURL(null);
       return;
     }
 
-    setFormData("file", file);
+    setCurrFile(file);
     refBackground.setImageURL(URL.createObjectURL(file));
 
     if (file.type === "image/gif" || file.type === "image/webp") {
@@ -215,7 +217,7 @@ function App({ worker }: { worker: Worker }) {
     formRefs.progressBar.style.setProperty("--progress", "0%");
     formRefs.progressStatus.textContent = "Starting...";
 
-    if (formData.mode === "full" && !formData.file) {
+    if (formData.mode === "full" && !currFile()) {
       showToast(3000, { message: "Please select a file", isError: true });
       setIsGenerating(false);
       formRefs.submitButton.disabled = false;
@@ -223,10 +225,10 @@ function App({ worker }: { worker: Worker }) {
     }
 
     try {
-      const data = formData.file
+      const data = currFile()
         ? imageData()
           ? new Uint8Array(imageData()!.data.buffer, imageData()!.data.byteOffset, imageData()!.data.byteLength)
-          : new Uint8Array(await formData.file.arrayBuffer())
+          : new Uint8Array(await currFile()!.arrayBuffer())
         : new Uint8Array();
       let signalCompression = null;
 
@@ -237,16 +239,15 @@ function App({ worker }: { worker: Worker }) {
       }
 
       function getMode() {
-        if (!formData.file || ["gif", "webp"].includes(formData.file?.type.substring(6))) {
-          return formData.mode;
-        }
-        return {
-          staticImage: {
-            useConstantCombinators: formData.staticImageMode === "constant",
-            useCombinators: formData.staticImageMode !== "lamps",
-            useTimer: formData.staticImageMode === "video",
-          },
-        };
+        return !currFile() || ["gif", "webp"].includes(currFile()?.type.substring(6) ?? "")
+          ? formData.mode
+          : {
+              staticImage: {
+                useConstantCombinators: formData.staticImageMode === "constant",
+                useCombinators: formData.staticImageMode !== "lamps",
+                useTimer: formData.staticImageMode === "video",
+              },
+            };
       }
 
       worker.postMessage({
@@ -260,7 +261,7 @@ function App({ worker }: { worker: Worker }) {
             flippedAxes: `${formData.flippedAxes}`,
             grayscaleBits: +formData.grayscaleBits,
             imageMetadata: {
-              imageType: formData.file?.type.substring(6 /* image/ */),
+              imageType: currFile()?.type.substring(6 /* image/ */),
               imageSize: imageData() && [imageData()!.width, imageData()!.height],
             },
             imageFilters: [],
@@ -268,7 +269,7 @@ function App({ worker }: { worker: Worker }) {
             maxGroupSize: +formData.maxGroupSize! || null,
             maxSize: +formData.maxSize,
             mode: getMode(),
-            name: formData.file?.name,
+            name: currFile()?.name,
             outputFormat: `${formData.outputFormat}`,
             resamplingFilter: `${formData.resamplingFilter}`,
             rotation: +formData.rotation,
@@ -370,7 +371,7 @@ function App({ worker }: { worker: Worker }) {
     }
   });
 
-  function renderAnimationInfo() {
+  function CurrentAnimationInfo() {
     const info = animationInfo();
     if (!info) return null;
 
@@ -387,7 +388,7 @@ function App({ worker }: { worker: Worker }) {
           )}
         </div>
         <div class="flex items-center justify-between">
-          <div>{formData.file && <span>{formatFileSize(formData.file!.size)}</span>}</div>
+          <div>{currFile() && <span>{formatFileSize(currFile()!.size)}</span>}</div>
           {info.frames && info.duration && (
             <div>
               Frames: <span class="font-semibold">{info.frames}</span> (~
@@ -398,13 +399,14 @@ function App({ worker }: { worker: Worker }) {
       </div>
     );
   }
-  function renderFormElements() {
-    const isStaticImage = formData.file && !["image/gif", "image/webp"].includes(formData.file.type);
-    return Object.entries(FORM_ELEMENTS).map(([k, v]) => {
-      if (["mode", "customWidth", "customHeight"].includes(k)) return null;
-      else if (k === "staticImageMode" && !isStaticImage) return null;
-      else if (k === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") return null;
-      else if (formData.mode === "full" && (k === "customWidth" || k === "customHeight")) return null;
+  function CurrentFormElements() {
+    const isStaticImage = currFile() && !["image/gif", "image/webp"].includes(currFile()!.type);
+
+    return Object.entries(FORM_ELEMENTS).map(([key, value]) => {
+      if (["mode", "customWidth", "customHeight"].includes(key)) return null;
+      else if (key === "staticImageMode" && !isStaticImage) return null;
+      else if (key === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") return null;
+      else if (formData.mode === "full" && (key === "customWidth" || key === "customHeight")) return null;
       else if (formData.mode !== "full") {
         const allowed = [
           "connectionDirection",
@@ -418,8 +420,8 @@ function App({ worker }: { worker: Worker }) {
           "useDLC",
           "wireColor",
         ];
-        if (!allowed.includes(k)) {
-          v = { ...v, disabled: true } as any;
+        if (!allowed.includes(key)) {
+          value = { ...value, disabled: true } as any;
         }
       } else if (isStaticImage) {
         const { staticImageMode: mode } = formData;
@@ -439,11 +441,14 @@ function App({ worker }: { worker: Worker }) {
           mode === "lamps" && "wireColor",
         ].map((k) => (k === !!k || !k ? null : k)); // Remove booleans / falsey values
 
-        if (disallowedKeys.includes(k)) return null;
-        else if (disabledKeys.includes(k)) v = { ...v, disabled: true } as any;
+        if (disallowedKeys.includes(key)) {
+          return null;
+        } else if (disabledKeys.includes(key)) {
+          value = { ...value, disabled: true } as any;
+        }
       }
 
-      return makeFormElement({ key: k, value: v });
+      return <FormElement key={key} value={value} />;
     });
   }
 
@@ -466,7 +471,7 @@ function App({ worker }: { worker: Worker }) {
         >
           {_toast().message}
         </div>
-        <div style={{ height: "20vh" }} />
+        <hr class="h-[20vh]" />
         <div ref={form!} class="panel-container flex">
           <div classList={{ hidden: isGenerating() }} class="panel form flex-shrink-0">
             <div class="flex items-center justify-between">
@@ -514,7 +519,7 @@ function App({ worker }: { worker: Worker }) {
                   />
                 </div>
               </div>
-              {renderAnimationInfo()}
+              <CurrentAnimationInfo />
 
               {/* Max Size Input */}
               <div class="mt-5 flex items-center justify-between factorio-form-element" aria-disabled={formData.mode !== "full"}>
@@ -539,11 +544,11 @@ function App({ worker }: { worker: Worker }) {
                 />
               </div>
 
-              {makeFormElement({ key: "mode", value: FORM_ELEMENTS.mode })}
+              <FormElement key="mode" value={FORM_ELEMENTS.mode} />
               {(formData.mode === "lamps" || formData.mode === "lampGrid") && (
                 <>
-                  {makeFormElement({ key: "customHeight", value: FORM_ELEMENTS.customHeight })}
-                  {makeFormElement({ key: "customWidth", value: FORM_ELEMENTS.customWidth })}
+                  <FormElement key="customHeight" value={FORM_ELEMENTS.customHeight} />
+                  <FormElement key="customWidth" value={FORM_ELEMENTS.customWidth} />
                 </>
               )}
               <SignalPresetSelect showToast={showToast} setSignalPreset={setCurrSignalPreset} setTimingSignals={setCurrTimingSignals} />
@@ -592,7 +597,7 @@ function App({ worker }: { worker: Worker }) {
                   onChange={(v) => setFormData("substationQuality", v)}
                 />
               </Show>
-              {renderFormElements()}
+              <CurrentFormElements />
             </div>
           </div>
 

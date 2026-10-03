@@ -20,6 +20,7 @@ pub struct FrameData<'a> {
     frames: image::Frames<'a>,
     in_dim: UVec2,
     in_n_frames: u32,
+    is_first: bool,
     samp_i: u32,
     out_dim_raw: DVec2,
     out_n_frames: u32,
@@ -83,6 +84,7 @@ impl<'a> FrameData<'a> {
             frames: frame_data.frames,
             in_dim,
             in_n_frames: n_frames,
+            is_first: true,
             samp_i: 0,
             out_dim_raw: scale_factor * DVec2::from(in_dim),
             prev_frame: None,
@@ -138,7 +140,9 @@ impl Iterator for FrameData<'_> {
                 }
             }
 
-            if self.frame_i > 0 {
+            if self.is_first {
+                self.is_first = false;
+            } else {
                 set_progress(
                     0.10,
                     0.90,

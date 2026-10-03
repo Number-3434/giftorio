@@ -49,19 +49,16 @@ function Background(props: { ref?: (api: BackgroundApi) => void; interval?: numb
   });
 
   return (
-    <div id="media-container" class="fixed top-0 left-0 w-full h-full" style="z-index: -1;">
+    <div id="media-container" class="fixed top-0 left-0 w-full h-full z-[-1]">
       <div class="absolute inset-0 bg-black"></div>
       <img
         ref={refImage}
         src={customImageURL() ?? undefined}
         alt="test"
         width="20"
-        class="absolute top-0 left-0 w-full h-full object-contain transition-opacity duration-1000 ease-in-out opacity-30"
+        class="absolute top-0 left-0 w-full h-full object-contain transition-opacity duration-1000 ease-in-out opacity-30 z-0"
         classList={{ hidden: !customImageURL() }}
-        style={{
-          "z-index": "0",
-          "image-rendering": "pixelated",
-        }}
+        style={{ "image-rendering": "pixelated" }}
       />
       {customImageURL()
         ? null
@@ -69,13 +66,12 @@ function Background(props: { ref?: (api: BackgroundApi) => void; interval?: numb
           ? MEDIA.map((media, i) => (
               <video
                 id={`bg-video-${i + 1}`}
-                class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out pointer-events-none opacity-0"
+                class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out pointer-events-none opacity-0 z-0"
                 classList={{ "opacity-100": i === currMediaIdx() }}
                 autoplay
                 muted
                 loop
                 playsinline
-                style="z-index: 0;"
               >
                 <source src={media.mp4} type="video/mp4" />
                 <source src={media.webm} type="video/webm" />
@@ -86,9 +82,8 @@ function Background(props: { ref?: (api: BackgroundApi) => void; interval?: numb
               <img
                 src={media.fallback}
                 alt=""
-                class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out opacity-0"
+                class="absolute top-0 left-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out opacity-0 z-0"
                 classList={{ "opacity-100": i === currMediaIdx() }}
-                style="z-index: 0;"
               />
             ))}
     </div>
