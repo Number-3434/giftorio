@@ -437,7 +437,11 @@ function SignalSelectors(props: SignalSelectorProps) {
             <div class="flex items-center factorio-form-element justify-between w-full">
               <label class="text-white-500" for="maxsize">
                 Signal {key.toUpperCase()}
-                <Tooltip name={`Signal ${key.toUpperCase()}`} splash="Reserved timing signal, will not be used for data storage." />
+                <Tooltip
+                  name={`Signal ${key.toUpperCase()}`}
+                  tooltip="Used to internally time the blueprint. All timing signals must be unique."
+                  splash="Reserved for timing wires; data combinators will not use these signals."
+                />
               </label>
               <SignalSelector
                 otherValues={(() => {

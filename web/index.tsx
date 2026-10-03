@@ -17,9 +17,10 @@ worker.addEventListener("message", async (event) => {
   } else if (event.data.chunk) {
     const { id, data } = event.data.chunk;
     try {
-      writer!.write(data);
+      await writer!.write(data);
       worker.postMessage({ type: "chunkWritten", id });
     } catch (e) {
+      console.log(e);
       worker.postMessage({ type: "chunkWritten", id, error: e?.toString() ?? String(e) });
     }
   } else if (event.data.type === "done") {
@@ -27,11 +28,11 @@ worker.addEventListener("message", async (event) => {
     writer = null;
   }
 });
-
-// abort so it dose not look stuck
-window.onunload = () => {
-  writer?.abort();
-};
+console.log("PAGE IS LOADING");
+// window.addEventListener("beforeunload", () => {
+//   console.log("PAGE IS UNLOADING");
+//   writer?.abort();
+// });
 
 const root = document.getElementById("root");
 render(() => <App worker={worker} />, root!);

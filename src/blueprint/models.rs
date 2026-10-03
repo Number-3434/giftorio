@@ -88,7 +88,7 @@ impl Signal {
     }
 }
 
-pub type Wire = [u32; 4];
+pub type Wire = [u32; 4]; // TODO: could use an unpacked (u32, u8, u32, u8)-type data structure for better memory
 
 mod dvec2_xy {
     use glam::DVec2;

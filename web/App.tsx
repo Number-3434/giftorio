@@ -1,4 +1,4 @@
-import { createEffect, createSignal, onMount, Show } from "solid-js";
+import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import COMB_POS_DATA from "./assets/data/combinator-positions.json";
 import Background, { BackgroundApi } from "./components/Background";
@@ -11,7 +11,7 @@ import { FORM_ELEMENTS, getInitialValues, LAST_FILE_KEY, setInitialValues, SHOW_
 import { loadFileDB, saveFileDB } from "./db";
 import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
 import { FormElementValue } from "./types";
-import { formatDuration, formatFileSize } from "./utils";
+import { formatDuration, formatFileSize, useErrM } from "./utils";
 
 function App({ worker }: { worker: Worker }) {
   const DEFAULT_TOAST = { id: 0, show: false, message: "", isError: false };
@@ -28,10 +28,11 @@ function App({ worker }: { worker: Worker }) {
   const [showAdvanced, setShowAdvanced] = createSignal(false);
   const [isMobile, setIsMobile] = createSignal(false);
   const [imageData, setImageData] = createSignal<ImageData>();
+  const [isStaticImage, setIsStaticImage] = createSignal(false);
   const [currSignalPreset, setCurrSignalPreset] = createSignal<SignalPreset | null>(null);
   const [currTimingSignals, setCurrTimingSignals] = createSignal<TimingSignals | null>(null);
 
-  let form: HTMLDivElement = null!;
+  let refFormContainer: HTMLDivElement = null!;
   let refBackground: BackgroundApi = null!;
 
   // Refs
@@ -140,14 +141,13 @@ function App({ worker }: { worker: Worker }) {
   }
 
   // Worker message handler
-  worker.onmessage = async (event) => {
-    if (event.data.progress) {
-      const { percentage, status } = event.data.progress;
-      console.log(percentage, status);
+  worker.onmessage = async (evt) => {
+    if (evt.data.progress) {
+      const { percentage, status } = evt.data.progress;
       formRefs.progressBar.style.setProperty("--progress", `${percentage}%`);
       formRefs.progressStatus.textContent = `(${percentage.toFixed(0)}%)  ${status}`;
-    } else if (event.data.blueprintMetadata) {
-      const { blueprintMetadata } = event.data;
+    } else if (evt.data.blueprintMetadata) {
+      const { blueprintMetadata } = evt.data;
 
       showToast(3000, {
         message: "Blueprint downloaded! If you're having trouble importing the blueprint into Factorio, try using the JSON format.",
@@ -157,14 +157,14 @@ function App({ worker }: { worker: Worker }) {
       formRefs.blueprintResult.classList.remove("hidden");
       formRefs.responseText.innerHTML = "Blueprint downloaded!";
       formRefs.submitButton.disabled = false;
-    } else if (event.data.error) {
-      showToast(3000, { message: event.data.error, isError: true });
+    } else if (evt.data.error) {
+      showToast(3000, { message: evt.data.error, isError: true });
       setIsGenerating(false);
       formRefs.submitButton.disabled = false;
     }
   };
 
-  function setInputFile(file: File | null) {
+  async function setInputFile(file: File | null) {
     if (!file) {
       setCurrFile(null);
       saveFileDB(null, LAST_FILE_KEY);
@@ -172,29 +172,36 @@ function App({ worker }: { worker: Worker }) {
       return;
     }
 
-    setCurrFile(file);
-    refBackground.setImageURL(URL.createObjectURL(file));
+    const _isStaticImage = !["image/gif", "image/webp"].includes(file.type);
+    let data: ImageData | undefined = undefined;
 
-    if (file.type === "image/gif" || file.type === "image/webp") {
-      // Use our own custom info parser on the raw data
-      file.arrayBuffer().then((buffer) => setAnimationInfo(getAnimationInfo(new Uint8Array(buffer))));
-      setImageData(undefined);
-    } else {
-      getRawImageData(file).then((v) => {
-        setAnimationInfo(new AnimationInfo(0, 0, v.width, v.height));
-        setImageData(v);
-      });
+    try {
+      if (!_isStaticImage) {
+        // Use our own custom info parser on the raw data
+        setAnimationInfo(getAnimationInfo(new Uint8Array(await file.arrayBuffer())));
+      } else {
+        // Parse the image directly in JS for more compatibility (we decode using the browser and
+        // send the image buffer directly to Rust instead of relying on support from Rust crates).
+        data = await getRawImageData(file);
+        setAnimationInfo(new AnimationInfo(0, 0, data.width, data.height));
+      }
+    } catch (e: any) {
+      throw e;
     }
 
+    setIsStaticImage(_isStaticImage);
+    setImageData(data);
+    setCurrFile(file);
     saveFileDB(file, LAST_FILE_KEY);
+    refBackground.setImageURL(URL.createObjectURL(file));
   }
 
-  async function handleSubmit(event: SubmitEvent) {
-    event.preventDefault();
+  async function handleSubmit(evt: SubmitEvent) {
+    evt.preventDefault();
 
     // Validate ALL inputs (instead of only showing errors for the first invalid input)
     let isValid = true;
-    for (const e of [event.target, ...Object.values(formRefs)]) {
+    for (const e of [evt.target, ...Object.values(formRefs)]) {
       if ((e instanceof HTMLFormElement || e instanceof HTMLInputElement) && e.checkValidity() === false) {
         e.reportValidity();
         isValid = false;
@@ -239,7 +246,7 @@ function App({ worker }: { worker: Worker }) {
       }
 
       function getMode() {
-        return !currFile() || ["gif", "webp"].includes(currFile()?.type.substring(6) ?? "")
+        return !currFile() || !isStaticImage()
           ? formData.mode
           : {
               staticImage: {
@@ -294,8 +301,8 @@ function App({ worker }: { worker: Worker }) {
 
   function handleMouseDown(e: MouseEvent) {
     e.preventDefault();
-    setXOffset(e.clientX - form.getBoundingClientRect().left);
-    setYOffset(e.clientY - form.getBoundingClientRect().top);
+    setXOffset(e.clientX - refFormContainer.getBoundingClientRect().left);
+    setYOffset(e.clientY - refFormContainer.getBoundingClientRect().top);
     (e.target! as HTMLElement).style.cursor = "grabbing";
     setIsDragging(true);
 
@@ -314,21 +321,22 @@ function App({ worker }: { worker: Worker }) {
 
   document.addEventListener("mousemove", (e) => {
     if (isDragging()) {
-      form.style.position = "absolute";
-      form.style.left = `${e.clientX - xOffset()}px`;
-      form.style.top = `${e.clientY - yOffset()}px`;
+      refFormContainer.style.position = "absolute";
+      refFormContainer.style.left = `${e.clientX - xOffset()}px`;
+      refFormContainer.style.top = `${e.clientY - yOffset()}px`;
     }
   });
 
   onMount(() => {
     // Check if device is mobile
-    setIsMobile(window.innerWidth <= 768);
-    window.addEventListener("resize", () => setIsMobile(window.innerWidth <= 768));
+    const IS_MOBILE_WIDTH_THRESHOLD = 768;
+    setIsMobile(window.innerWidth <= IS_MOBILE_WIDTH_THRESHOLD);
+    window.addEventListener("resize", () => setIsMobile(window.innerWidth <= IS_MOBILE_WIDTH_THRESHOLD));
 
-    const bounds = form.getBoundingClientRect();
-    form.style.position = "absolute";
-    form.style.left = `${bounds.left}px`;
-    form.style.top = `${bounds.top}px`;
+    const bounds = refFormContainer.getBoundingClientRect();
+    refFormContainer.style.position = "absolute";
+    refFormContainer.style.left = `${bounds.left}px`;
+    refFormContainer.style.top = `${bounds.top}px`;
   });
 
   onMount(() => {
@@ -364,92 +372,96 @@ function App({ worker }: { worker: Worker }) {
     setInitialValues(formData);
   });
   createEffect(() => localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced().toString()));
-
   createEffect(() => {
     if (currSignalPreset()) {
       worker.postMessage({ signalPreset: currSignalPreset()! });
     }
   });
 
-  function CurrentAnimationInfo() {
-    const info = animationInfo();
-    if (!info) return null;
-
+  function AnimationInfoDisplay(props: Partial<AnimationInfo> & { file: File | null }) {
     return (
       <div class="text-gray-300">
         <div class="flex items-center justify-between">
-          <div>
-            <span class="font-semibold">{info.width}</span> x <span class="font-semibold">{info.height}</span> px
-          </div>
-          {info.duration && (
+          <Show when={props.width && props.height}>
             <div>
-              Length: <span class="font-semibold">{formatDuration(info.duration)}</span>
+              <span class="font-semibold">{props.width}</span> x <span class="font-semibold">{props.height}</span> px
             </div>
-          )}
+          </Show>
+          <Show when={props.duration}>
+            <div>
+              Length: <span class="font-semibold">{formatDuration(props.duration!)}</span>
+            </div>
+          </Show>
         </div>
         <div class="flex items-center justify-between">
-          <div>{currFile() && <span>{formatFileSize(currFile()!.size)}</span>}</div>
-          {info.frames && info.duration && (
+          <Show when={props.file}>
             <div>
-              Frames: <span class="font-semibold">{info.frames}</span> (~
-              {Math.round((10 * (info.frames * 1000)) / info.duration) / 10} FPS)
+              <span>{formatFileSize(props.file!.size)}</span>
             </div>
-          )}
+          </Show>
+          <Show when={props.frames && props.duration}>
+            <div>
+              Frames: <span class="font-semibold">{props.frames}</span> (~
+              {Math.round((10 * (props.frames! * 1000)) / props.duration!) / 10} FPS)
+            </div>
+          </Show>
         </div>
       </div>
     );
   }
-  function CurrentFormElements() {
-    const isStaticImage = currFile() && !["image/gif", "image/webp"].includes(currFile()!.type);
+  function FormElementsDisplay(props: { isStaticImage: boolean }) {
+    const visibleFormElements = createMemo(() =>
+      Object.entries(FORM_ELEMENTS).map(([key, value]) => {
+        if (["mode", "customWidth", "customHeight"].includes(key)) return null;
+        else if (key === "staticImageMode" && !props.isStaticImage) return null;
+        else if (key === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") return null;
+        else if (formData.mode === "full" && (key === "customWidth" || key === "customHeight")) return null;
+        else if (formData.mode !== "full") {
+          const allowed = [
+            "connectionDirection",
+            "flippedAxes",
+            "grayscaleBits",
+            "imageRotation",
+            "maxGroupSize",
+            "outputFormat",
+            "signalSorting",
+            "substationQuality",
+            "useDLC",
+            "wireColor",
+          ];
+          if (!allowed.includes(key)) {
+            value = { ...value, disabled: true } as any;
+          }
+        } else if (props.isStaticImage) {
+          const { staticImageMode: mode } = formData;
+          const disallowedKeys = [
+            //
+            "includeLastFrame",
+            "mode",
+            "signalCompressionType",
+            "temporalCompressionWindow",
+            "targetFps",
+          ]; // Remove booleans / falsey values
+          const disabledKeys = [
+            mode === "lamps" && "connectionDirection",
+            mode === "lamps" && "grayscaleBits",
+            mode === "lamps" && "maxGroupSize",
+            mode === "lamps" && "signalSorting",
+            mode === "lamps" && "wireColor",
+          ].map((k) => (k === !!k || !k ? null : k)); // Remove booleans / falsey values
 
-    return Object.entries(FORM_ELEMENTS).map(([key, value]) => {
-      if (["mode", "customWidth", "customHeight"].includes(key)) return null;
-      else if (key === "staticImageMode" && !isStaticImage) return null;
-      else if (key === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") return null;
-      else if (formData.mode === "full" && (key === "customWidth" || key === "customHeight")) return null;
-      else if (formData.mode !== "full") {
-        const allowed = [
-          "connectionDirection",
-          "flippedAxes",
-          "grayscaleBits",
-          "imageRotation",
-          "maxGroupSize",
-          "outputFormat",
-          "signalSorting",
-          "substationQuality",
-          "useDLC",
-          "wireColor",
-        ];
-        if (!allowed.includes(key)) {
-          value = { ...value, disabled: true } as any;
+          if (disallowedKeys.includes(key)) {
+            return null;
+          } else if (disabledKeys.includes(key)) {
+            value = { ...value, disabled: true } as any;
+          }
         }
-      } else if (isStaticImage) {
-        const { staticImageMode: mode } = formData;
-        const disallowedKeys = [
-          //
-          "includeLastFrame",
-          "mode",
-          "signalCompressionType",
-          "temporalCompressionWindow",
-          "targetFps",
-        ]; // Remove booleans / falsey values
-        const disabledKeys = [
-          mode === "lamps" && "connectionDirection",
-          mode === "lamps" && "grayscaleBits",
-          mode === "lamps" && "maxGroupSize",
-          mode === "lamps" && "signalSorting",
-          mode === "lamps" && "wireColor",
-        ].map((k) => (k === !!k || !k ? null : k)); // Remove booleans / falsey values
 
-        if (disallowedKeys.includes(key)) {
-          return null;
-        } else if (disabledKeys.includes(key)) {
-          value = { ...value, disabled: true } as any;
-        }
-      }
+        return [key, value] as const;
+      }),
+    );
 
-      return <FormElement key={key} value={value} />;
-    });
+    return <For each={visibleFormElements().filter((v) => !!v)}>{([key, value]) => <FormElement {...{ key, value }} />}</For>;
   }
 
   return (
@@ -472,7 +484,7 @@ function App({ worker }: { worker: Worker }) {
           {_toast().message}
         </div>
         <hr class="h-[20vh]" />
-        <div ref={form!} class="panel-container flex">
+        <div ref={refFormContainer!} class="panel-container flex">
           <div classList={{ hidden: isGenerating() }} class="panel form flex-shrink-0">
             <div class="flex items-center justify-between">
               <h2 class="text-tan-500">GIF/WebP to Blueprint</h2>
@@ -504,7 +516,13 @@ function App({ worker }: { worker: Worker }) {
                 </svg>
               </div>
             </div>
-            <form onSubmit={handleSubmit} class="panel-inset-light bg-gray-500 p-6 rounded shadow-md w-full min-w-100 max-w-md">
+            <form
+              onSubmit={(e) => {
+                // e.preventDefault();
+                handleSubmit(e);
+              }}
+              class="panel-inset-light bg-gray-500 p-6 rounded shadow-md w-full min-w-100 max-w-md"
+            >
               <div class="mb-4 flex items-center justify-between">
                 {/* File Input */}
                 <div class="factorio-form-element">
@@ -514,12 +532,23 @@ function App({ worker }: { worker: Worker }) {
                     type="file"
                     id="gifInput"
                     required={formData.mode === "full"}
-                    onChange={(e) => setInputFile(e.target.files![0])}
+                    onChange={(el) => {
+                      const errM = useErrM(el.currentTarget);
+                      setInputFile(el.target.files![0])
+                        .catch((e) => {
+                          errM.report(e.toString());
+                          el.target.value = "";
+                          showToast(3000, { message: e.toString(), isError: true });
+                        })
+                        .finally(() => errM.test());
+                    }}
                     accept="image/*"
                   />
                 </div>
               </div>
-              <CurrentAnimationInfo />
+              <Show when={animationInfo()} fallback={"Loading..."}>
+                <AnimationInfoDisplay {...animationInfo()!} file={currFile()} />
+              </Show>
 
               {/* Max Size Input */}
               <div class="mt-5 flex items-center justify-between factorio-form-element" aria-disabled={formData.mode !== "full"}>
@@ -597,7 +626,7 @@ function App({ worker }: { worker: Worker }) {
                   onChange={(v) => setFormData("substationQuality", v)}
                 />
               </Show>
-              <CurrentFormElements />
+              <FormElementsDisplay isStaticImage={isStaticImage()} />
             </div>
           </div>
 

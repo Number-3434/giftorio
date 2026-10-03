@@ -7,7 +7,12 @@ use glam::{dvec2, uvec2, UVec2};
 use std::{io, sync::Arc};
 use wasm_bindgen::JsValue;
 
+/// How many entities to encode in one go. Encoding more entities at once is faster, but uses more memory.
 const ENCODE_CHUNK_SIZE: usize = 100;
+
+/// Number of wires to encode per chunk. Since wires generate much less data,
+/// we can batch more wires together for better speed.
+const WIRE_ENCODE_CHUNK_SIZE: usize = 5000;
 
 pub struct BlueprintGenerator<'a> {
     args: &'a BlueprintArgs,
@@ -532,7 +537,6 @@ impl<'a> BlueprintGenerator<'a> {
                         &format!("Generating data (group {} / {n_groups})", group_i + 1),
                     );
                 }
-
                 let state = &mut info.patch_states[group_i as usize]; // Individual state for each group of lamps
                 let frame_sigs: Vec<i32>;
                 let data_combs = &group_data_combs[group_i as usize];
@@ -689,8 +693,8 @@ impl<'a> BlueprintGenerator<'a> {
         if !self.args.prefer_green_wires {
             invert_wires(all_ents, all_wires);
         }
-        for (i, wires) in all_wires.chunks(ENCODE_CHUNK_SIZE).enumerate() {
-            let display_i = (i + 1) * ENCODE_CHUNK_SIZE;
+        for (i, wires) in all_wires.chunks(WIRE_ENCODE_CHUNK_SIZE).enumerate() {
+            let display_i = (i + 1) * WIRE_ENCODE_CHUNK_SIZE;
             set_progress(
                 0.90,
                 1.00,
