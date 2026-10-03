@@ -8,6 +8,16 @@ async function main() {
     set_progress_callback((percentage: number, status: string) => postMessage({ progress: { percentage, status } }));
   })();
 
+  let writerReadyResolve: (() => void) | null = null;
+  let writerReady: Promise<void> = Promise.resolve();
+  function waitForWriterReady() {
+    writerReady = new Promise<void>((resolve) => {
+      writerReadyResolve = resolve;
+    });
+
+    return writerReady;
+  }
+
   const pendingWrites = new Map();
   let nextWriteId = 0;
   let setSignalDataPromise: Promise<void> = Promise.resolve();
@@ -28,11 +38,15 @@ async function main() {
       await setSignalDataPromise;
 
       try {
+        waitForWriterReady();
+
         if (outputFormat === "blueprint") {
           postMessage({ type: "start", filename: "blueprint.bp" });
         } else {
           postMessage({ type: "start", filename: "blueprint.json" });
         }
+
+        await writerReady;
 
         const blueprintMetadata = await run_blueprint(
           args,
@@ -52,6 +66,9 @@ async function main() {
     } else if (event.data.signalPreset) {
       const preset: SignalPreset = event.data.signalPreset;
       setSignalDataPromise = set_signal_data(new TextEncoder().encode(JSON.stringify(preset)));
+    } else if (event.data.type === "writerReady") {
+      writerReadyResolve?.();
+      writerReadyResolve = null;
     }
   });
 }
