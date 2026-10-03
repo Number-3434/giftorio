@@ -13,7 +13,7 @@ import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } fro
 import { FormElementValue } from "./types";
 import { formatDuration, formatFileSize, useErrM } from "./utils";
 
-function App({ worker }: { worker: Worker }) {
+function App({ openDownloadWindow, worker }: { openDownloadWindow(): void; worker: Worker }) {
   const DEFAULT_TOAST = { id: 0, show: false, message: "", isError: false };
 
   // State
@@ -657,6 +657,16 @@ function App({ worker }: { worker: Worker }) {
               <div class="flex items-center justify-between">
                 <button onClick={() => setIsGenerating(false)} id="backButton" class="button">
                   Back
+                </button>
+                <button
+                  onClick={() => {
+                    openDownloadWindow();
+                    setIsGenerating(false);
+                  }}
+                  id="backButton"
+                  class="button"
+                >
+                  Force Download
                 </button>
               </div>
               <div class="mt-6 text-center text-white-500">

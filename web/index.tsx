@@ -1,3 +1,8 @@
+const AUTOCLOSE_WINDOW_KEY = "giftorio_autoclose_window";
+if (new URLSearchParams(location.search).get(AUTOCLOSE_WINDOW_KEY) === "true") {
+  window.close();
+}
+
 import { render } from "solid-js/web";
 import streamSaver from "streamsaver";
 import App from "./App";
@@ -35,7 +40,6 @@ worker.addEventListener("message", async (event) => {
     }
   } else if (event.data.type === "done") {
     try {
-      window.open(downloadUrl!, "_blank");
       await writer!.close();
     } finally {
       writer = null;
@@ -47,5 +51,11 @@ window.addEventListener("beforeunload", () => {
   writer?.abort();
 });
 
+const openDownloadWindow = () => {
+  const url = new URL(downloadUrl!);
+  url.searchParams.set(AUTOCLOSE_WINDOW_KEY, "true");
+  return downloadUrl && window.open(downloadUrl, "_blank", "width=100,height=100");
+};
+
 const root = document.getElementById("root");
-render(() => <App worker={worker} />, root!);
+render(() => <App worker={worker} openDownloadWindow={openDownloadWindow} />, root!);
