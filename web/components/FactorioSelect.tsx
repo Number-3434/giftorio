@@ -1,6 +1,6 @@
+import Tooltip from "@/components/Tooltip";
+import { FormElementValue } from "@/types";
 import { createEffect, createSignal, For, JSX } from "solid-js";
-import { FormElementValue } from "../types";
-import { Tooltip } from "./Tooltip";
 
 export type SelectOption = { name: string; tooltip?: string };
 export interface FactorioSelectProps extends Omit<JSX.SelectHTMLAttributes<HTMLSelectElement>, "onChange"> {
@@ -14,8 +14,7 @@ export interface FactorioSelectProps extends Omit<JSX.SelectHTMLAttributes<HTMLS
   options: [string, string | SelectOption][];
   splash?: string;
 }
-
-export function FactorioSelect(props: FactorioSelectProps) {
+export default function FactorioSelect(props: FactorioSelectProps) {
   let selectProps: JSX.SelectHTMLAttributes<HTMLSelectElement>;
   {
     const { formArgs, key, name, onChange, options, tooltip, splash, ref, ..._selectProps } = props;

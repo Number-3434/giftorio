@@ -300,7 +300,11 @@ textarea {
 }
 
 .button {
-  @apply bg-gray-100 font-bold min-w-[128px] text-xl border-none whitespace-nowrap cursor-pointer select-none h-9 text-center;
+  @apply bg-gray-100 font-bold  text-xl border-none whitespace-nowrap cursor-pointer select-none text-center;
+
+  &:not(.icon-button) {
+    @apply min-w-[128px] h-9;
+  }
 
   position: relative;
   padding-bottom: 2px;
@@ -425,10 +429,6 @@ select {
     opacity: 0.4;
     pointer-events: none;
   }
-}
-
-dialog {
-  @apply backdrop:bg-black/60;
 }
 
 select {
@@ -765,7 +765,7 @@ input[type="checkbox"]:checked ~ .checkbox {
 }
 
 .toast {
-  @apply fixed text-white max-w-md text-center shadow-lg z-5000 font-bold pointer-events-none;
+  @apply fixed text-white max-w-md text-center shadow-lg z-5000 font-bold pointer-events-none bg-transparent;
 
   animation: move-up var(--duration) linear forwards;
   transform: translateX(-50%);

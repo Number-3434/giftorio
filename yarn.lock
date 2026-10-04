@@ -323,6 +323,13 @@
   resolved "https://registry.npmjs.org/@types/gensync/-/gensync-1.0.4.tgz"
   integrity sha512-C3YYeRQWp2fmq9OryX+FoDy8nXS6scQ7dPptD8LnFDAUNcKWJjXQKDNJD3HVm+kOUsXhTOkpi69vI4EuAr95bA==
 
+"@types/node@^18.0.0 || ^20.0.0 || >=22.0.0", "@types/node@^26.6.4":
+  version "26.6.4"
+  resolved "https://registry.npmjs.org/@types/node/-/node-26.6.4.tgz"
+  integrity sha512-ldVPDCzj7fsaGZrLB0NuHuTvJcsNasysBAqMolr/cgxrLd1xbqxIr3XJiPnHHJUCxj5sNF1vnRj9aWnrVh5Jcg==
+  dependencies:
+    undici-types "~8.9.0"
+
 "@types/streamsaver@^2.0.5":
   version "2.0.5"
   resolved "https://registry.npmjs.org/@types/streamsaver/-/streamsaver-2.0.5.tgz"
@@ -861,6 +868,11 @@ to-regex-range@^5.0.1:
   integrity sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==
   dependencies:
     is-number "^7.0.0"
+
+undici-types@~8.9.0:
+  version "8.9.0"
+  resolved "https://registry.npmjs.org/undici-types/-/undici-types-8.9.0.tgz"
+  integrity sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==
 
 universalify@^2.0.0:
   version "2.0.1"

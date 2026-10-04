@@ -13,7 +13,7 @@ export interface KeyboardListenerProps {
 
   target?: HTMLElement | Document;
 }
-export function KeyboardListener(props: KeyboardListenerProps) {
+export default function KeyboardListener(props: KeyboardListenerProps) {
   const { keys = null, alwaysListen = false } = props;
 
   function shouldFireFor(e: KeyboardEvent): boolean {

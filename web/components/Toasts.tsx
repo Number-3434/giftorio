@@ -1,31 +1,29 @@
-import { createSignal, For, JSX, onCleanup, onMount } from "solid-js";
-import { pxToRem } from "../utils";
+import { createSignal, For, onCleanup, onMount } from "solid-js";
 
-export type ToastData = {
-  duration?: number;
+export interface ToastArgs {
   isError?: boolean;
-  message: JSX.Element;
-};
+}
 export interface ToastsApi {
-  addToast(toast: ToastData): void;
+  showToast(msg: string, args?: ToastArgs): void;
 }
 export interface ToastsProps {
   ref(api: ToastsApi): void;
 }
-export function Toasts(props: ToastsProps) {
-  const [toasts, setToasts] = createSignal<Record<number, ToastData & { x: number; y: number }>>({});
+export default function Toasts(props: ToastsProps) {
+  const [toasts, setToasts] = createSignal<Record<number, ToastArgs & { msg: string } & { x: number; y: number }>>({});
+
   let nextToastId = 0;
   let mousePos = { x: 0, y: 0 };
 
-  function addToast(toast: ToastData) {
+  function showToast(msg: string, args?: ToastArgs) {
     const id = nextToastId++;
-    setToasts((prev) => ({ ...prev, [id]: { ...toast, ...mousePos } }));
+    setToasts((prev) => ({ ...prev, [id]: { msg, ...args, ...mousePos } }));
     setTimeout(() => {
       setToasts((prev) => {
         const { [id]: _, ...rest } = prev;
         return rest;
       });
-    }, toast.duration ?? 3000);
+    }, 3000);
   }
 
   function onMouseMove(e: MouseEvent) {
@@ -41,7 +39,7 @@ export function Toasts(props: ToastsProps) {
     });
   });
 
-  props.ref({ addToast } satisfies ToastsApi);
+  props.ref({ showToast });
 
   return (
     <For each={Object.values(toasts())}>
@@ -49,6 +47,8 @@ export function Toasts(props: ToastsProps) {
         let el!: HTMLDivElement;
 
         onMount(() => {
+          el.showPopover(); // Show above e.g. other dialogs
+
           const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
 
           const MARGIN = 1.5 * rem;
@@ -75,15 +75,8 @@ export function Toasts(props: ToastsProps) {
         });
 
         return (
-          <div
-            ref={el}
-            class="fixed toast select-none"
-            style={{
-              "--cursor-x": pxToRem(t.x),
-              "--cursor-y": pxToRem(t.y),
-            }}
-          >
-            {t.message}
+          <div ref={el} popover="manual" class="fixed toast select-none">
+            {t.msg}
           </div>
         );
       }}

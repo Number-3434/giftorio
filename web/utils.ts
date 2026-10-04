@@ -20,50 +20,46 @@ export function formatFileSize(bytes: number) {
 
 export function useErrM(el: HTMLElement) {
   let errMsg: string | null = null;
-  function set(msg: string | null) {
-    errMsg = msg;
-  }
-  function clear() {
-    set(null);
-  }
-  function get() {
-    return errMsg;
-  }
 
-  function test() {
-    function isInput(el: HTMLElement) {
-      return (
+  const obj = {
+    clear() {
+      errMsg = null;
+    },
+    get() {
+      return errMsg;
+    },
+    report(msg: string) {
+      errMsg = msg;
+      obj.test();
+    },
+    set(msg: string) {
+      errMsg = msg;
+    },
+    test() {
+      const isInput = (el: HTMLElement) =>
         el instanceof HTMLButtonElement ||
         el instanceof HTMLInputElement ||
         el instanceof HTMLObjectElement ||
         el instanceof HTMLSelectElement ||
-        el instanceof HTMLTextAreaElement
-      );
-    }
+        el instanceof HTMLTextAreaElement;
 
-    if (errMsg) {
-      if (isInput(el)) {
-        el.setCustomValidity(errMsg);
-        el.reportValidity();
-      }
-      el.setAttribute("aria-invalid", "true");
-      return false;
-    } else {
-      if (isInput(el)) {
+      if (errMsg) {
+        if (isInput(el)) {
+          el.setCustomValidity(errMsg);
+          el.reportValidity();
+        }
+        el.setAttribute("aria-invalid", "true");
+        return false;
+      } else if (isInput(el)) {
         el.setCustomValidity("");
         el.reportValidity();
       }
       el.setAttribute("aria-invalid", "false");
       return true;
-    }
-  }
+    },
+  };
 
-  function report(msg: string) {
-    set(msg);
-    test();
-  }
-
-  return { clear, get, report, set, test };
+  return obj;
 }
 
 export function binaryInsert<T>(arr: T[], value: T, compare: (a: T, b: T) => number): number {

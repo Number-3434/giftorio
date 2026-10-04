@@ -1,5 +1,5 @@
+import { SignalPreset } from "@/data.jsx";
 import init, { init as prepare_wasm, run_blueprint, set_progress_callback, set_signal_data } from "../pkg/giftorio_wasm.js";
-import { SignalPreset } from "./data.jsx";
 
 async function main() {
   const wasmReady = (async () => {
@@ -10,6 +10,7 @@ async function main() {
 
   let writerReadyResolve: (() => void) | null = null;
   let writerReady: Promise<void> = Promise.resolve();
+
   function waitForWriterReady() {
     writerReady = new Promise<void>((resolve) => {
       writerReadyResolve = resolve;

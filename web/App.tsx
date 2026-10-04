@@ -1,18 +1,19 @@
+import getAnimationInfo, { AnimationInfo, getRawImageData } from "@/animationInfo";
+import COMB_POS_DATA from "@/assets/data/combinator-positions.json";
+import Background, { BackgroundApi } from "@/components/Background";
+import FactorioSelect, { SelectOption } from "@/components/FactorioSelect";
+import FactorioSlider from "@/components/FactorioSlider";
+import KeyboardListener from "@/components/KeyboardListener";
+import SignalPresetSelect from "@/components/signal/SignalPresetSelect";
+import SignalSelectors, { TimingSignals } from "@/components/signal/SignalSelectors";
+import Toasts, { ToastsApi } from "@/components/Toasts";
+import Tooltip from "@/components/Tooltip";
+import { FORM_ELEMENTS, getInitialValues, LAST_FILE_KEY, setInitialValues, SHOW_ADVANCED_KEY, SignalPreset } from "@/data";
+import { loadFileDB, saveFileDB } from "@/db";
+import { FormElementValue } from "@/types";
+import { formatDuration, formatFileSize, useErrM } from "@/utils";
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
-import COMB_POS_DATA from "./assets/data/combinator-positions.json";
-import Background, { BackgroundApi } from "./components/Background";
-import { FactorioSelect, SelectOption } from "./components/FactorioSelect";
-import { FactorioSlider } from "./components/FactorioSlider";
-import { KeyboardListener } from "./components/KeyboardListener";
-import { SignalPresetSelect, TimingSignals } from "./components/SignalPresetSelect";
-import { ToastData, Toasts, ToastsApi } from "./components/Toasts";
-import { Tooltip } from "./components/Tooltip";
-import { FORM_ELEMENTS, getInitialValues, LAST_FILE_KEY, setInitialValues, SHOW_ADVANCED_KEY, SignalPreset } from "./data";
-import { loadFileDB, saveFileDB } from "./db";
-import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } from "./imageUtils";
-import { FormElementValue } from "./types";
-import { formatDuration, formatFileSize, useErrM } from "./utils";
 
 export interface AppApi {
   showOpenStreamingWindowWarning(): void;
@@ -29,14 +30,13 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
   const [animationInfo, setAnimationInfo] = createSignal<Partial<AnimationInfo>>();
   const [isGenerating, setIsGenerating] = createSignal(false);
   const [isDragging, setIsDragging] = createSignal(false);
-  const [xOffset, setXOffset] = createSignal(0);
-  const [yOffset, setYOffset] = createSignal(0);
+  const [offset, setOffset] = createSignal({ x: 0, y: 0 });
   const [showAdvanced, setShowAdvanced] = createSignal(false);
   const [isMobile, setIsMobile] = createSignal(false);
   const [imageData, setImageData] = createSignal<ImageData>();
   const [isStaticImage, setIsStaticImage] = createSignal(false);
-  const [currSignalPreset, setCurrSignalPreset] = createSignal<SignalPreset | null>(null);
-  const [currTimingSignals, setCurrTimingSignals] = createSignal<TimingSignals | null>(null);
+  const [signalPreset, setSignalPreset] = createSignal<SignalPreset | null>(null);
+  const [timingSignals, setTimingSignals] = createSignal<TimingSignals | null>(null);
   const [showStreamingWindowWarning, setShowStreamingWindowWarning] = createSignal(false);
 
   let refBackground: BackgroundApi = null!;
@@ -48,6 +48,10 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     setTimeout(() => setShowStreamingWindowWarning(false), 10000);
   }
   ref({ showOpenStreamingWindowWarning } satisfies AppApi);
+
+  createEffect(() => {
+    console.log(signalPreset());
+  });
 
   // Refs
   const formRefs: {
@@ -62,9 +66,8 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     submitButton: HTMLButtonElement;
   } = {} as any;
 
-  function showToast(duration: number, toast: ToastData) {
-    duration ??= toast.duration ?? 3000;
-    refToasts.addToast({ ...toast, duration }); // Reset the toast
+  function showToast(...args: Parameters<ToastsApi["showToast"]>) {
+    refToasts.showToast(...args);
   }
 
   function FormElement({ key, value }: { key: string; value: FormElementValue }) {
@@ -156,16 +159,14 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     } else if (evt.data.blueprintMetadata) {
       const { blueprintMetadata } = evt.data;
 
-      showToast(3000, {
-        message: "Blueprint downloaded! If you're having trouble importing the blueprint into Factorio, try using the JSON format.",
-      });
+      showToast("Blueprint downloaded! If you're having trouble importing the blueprint into Factorio, try using the JSON format.");
 
       formRefs.progressContainer.classList.add("hidden");
       formRefs.blueprintResult.classList.remove("hidden");
       formRefs.responseText.innerHTML = "Blueprint downloaded!";
       formRefs.submitButton.disabled = false;
     } else if (evt.data.error) {
-      showToast(3000, { message: evt.data.error, isError: true });
+      showToast(evt.data.error, { isError: true });
       setIsGenerating(false);
       formRefs.submitButton.disabled = false;
     }
@@ -215,7 +216,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
       }
     }
     if (!isValid) {
-      showToast(3000, { message: "Please fix all errors", isError: true });
+      showToast("Please fix all errors", { isError: true });
       return;
     }
 
@@ -232,7 +233,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     formRefs.progressStatus.textContent = "Starting...";
 
     if (formData.mode === "full" && !currFile()) {
-      showToast(3000, { message: "Please select a file", isError: true });
+      showToast("Please select a file", { isError: true });
       setIsGenerating(false);
       formRefs.submitButton.disabled = false;
       return;
@@ -292,15 +293,15 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
               formData.signalSorting === "auto" ? (formData.outputFormat === "json" ? "json" : "compression") : `${formData.signalSorting}`,
             substationQuality: formData.substationQuality === "none" ? null : `${formData.substationQuality}`,
             targetFps: +formData.targetFps,
-            timingSignals: currTimingSignals(),
+            timingSignals: timingSignals(),
             useGreenLampWires: !!(formData.wireColor === "green"),
             useHorizontalLampWires: !!(formData.connectionDirection === "horizontal"),
           },
         },
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to process file:", err);
-      showToast(3000, { message: "Failed to process file", isError: true });
+      showToast(`Failed to process file: ${err}`, { isError: true });
       setIsGenerating(false);
       formRefs.submitButton.disabled = false;
     }
@@ -308,8 +309,8 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
 
   function handleMouseDown(e: MouseEvent) {
     e.preventDefault();
-    setXOffset(e.clientX - refFormContainer.getBoundingClientRect().left);
-    setYOffset(e.clientY - refFormContainer.getBoundingClientRect().top);
+    const r = refFormContainer.getBoundingClientRect();
+    setOffset({ x: e.clientX - r.left, y: e.clientY - r.top });
     (e.target! as HTMLElement).style.cursor = "grabbing";
     setIsDragging(true);
 
@@ -329,8 +330,8 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
   document.addEventListener("mousemove", (e) => {
     if (isDragging()) {
       refFormContainer.style.position = "absolute";
-      refFormContainer.style.left = `${e.clientX - xOffset()}px`;
-      refFormContainer.style.top = `${e.clientY - yOffset()}px`;
+      refFormContainer.style.left = `${e.clientX - offset().x}px`;
+      refFormContainer.style.top = `${e.clientY - offset().y}px`;
     }
   });
 
@@ -366,7 +367,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
       })
       .catch((err) => {
         console.error("Failed to load file:", err);
-        showToast(3000, { message: "Failed to load file", isError: true });
+        showToast(`Failed to load file: ${err}`, { isError: true });
       });
   });
 
@@ -380,8 +381,8 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
   });
   createEffect(() => localStorage.setItem(SHOW_ADVANCED_KEY, showAdvanced().toString()));
   createEffect(() => {
-    if (currSignalPreset()) {
-      worker.postMessage({ signalPreset: currSignalPreset()! });
+    if (signalPreset()) {
+      worker.postMessage({ signalPreset: signalPreset()! });
     }
   });
 
@@ -475,6 +476,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     <>
       <KeyboardListener keys={["Enter", "e", "E"]} onKeyDown={() => formRefs.submitButton.click()} />
       <Background ref={(api) => (refBackground = api)} />
+
       <div class="fixed top-0 left-0 right-0 font-semibold">
         <Show when={isMobile()}>
           <div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Features may be limited on mobile.</div>
@@ -494,17 +496,6 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
         </div>
       </div>
       <div class="flex flex-col items-center justify-start min-h-screen">
-        {/* <div
-          class="fixed top-4 right-4 text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300 z-5000 font-bold"
-          classList={{
-            "opacity-0": !_toast().show,
-            "opacity-100": _toast().show,
-            // "bg-green-500": !_toast().isError,
-            // "bg-red-500": _toast().isError,
-          }}
-        >
-          {_toast().message}
-        </div> */}
         <Toasts ref={(api) => (refToasts = api)} />
         <hr class="h-[20vh]" />
         <div ref={refFormContainer!} class="panel-container flex">
@@ -539,13 +530,8 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
                 </svg>
               </div>
             </div>
-            <form
-              onSubmit={(e) => {
-                // e.preventDefault();
-                handleSubmit(e);
-              }}
-              class="panel-inset-light bg-gray-500 p-6 rounded shadow-md w-full min-w-100 max-w-md"
-            >
+
+            <form onSubmit={handleSubmit} id="main" class="panel-inset-light bg-gray-500 p-6 rounded shadow-md w-full min-w-100 max-w-md">
               <div class="mb-4 flex items-center justify-between">
                 {/* File Input */}
                 <div class="factorio-form-element">
@@ -561,7 +547,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
                         .catch((e) => {
                           errM.report(e.toString());
                           el.target.value = "";
-                          showToast(3000, { message: e.toString(), isError: true });
+                          showToast(e.toString(), { isError: true });
                         })
                         .finally(() => errM.test());
                     }}
@@ -603,7 +589,19 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
                   <FormElement key="customWidth" value={FORM_ELEMENTS.customWidth} />
                 </>
               )}
-              <SignalPresetSelect showToast={showToast} setSignalPreset={setCurrSignalPreset} setTimingSignals={setCurrTimingSignals} />
+
+              <SignalPresetSelect {...{ setSignalPreset, showToast }} />
+              <Show when={signalPreset()}>
+                <SignalSelectors
+                  values={{
+                    f: { type: "virtual", name: "signal-F", quality: "normal" },
+                    s: { type: "virtual", name: "signal-B", quality: "normal" },
+                    t: { type: "virtual", name: "signal-T", quality: "normal" },
+                  }}
+                  signalData={signalPreset()!}
+                  onChange={(v) => setTimingSignals(v)}
+                />
+              </Show>
 
               <div class="mb-4" />
 
@@ -627,21 +625,21 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
               <div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
             </div>
             <div class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto" style={{ "max-height": "50vh" }}>
-              <Show when={currSignalPreset()}>
+              <Show when={signalPreset()}>
                 <FactorioSelect
                   class="text-sm"
                   name="Substation Quality"
                   key="substationQuality"
-                  disabled={currSignalPreset()!.qualities.length === 0}
+                  disabled={signalPreset()!.qualities.length === 0}
                   title={
-                    currSignalPreset()!.qualities.length === 0
+                    signalPreset()!.qualities.length === 0
                       ? "Unavailable as the current signal preset does not support quality levels."
                       : undefined // allow overwriting
                   }
-                  options={currSignalPreset()!.qualities.map((q) => [q, { name: q, tooltip: `Maps to the internal quality "${q}".` }])}
+                  options={signalPreset()!.qualities.map((q) => [q, { name: q, tooltip: `Maps to the internal quality "${q}".` }])}
                   tooltip="The quality level of the substations."
                   splash={
-                    currSignalPreset()!.qualities.length === 0
+                    signalPreset()!.qualities.length === 0
                       ? "Unavailable as the current signal preset does not support quality levels."
                       : ""
                   }

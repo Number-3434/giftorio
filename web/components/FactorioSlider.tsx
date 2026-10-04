@@ -13,8 +13,7 @@ export interface FactorioSliderProps {
   onSubmit(value: number): void;
   ref?(el: HTMLInputElement): void;
 }
-
-export function FactorioSlider(props: FactorioSliderProps) {
+export default function FactorioSlider(props: FactorioSliderProps) {
   let { value, values, min = 0, max = Infinity, step, scale = "linear", onSubmit, ref } = props;
   const hasCustomValues = !!values;
   const [currValue, setCurrValue] = createSignal(value);
@@ -62,11 +61,12 @@ export function FactorioSlider(props: FactorioSliderProps) {
   }
 
   return (
-    <div class="flex items-center justify-between w-full flex-1">
+    <div class="flex items-center justify-between w-full flex-1" role="group">
       <div class="flex justify-between items-center gap-3 flex-1" classList={{ "w-full": true }}>
         <div
           aria-disabled={props.disabled}
           class="factorio-slider-wrapper flex-1"
+          role="slider"
           style={{ "--slider-width": hasCustomValues ? "15px" : "25px" }}
           classList={{ "has-multiple-values": hasCustomValues }}
         >

@@ -1,6 +1,6 @@
+import infoIcon from "@/assets/img/info.png";
+import { SelectOption } from "@/components/FactorioSelect";
 import { JSX } from "solid-js";
-import infoIcon from "../assets/img/info.png";
-import { SelectOption } from "./FactorioSelect";
 
 export interface TooltipProps {
   name: string;
@@ -8,8 +8,7 @@ export interface TooltipProps {
   options?: [string, string | SelectOption][];
   splash?: string;
 }
-
-export function Tooltip(props: TooltipProps) {
+export default function Tooltip(props: TooltipProps) {
   const { name, options } = props;
   let hasOptionTip = false;
 
@@ -27,6 +26,7 @@ export function Tooltip(props: TooltipProps) {
   return (
     <>
       <img
+        role="note"
         src={infoIcon}
         class="inline-block ml-1 mb-0.5 w-4 h-4 tooltip-trigger"
         alt="Info"
@@ -56,7 +56,7 @@ export function Tooltip(props: TooltipProps) {
           tooltip.style.top = `${y}px`;
         }}
       />
-      <div class="tooltip">
+      <div class="tooltip" role="tooltip">
         <div class="tooltip-header">{name}</div>
         {props.tooltip && <div class="text-white font-light">{props.tooltip}</div>}
         {optionsSection && (

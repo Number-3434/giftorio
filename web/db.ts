@@ -1,26 +1,24 @@
+import { SignalData, SignalPreset } from "@/data";
 import { gunzipSync, gzipSync } from "fflate";
-import { SignalData, SignalPreset } from "./data";
 
 const APP_STORAGE_KEY = "app-storage";
 const FILE_STORAGE_KEY = "file-storage";
 const SIGNAL_PRESETS_STORAGE_KEY = "signal-data-presets";
 
+// indexedDB.databases().then((dbs) => {
+//   dbs.forEach(({ name }) => name && indexedDB.deleteDatabase(name));
+// });
+
 const PRESET_MAP = {
   "base-2.0.77": {
-    import: () => {
-      console.trace("Importing base preset");
-      return import("./assets/data/presets/base-2.0.77.json") as Promise<SignalData>;
-    },
+    import: () => import("./assets/data/presets/base-2.0.77.json") as Promise<SignalData>,
     description: "Signals from the base game (v2.0.77).",
   },
   "space-age-2.0.77": {
-    import: () => {
-      console.trace("Importing space age preset");
-      return import("./assets/data/presets/space-age-2.0.77.json") as Promise<SignalData>;
-    },
+    import: () => import("./assets/data/presets/space-age-2.0.77.json") as Promise<SignalData>,
     description: "Signals from the Space Age DLC (v2.0.77).",
   },
-};
+} as const;
 export const DEFAULT_SIGNAL_PRESET_KEYS = Object.keys(PRESET_MAP);
 
 const fileDBPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {

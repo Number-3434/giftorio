@@ -1,23 +1,22 @@
+import gumpMp4 from "@/assets/img/gump.mp4";
+import gumpWebm from "@/assets/img/gump.webm";
+import nyanGif from "@/assets/img/nyan.gif";
+import nyanMp4 from "@/assets/img/nyan.mp4";
+import nyanWebm from "@/assets/img/nyan.webm";
+import rickMp4 from "@/assets/img/rick.mp4";
+import rickWebm from "@/assets/img/rick.webm";
 import { createSignal, onMount } from "solid-js";
-import gumpMp4 from "../assets/img/gump.mp4";
-import gumpWebm from "../assets/img/gump.webm";
-import nyanGif from "../assets/img/nyan.gif";
-import nyanMp4 from "../assets/img/nyan.mp4";
-import nyanWebm from "../assets/img/nyan.webm";
-import rickMp4 from "../assets/img/rick.mp4";
-import rickWebm from "../assets/img/rick.webm";
 
 const MEDIA = [
   { mp4: nyanMp4, webm: nyanWebm, fallback: nyanGif },
   { mp4: rickMp4, webm: rickWebm, fallback: nyanGif },
   { mp4: gumpMp4, webm: gumpWebm, fallback: nyanGif },
-];
+] as const;
 
 export interface BackgroundApi {
   setImageURL(url: string | null | undefined): void;
 }
-
-function Background(props: { ref?: (api: BackgroundApi) => void; interval?: number }) {
+export default function Background(props: { ref?: (api: BackgroundApi) => void; interval?: number }) {
   const [currMediaIdx, setCurrMediaIdx] = createSignal(0);
   const [canUseVideoBg, setCanUseVideoBg] = createSignal(true);
   const [useVideoBg, setUseVideoBg] = createSignal(true);
@@ -89,5 +88,3 @@ function Background(props: { ref?: (api: BackgroundApi) => void; interval?: numb
     </div>
   );
 }
-
-export default Background;

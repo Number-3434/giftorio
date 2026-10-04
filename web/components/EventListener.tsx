@@ -1,6 +1,10 @@
 import { onCleanup, onMount } from "solid-js";
 
-export function EventListener<K extends keyof DocumentEventMap>(props: { event: K; handler(event: DocumentEventMap[K]): void }) {
+export interface EventListenerProps<K extends keyof DocumentEventMap> {
+  event: K;
+  handler(event: DocumentEventMap[K]): void;
+}
+export default function EventListener<K extends keyof DocumentEventMap>(props: EventListenerProps<K>) {
   const { event, handler } = props;
   onMount(() => {
     document.addEventListener(event, handler);

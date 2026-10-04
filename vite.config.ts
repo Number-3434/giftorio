@@ -1,3 +1,4 @@
+import path from "node:path";
 import { defineConfig } from "vite";
 import solidPlugin from "vite-plugin-solid";
 import { viteStaticCopy } from "vite-plugin-static-copy";
@@ -7,4 +8,9 @@ export default defineConfig({
   server: { host: "0.0.0.0", port: 3000 },
   build: { target: "esnext" },
   assetsInclude: ["**/*.png", "**/*.jpg", "**/*.gif", "**/*.jpeg", "**/*.lua"],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "web"),
+    },
+  },
 });

@@ -177,7 +177,7 @@ function webpInfo(data: Uint8Array): AnimationInfo {
  * @param data - Image data to analyze.
  * @returns Information about the animation.
  */
-export function animationInfo(data: Uint8Array): AnimationInfo {
+export default function animationInfo(data: Uint8Array): AnimationInfo {
   if (data.length >= 6 && ["GIF87a", "GIF89a"].includes(String.fromCharCode(...data.subarray(0, 6)))) {
     return gifInfo(data);
   } else if (

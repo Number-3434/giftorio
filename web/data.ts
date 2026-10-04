@@ -1,6 +1,6 @@
+import FORM_ELEMENTS from "@/formElements.json";
+import _INITIAL_VALUES from "@/initialValues.json";
 import { Ajv, JSONSchemaType } from "ajv";
-import FORM_ELEMENTS from "./formElements.json";
-import _INITIAL_VALUES from "./initialValues.json";
 
 export { FORM_ELEMENTS };
 
