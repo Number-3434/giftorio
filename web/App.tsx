@@ -6,6 +6,7 @@ import { FactorioSelect, SelectOption } from "./components/FactorioSelect";
 import { FactorioSlider } from "./components/FactorioSlider";
 import { KeyboardListener } from "./components/KeyboardListener";
 import { SignalPresetSelect, TimingSignals } from "./components/SignalPresetSelect";
+import { ToastData, Toasts, ToastsApi } from "./components/Toasts";
 import { Tooltip } from "./components/Tooltip";
 import { FORM_ELEMENTS, getInitialValues, LAST_FILE_KEY, setInitialValues, SHOW_ADVANCED_KEY, SignalPreset } from "./data";
 import { loadFileDB, saveFileDB } from "./db";
@@ -13,15 +14,20 @@ import { AnimationInfo, animationInfo as getAnimationInfo, getRawImageData } fro
 import { FormElementValue } from "./types";
 import { formatDuration, formatFileSize, useErrM } from "./utils";
 
-function App({ openDownloadWindow, worker }: { openDownloadWindow(): void; worker: Worker }) {
-  const DEFAULT_TOAST = { id: 0, show: false, message: "", isError: false };
-
+export interface AppApi {
+  showOpenStreamingWindowWarning(): void;
+}
+export interface AppProps {
+  ref(api: AppApi): void;
+  streamingAvailable: boolean;
+  worker: Worker;
+}
+export default function App({ ref, streamingAvailable, worker }: AppProps) {
   // State
   const [formData, setFormData] = createStore(getInitialValues());
   const [currFile, setCurrFile] = createSignal<File | null>(null);
   const [animationInfo, setAnimationInfo] = createSignal<Partial<AnimationInfo>>();
   const [isGenerating, setIsGenerating] = createSignal(false);
-  const [_toast, _setToast] = createSignal({ ...DEFAULT_TOAST });
   const [isDragging, setIsDragging] = createSignal(false);
   const [xOffset, setXOffset] = createSignal(0);
   const [yOffset, setYOffset] = createSignal(0);
@@ -31,9 +37,17 @@ function App({ openDownloadWindow, worker }: { openDownloadWindow(): void; worke
   const [isStaticImage, setIsStaticImage] = createSignal(false);
   const [currSignalPreset, setCurrSignalPreset] = createSignal<SignalPreset | null>(null);
   const [currTimingSignals, setCurrTimingSignals] = createSignal<TimingSignals | null>(null);
+  const [showStreamingWindowWarning, setShowStreamingWindowWarning] = createSignal(false);
 
-  let refFormContainer: HTMLDivElement = null!;
   let refBackground: BackgroundApi = null!;
+  let refFormContainer: HTMLDivElement = null!;
+  let refToasts: ToastsApi = null!;
+
+  function showOpenStreamingWindowWarning() {
+    setShowStreamingWindowWarning(true);
+    setTimeout(() => setShowStreamingWindowWarning(false), 10000);
+  }
+  ref({ showOpenStreamingWindowWarning } satisfies AppApi);
 
   // Refs
   const formRefs: {
@@ -48,16 +62,9 @@ function App({ openDownloadWindow, worker }: { openDownloadWindow(): void; worke
     submitButton: HTMLButtonElement;
   } = {} as any;
 
-  function showToast(duration: number, props: Partial<ReturnType<typeof _toast>> & Pick<ReturnType<typeof _setToast>, "message">) {
-    let { id, show } = _toast();
-    id++;
-
-    if (show) {
-      _setToast({ ...DEFAULT_TOAST, id }); // Reset the toast
-    }
-
-    _setToast({ show: true, isError: false, id, ...props });
-    setTimeout(() => _setToast((p) => (p.id === id ? { ...DEFAULT_TOAST, id } : p)), duration);
+  function showToast(duration: number, toast: ToastData) {
+    duration ??= toast.duration ?? 3000;
+    refToasts.addToast({ ...toast, duration }); // Reset the toast
   }
 
   function FormElement({ key, value }: { key: string; value: FormElementValue }) {
@@ -468,21 +475,37 @@ function App({ openDownloadWindow, worker }: { openDownloadWindow(): void; worke
     <>
       <KeyboardListener keys={["Enter", "e", "E"]} onKeyDown={() => formRefs.submitButton.click()} />
       <Background ref={(api) => (refBackground = api)} />
-      <Show when={isMobile()}>
-        <div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Some features may be limited on mobile.</div>
-      </Show>
-      <div class="flex flex-col items-center justify-start min-h-screen">
+      <div class="fixed top-0 left-0 right-0 font-semibold">
+        <Show when={isMobile()}>
+          <div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Features may be limited on mobile.</div>
+        </Show>
+        <Show when={!streamingAvailable}>
+          <div class="streaming-unavailable-warning">
+            ⚠️ Streaming unavailable in this browser. This may cause issues with larger files.
+          </div>
+        </Show>
+
         <div
+          class="streaming-unavailable-warning transition-opacity duration-300"
+          classList={{ "opacity-0": !showStreamingWindowWarning(), "opacity-100": showStreamingWindowWarning() }}
+        >
+          ⚠️ Opened a new window to download the file as it was detected that the stream was stuck. If you're on Firefox, try soft
+          refreshing the page (Ctrl + R).
+        </div>
+      </div>
+      <div class="flex flex-col items-center justify-start min-h-screen">
+        {/* <div
+          class="fixed top-4 right-4 text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300 z-5000 font-bold"
           classList={{
             "opacity-0": !_toast().show,
             "opacity-100": _toast().show,
-            "bg-green-500": !_toast().isError,
-            "bg-red-500": _toast().isError,
+            // "bg-green-500": !_toast().isError,
+            // "bg-red-500": _toast().isError,
           }}
-          class="fixed top-4 right-4 text-white px-4 py-2 rounded shadow-lg transition-opacity duration-300 z-5000"
         >
           {_toast().message}
-        </div>
+        </div> */}
+        <Toasts ref={(api) => (refToasts = api)} />
         <hr class="h-[20vh]" />
         <div ref={refFormContainer!} class="panel-container flex">
           <div classList={{ hidden: isGenerating() }} class="panel form flex-shrink-0">
@@ -658,16 +681,6 @@ function App({ openDownloadWindow, worker }: { openDownloadWindow(): void; worke
                 <button onClick={() => setIsGenerating(false)} id="backButton" class="button">
                   Back
                 </button>
-                <button
-                  onClick={() => {
-                    openDownloadWindow();
-                    setIsGenerating(false);
-                  }}
-                  id="backButton"
-                  class="button"
-                >
-                  Force Download
-                </button>
               </div>
               <div class="mt-6 text-center text-white-500">
                 <p>
@@ -719,5 +732,3 @@ function App({ openDownloadWindow, worker }: { openDownloadWindow(): void; worke
     </>
   );
 }
-
-export default App;

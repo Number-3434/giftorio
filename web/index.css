@@ -702,7 +702,7 @@ input[type="checkbox"]:checked ~ .checkbox {
 }
 
 .mobile-warning {
-  @apply fixed top-0 left-0 right-0 bg-orange-500 text-black p-4 text-center z-50;
+  @apply bg-orange-500 text-black p-4 text-center z-50;
   box-shadow:
     inset 8px 0px 4px -8px #000,
     inset -8px 0px 4px -8px #000,
@@ -737,6 +737,17 @@ input[type="checkbox"]:checked ~ .checkbox {
   }
 }
 
+.streaming-unavailable-warning {
+  @apply bg-orange-500 text-black p-4 text-center z-50;
+  box-shadow:
+    inset 8px 0px 4px -8px #000,
+    inset -8px 0px 4px -8px #000,
+    inset 0px 10px 2px -8px #2e2521,
+    inset 0px 10px 2px -8px #163218,
+    inset 0px -9px 2px -8px #000,
+    0px 0px 4px 0px #000;
+}
+
 .pixel-wrapper {
   /* Scale the low-res container to fill the screen */
   transform: scale(calc(100vw / 120));
@@ -751,4 +762,27 @@ input[type="checkbox"]:checked ~ .checkbox {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   object-fit: none;
+}
+
+.toast {
+  @apply fixed text-white max-w-md text-center shadow-lg z-5000 font-bold pointer-events-none;
+
+  animation: move-up var(--duration) linear forwards;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(min(50vw, 30rem));
+  text-shadow:
+    1px 0 0 #000,
+    -1px 0 0 #000,
+    0 1px 0 #000,
+    0 -1px 0 #000,
+    1px 1px 0 #000,
+    1px -1px 0 #000,
+    -1px 1px 0 #000,
+    -1px -1px 0 #000;
+}
+@keyframes move-up {
+  to {
+    top: 1.5rem;
+  }
 }

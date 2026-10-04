@@ -99,3 +99,7 @@ export function binarySearch<T>(arr: T[], value: T, compare: (a: T, b: T) => num
 }
 
 export type ValueOf<T> = T[keyof T];
+
+export function pxToRem(px: number): number {
+  return px / parseFloat(getComputedStyle(document.documentElement).fontSize);
+}
