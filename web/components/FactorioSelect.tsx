@@ -1,6 +1,6 @@
 import Tooltip from "@/components/Tooltip";
 import { FormElementValue } from "@/types";
-import { createEffect, createSignal, For, JSX } from "solid-js";
+import { createEffect, createSignal, For, JSX, Show } from "solid-js";
 
 export type SelectOption = { name: string; tooltip?: string };
 export interface FactorioSelectProps extends Omit<JSX.SelectHTMLAttributes<HTMLSelectElement>, "onChange"> {
@@ -8,7 +8,7 @@ export interface FactorioSelectProps extends Omit<JSX.SelectHTMLAttributes<HTMLS
   formArgs?: FormElementValue;
   initialValue: string;
   key: string;
-  name: string;
+  name?: string;
   onChange(value: string): void;
   tooltip?: string;
   options: [string, string | SelectOption][];
@@ -49,10 +49,12 @@ export default function FactorioSelect(props: FactorioSelectProps) {
       class="mt-1 mb-1 flex items-center justify-between factorio-form-element factorio-select-container"
       aria-disabled={props.formArgs?.disabled || props.disabled}
     >
-      <label class="block text-white-500" for={props.key}>
-        <span classList={{ "opacity-50": props.disabled }}>{props.name}</span>
-        <Tooltip name={props.name} tooltip={props.tooltip} splash={props.splash} options={props.options} />
-      </label>
+      <Show when={props.name}>
+        <label class="block text-white-500" for={props.key}>
+          <span classList={{ "opacity-50": props.disabled }}>{props.name}</span>
+          <Tooltip name={props.name!} tooltip={props.tooltip} splash={props.splash} options={props.options} />
+        </label>
+      </Show>
       {/* @ts-ignore */}
       <select id={props.key} name={props.key} prop:value={currValue()} onChange={handleChange} title={selectTitle()} {...selectProps}>
         <For each={props.options}>

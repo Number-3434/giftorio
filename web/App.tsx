@@ -1,6 +1,7 @@
 import getAnimationInfo, { AnimationInfo, getRawImageData } from "@/animationInfo";
 import COMB_POS_DATA from "@/assets/data/combinator-positions.json";
 import Background, { BackgroundApi } from "@/components/Background";
+import DialogDelete, { DialogDeleteApi } from "@/components/DialogDelete";
 import FactorioSelect, { SelectOption } from "@/components/FactorioSelect";
 import FactorioSlider from "@/components/FactorioSlider";
 import KeyboardListener from "@/components/KeyboardListener";
@@ -14,6 +15,7 @@ import { FormElementValue } from "@/types";
 import { formatDuration, formatFileSize, useErrM } from "@/utils";
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
+import { Portal } from "solid-js/web";
 
 export interface AppApi {
   showOpenStreamingWindowWarning(): void;
@@ -40,6 +42,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
   const [showStreamingWindowWarning, setShowStreamingWindowWarning] = createSignal(false);
 
   let refBackground: BackgroundApi = null!;
+  let refDialogReset: DialogDeleteApi = null!;
   let refFormContainer: HTMLDivElement = null!;
   let refToasts: ToastsApi = null!;
 
@@ -48,10 +51,6 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     setTimeout(() => setShowStreamingWindowWarning(false), 10000);
   }
   ref({ showOpenStreamingWindowWarning } satisfies AppApi);
-
-  createEffect(() => {
-    console.log(signalPreset());
-  });
 
   // Refs
   const formRefs: {
@@ -123,13 +122,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
         setFormData(key as keyof typeof formData, rawValue);
       }
       return (
-        <div
-          class="mb-1 factorio-form-element"
-          aria-disabled={value.disabled}
-          classList={{
-            flex: compact,
-          }}
-        >
+        <div class="mb-1 factorio-form-element" aria-disabled={value.disabled} classList={{ flex: compact }}>
           <label class="block text-white-500 mb-0 w-full">
             {name}
             <Tooltip {...tooltipProps} />
@@ -159,7 +152,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     } else if (evt.data.blueprintMetadata) {
       const { blueprintMetadata } = evt.data;
 
-      showToast("Blueprint downloaded! If you're having trouble importing the blueprint into Factorio, try using the JSON format.");
+      showToast("Blueprint downloaded!");
 
       formRefs.progressContainer.classList.add("hidden");
       formRefs.blueprintResult.classList.remove("hidden");
@@ -269,7 +262,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
         generate: {
           imageData: data,
           args: {
-            combinatorPositionsJson: JSON.stringify(COMB_POS_DATA), // TODO: Make this configurable???
+            combinatorPositionsJson: JSON.stringify(COMB_POS_DATA),
             customHeight: +formData.customHeight,
             customWidth: +formData.customWidth,
             displayMarginY: +formData.displayMarginY,
@@ -418,9 +411,11 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     );
   }
   function FormElementsDisplay(props: { isStaticImage: boolean }) {
+    const disallowedKeys = ["includeSubstations", "grayscaleBits", "outputFormat"];
     const visibleFormElements = createMemo(() =>
       Object.entries(FORM_ELEMENTS).map(([key, value]) => {
-        if (["mode", "customWidth", "customHeight"].includes(key)) return null;
+        if (disallowedKeys.includes(key)) return null;
+        else if (["mode", "customWidth", "customHeight"].includes(key)) return null;
         else if (key === "staticImageMode" && !props.isStaticImage) return null;
         else if (key === "temporalCompressionWindow" && formData.signalCompressionType !== "temporal") return null;
         else if (formData.mode === "full" && (key === "customWidth" || key === "customHeight")) return null;
@@ -501,7 +496,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
         <div ref={refFormContainer!} class="panel-container flex">
           <div classList={{ hidden: isGenerating() }} class="panel form flex-shrink-0">
             <div class="flex items-center justify-between">
-              <h2 class="text-tan-500">GIF/WebP to Blueprint</h2>
+              <h2>GIF/WebP to Blueprint</h2>
               <div class="handle cursor-pointer" onMouseDown={handleMouseDown}></div>
               <div
                 class="mb-[10px] w-5 h-5 flex items-center content-center justify-center"
@@ -582,7 +577,6 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
                 />
               </div>
 
-              <FormElement key="mode" value={FORM_ELEMENTS.mode} />
               {(formData.mode === "lamps" || formData.mode === "lampGrid") && (
                 <>
                   <FormElement key="customHeight" value={FORM_ELEMENTS.customHeight} />
@@ -591,17 +585,9 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
               )}
 
               <SignalPresetSelect {...{ setSignalPreset, showToast }} />
-              <Show when={signalPreset()}>
-                <SignalSelectors
-                  values={{
-                    f: { type: "virtual", name: "signal-F", quality: "normal" },
-                    s: { type: "virtual", name: "signal-B", quality: "normal" },
-                    t: { type: "virtual", name: "signal-T", quality: "normal" },
-                  }}
-                  signalData={signalPreset()!}
-                  onChange={(v) => setTimingSignals(v)}
-                />
-              </Show>
+              <For each={["grayscaleBits", "outputFormat"]}>
+                {(k) => <FormElement key={k} value={FORM_ELEMENTS[k as keyof typeof FORM_ELEMENTS]} />}
+              </For>
 
               <div class="mb-4" />
 
@@ -621,21 +607,21 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
 
           <div class="panel w-90 z-10" classList={{ hidden: !showAdvanced() || isGenerating() }}>
             <div class="flex items-center justify-between">
-              <h3 class="text-tan-500">Advanced Options</h3>
+              <h3>Advanced Options</h3>
               <div class="handle cursor-pointer" onMouseDown={handleMouseDown} onMouseUp={handleMouseUp}></div>
+              {/* <button class="button button-red icon-button w-8 h-8 self-start" type="button">
+                ↻
+              </button> */}
             </div>
             <div class="panel-inset-light px-3 pt-2 py-1 shadow-md w-full max-w-md overflow-y-auto" style={{ "max-height": "50vh" }}>
+              <FormElement key="includeSubstations" value={FORM_ELEMENTS.includeSubstations} />
+
               <Show when={signalPreset()}>
                 <FactorioSelect
-                  class="text-sm"
-                  name="Substation Quality"
+                  name="Substations"
                   key="substationQuality"
-                  disabled={signalPreset()!.qualities.length === 0}
-                  title={
-                    signalPreset()!.qualities.length === 0
-                      ? "Unavailable as the current signal preset does not support quality levels."
-                      : undefined // allow overwriting
-                  }
+                  title="The quality level of the substations. Set to 'None' to disable substations."
+                  disabled={!formData.includeSubstations}
                   options={signalPreset()!.qualities.map((q) => [q, { name: q, tooltip: `Maps to the internal quality "${q}".` }])}
                   tooltip="The quality level of the substations."
                   splash={
@@ -643,11 +629,53 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
                       ? "Unavailable as the current signal preset does not support quality levels."
                       : ""
                   }
-                  initialValue={formData.substationQuality ?? "None"}
+                  initialValue={formData.substationQuality ?? ""}
                   onChange={(v) => setFormData("substationQuality", v)}
                 />
               </Show>
               <FormElementsDisplay isStaticImage={isStaticImage()} />
+
+              <hr class="my-2" />
+              <h2>Advanced</h2>
+
+              <Show when={signalPreset()}>
+                <SignalSelectors
+                  values={{
+                    f: { type: "virtual", name: "signal-F", quality: "normal" },
+                    s: { type: "virtual", name: "signal-B", quality: "normal" },
+                    t: { type: "virtual", name: "signal-T", quality: "normal" },
+                  }}
+                  signalData={signalPreset()!}
+                  onChange={(v) => setTimingSignals(v)}
+                />
+              </Show>
+
+              <hr class="my-2" />
+              <h2>Data</h2>
+
+              <button class="button button-red icon-button w-full h-8 self-start" type="button" onClick={() => refDialogReset.show()}>
+                Reset all data
+              </button>
+
+              <Portal>
+                <DialogDelete
+                  ref={(api) => (refDialogReset = api)}
+                  onConfirm={() => {
+                    indexedDB
+                      .databases()
+                      .then((dbs) => Promise.all(dbs.map(({ name }) => name && indexedDB.deleteDatabase(name))))
+                      .then(() => {
+                        localStorage.clear();
+                        window.location.reload();
+                      });
+                  }}
+                >
+                  <h2>Are you sure you want to delete all data?</h2>
+                  <div class="text-white-500 text-center">
+                    This will remove all signal presets, configuration data, and reset all options back to their default values.
+                  </div>
+                </DialogDelete>
+              </Portal>
             </div>
           </div>
 
@@ -669,7 +697,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
               class="p-3 mb-3"
               classList={{ hidden: !isGenerating() }}
             >
-              <h2 class="text-tan-500">Blueprint Download</h2>
+              <h2>Blueprint Download</h2>
               <div
                 ref={(el) => (formRefs.responseText = el)}
                 id="responseText"

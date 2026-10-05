@@ -5,17 +5,13 @@ const APP_STORAGE_KEY = "app-storage";
 const FILE_STORAGE_KEY = "file-storage";
 const SIGNAL_PRESETS_STORAGE_KEY = "signal-data-presets";
 
-// indexedDB.databases().then((dbs) => {
-//   dbs.forEach(({ name }) => name && indexedDB.deleteDatabase(name));
-// });
-
 const PRESET_MAP = {
-  "base-2.0.77": {
-    import: () => import("./assets/data/presets/base-2.0.77.json") as Promise<SignalData>,
-    description: "Signals from the base game (v2.0.77).",
+  "compat-v2.0.77": {
+    import: () => import("@/assets/data/presets/compat-v2.0.77.json") satisfies Promise<SignalData>,
+    description: "Signals from the base game (v2.0.77). Excludes 'satellite' signals for upwards compatibility with Space Age.",
   },
-  "space-age-2.0.77": {
-    import: () => import("./assets/data/presets/space-age-2.0.77.json") as Promise<SignalData>,
+  "dlc-v2.0.77": {
+    import: () => import("@/assets/data/presets/space-age-v2.0.77.json") satisfies Promise<SignalData>,
     description: "Signals from the Space Age DLC (v2.0.77).",
   },
 } as const;
@@ -50,7 +46,7 @@ export async function loadFileDB(key: string): Promise<File | null> {
       req.onsuccess = () => resolve(req.result ?? null);
       req.onerror = () => reject(req.error);
     } catch (e) {
-      return resolve(null);
+      resolve(null);
     }
   });
 }
@@ -60,7 +56,7 @@ export async function getSignalPresetNames(): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(SIGNAL_PRESETS_STORAGE_KEY, "readonly");
     const req = tx.objectStore(SIGNAL_PRESETS_STORAGE_KEY).getAllKeys();
-    req.onsuccess = () => resolve(req.result as string[]);
+    req.onsuccess = () => resolve((console.log(req.result), req.result as string[]));
     req.onerror = () => reject(tx.error);
   });
 }
@@ -76,11 +72,8 @@ export async function addSignalPreset(name: string, preset: SignalPreset): Promi
 }
 export async function getSignalPreset(name: string): Promise<SignalPreset | null> {
   if (name in PRESET_MAP) {
-    const preset = PRESET_MAP[name as keyof typeof PRESET_MAP];
-    return {
-      description: preset.description,
-      ...(await preset.import()),
-    } satisfies SignalPreset;
+    const { description, import: get } = PRESET_MAP[name as keyof typeof PRESET_MAP];
+    return { description, ...(await get()) } satisfies SignalPreset;
   }
 
   const db = await fileDBPromise;
@@ -88,10 +81,18 @@ export async function getSignalPreset(name: string): Promise<SignalPreset | null
     try {
       const tx = db.transaction(SIGNAL_PRESETS_STORAGE_KEY, "readonly");
       const req = tx.objectStore(SIGNAL_PRESETS_STORAGE_KEY).get(name);
-      req.onsuccess = () => resolve(JSON.parse(new TextDecoder().decode(gunzipSync(req.result))));
+      req.onsuccess = () => {
+        try {
+          const result = JSON.parse(new TextDecoder().decode(gunzipSync(req.result)));
+          resolve(result);
+        } catch (e) {
+          throw e;
+          reject(e);
+        }
+      };
       req.onerror = () => reject(req.error);
     } catch (e) {
-      return resolve(null);
+      resolve(null);
     }
   });
 }

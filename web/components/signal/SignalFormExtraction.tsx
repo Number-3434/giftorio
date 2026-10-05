@@ -44,7 +44,15 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
     <dialog ref={refDialog}>
       {/* <dialog class="mt-5 mb-1 flex flex-col items-start gap-1 justify-between w-full" ref={refDialog}> */}
       <KeyboardListener keys={["Escape"]} onKeyDown={() => hide()} />
-      <form class="backdrop flex flex-col items-center justify-center" method="dialog">
+      <form
+        class="backdrop flex flex-col items-center justify-center"
+        method="dialog"
+        onSubmit={() => {
+          const { name, description } = formData;
+          const preset = { ...(currData() as SignalData), description };
+          props.onSubmit(name, preset);
+        }}
+      >
         <div
           class="panel flex flex-col min-h-md h-[75vh] w-[50vw]"
           onSubmit={(e) => {
@@ -124,11 +132,7 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
                   errM.report("Invalid JSON");
                   showToast("Invalid JSON", { isError: true });
                 }
-
-                if (errM.test()) {
-                  const { signals, qualities } = currData()!;
-                  showToast(`Successfully imported ${signals.length} signals and ${qualities.length} qualities!`);
-                }
+                errM.test();
               }}
             />
             <div class="my-10" />
@@ -137,7 +141,15 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
                 Back
               </button>
               <div />
-              <button class="button button-green-right" type="button" onClick={() => setStatus("metadata")}>
+              <button
+                class="button button-green-right"
+                type="button"
+                onClick={() => {
+                  const { signals, qualities } = currData()!;
+                  showToast(`Successfully imported ${signals.length} signals and ${qualities.length} qualities!`);
+                  setStatus("metadata");
+                }}
+              >
                 Next
               </button>
             </div>
@@ -160,17 +172,15 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
                   id="presetName"
                   name="presetName"
                   value={formData.name}
+                  required
                   onChange={(e) => {
                     const errM = useErrM(e.currentTarget);
                     const { value } = e.currentTarget;
-
-                    console.log(props.signalPresetKeys);
 
                     if (props.signalPresetKeys.includes(value)) {
                       errM.report(`The name "${value}" is already in use.`);
                       return;
                     }
-
                     errM.test() && setFormData("name", e.currentTarget.value);
                   }}
                 />
@@ -197,17 +207,7 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
                 Back
               </button>
               <div />
-              <button
-                class="button button-green-right"
-                onClick={() => {
-                  const key = formData.name;
-                  const preset = { ...(currData() as SignalData), description: formData.description };
-
-                  props.onSubmit(key, preset);
-                }}
-              >
-                Import
-              </button>
+              <button class="button button-green-right">Import</button>
             </div>
           </Show>
         </div>

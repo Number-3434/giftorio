@@ -10,6 +10,12 @@
     "tooltip": "The blueprint parts to include. Changes if the input file is an image or a video.",
     "splash": "Modes other than 'Everything' will not use the input video / image."
   },
+  "includeSubstations": {
+    "name": "Include Substations",
+    "type": "checkbox",
+    "tooltip": "Whether to include substations in the blueprint.",
+    "splash": "Substations are not required on space platforms."
+  },
   "staticImageMode": {
     "name": "Static Image Mode",
     "type": "select",

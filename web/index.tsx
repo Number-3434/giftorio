@@ -1,5 +1,6 @@
 import App, { AppApi } from "@/App";
 import "@/index.css";
+import { ErrorBoundary } from "solid-js";
 import { render } from "solid-js/web";
 import streamSaver from "streamsaver"; // If unsupported, this will fall back to a polyfill that buffers in RAM
 
@@ -88,4 +89,10 @@ function openDownloadWindow() {
 }
 const root = document.getElementById("root");
 
-render(() => <App ref={(api) => (refApp = api)} worker={worker} streamingAvailable={streamSaver.supported} />, root!);
+render(() => {
+  return (
+    <ErrorBoundary fallback={(err) => <pre style={{ "white-space": "pre-wrap" }}>{err instanceof Error ? err.stack : String(err)}</pre>}>
+      <App ref={(api) => (refApp = api)} worker={worker} streamingAvailable={streamSaver.supported} />
+    </ErrorBoundary>
+  );
+}, root!);

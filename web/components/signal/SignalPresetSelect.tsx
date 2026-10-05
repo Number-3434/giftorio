@@ -26,6 +26,10 @@ export default function SignalPresetSelect(props: SignalPresetSelectProps) {
   createEffect(() => currPresetKey() && localStorage.setItem(CURR_SIGNAL_PRESET_KEY, currPresetKey()!));
   createEffect(() => props.setSignalPreset(currPreset()!));
 
+  createEffect(() => {
+    console.log(signalPresetKeys());
+  });
+
   return (
     <div class="mt-5 mb-1 flex flex-col items-start gap-1 justify-between w-full">
       <DialogDelete
@@ -42,11 +46,29 @@ export default function SignalPresetSelect(props: SignalPresetSelectProps) {
       </DialogDelete>
 
       <div class="flex items-center factorio-form-element justify-between w-full">
-        <label class="text-white-500" for="maxsize">
+        <label class="text-white-500" for="signalPreset">
           Signal Preset
           <Show when={currPreset()}>
             <Tooltip
-              tooltip={<i>{currPreset()!.description}</i>}
+              tooltip={
+                <>
+                  <i>{currPreset()!.description}</i>
+                  <hr class="my-2" />
+                  <div>
+                    <div>
+                      <span class="text-cyan-500 font-semibold">Total Signals:</span>{" "}
+                      <span class="text-tan-500 font-semibold">{currPreset()!.signals.length}</span>
+                    </div>
+                    <div>
+                      <span class="text-cyan-500 font-semibold">Total Qualities:</span>{" "}
+                      <span class="text-tan-500 font-semibold">
+                        {currPreset()!.qualities.length}
+                        {currPreset()!.qualities.length && <> ({currPreset()!.qualities.join(", ")})</>}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              }
               name={`Signal Preset: ${currPresetKey()}`}
               splash="Signal presets define the signals and qualities available for use in the blueprint."
             />
@@ -75,7 +97,7 @@ export default function SignalPresetSelect(props: SignalPresetSelectProps) {
                 });
               }}
               showToast={props.showToast}
-              signalPresetKeys={[...signalPresetKeys()!, ...DEFAULT_SIGNAL_PRESET_KEYS]}
+              signalPresetKeys={[...(signalPresetKeys() ?? []), ...DEFAULT_SIGNAL_PRESET_KEYS]}
             />
           </Portal>
           <div class="flex gap-1">
