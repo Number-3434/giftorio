@@ -190,6 +190,10 @@
       "json": {
         "name": "Raw JSON",
         "tooltip": "The raw JSON (uncompressed) blueprint file. Can also be imported in the 'Import Blueprint String' dialog."
+      },
+      "rawCompressed": {
+        "name": "Raw ZLIB",
+        "tooltip": "DOES NOT WORK IN FACTORIO. The raw ZLIB file, before base64 string encoding. Use this for debugging purposes."
       }
     },
     "splash": "Tip: From Factorio v2.0.25 onwards, JSON and blueprint files can be imported directly into the game via drag-and-drop."

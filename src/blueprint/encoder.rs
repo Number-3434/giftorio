@@ -16,29 +16,55 @@ use std::{
 use wasm_bindgen::UnwrapThrowExt;
 
 pub struct BlueprintEncoder<'a> {
+    args: &'a BlueprintArgs,
     blueprint_generator: BlueprintGenerator<'a>,
     chunks: ChunkQueue,
     finished: bool,
     started: bool,
-    zlib_encoder: Option<ZlibEncoder<EncoderWriter<'a, GeneralPurpose, StreamingWriter>>>,
+    writer: Option<ZlibEncoder<OutputWriter<'a>>>,
 }
-impl<'a> BlueprintEncoder<'a> {
-    pub fn new(blueprint_generator: BlueprintGenerator<'a>, args: &BlueprintArgs) -> Self {
-        let chunks = Arc::new(Mutex::new(VecDeque::new()));
-        let writer = StreamingWriter::new(Arc::clone(&chunks));
-        let mut zlib: Option<ZlibEncoder<_>> = None;
-
-        if args.output_format == OutputFormat::Blueprint {
-            let b64 = EncoderWriter::new(writer, &STANDARD);
-            zlib = Some(ZlibEncoder::new(b64, Compression::best()))
+enum OutputWriter<'a> {
+    RawCompressed(StreamingWriter),
+    Base64(EncoderWriter<'a, GeneralPurpose, StreamingWriter>),
+}
+impl<'a> std::io::Write for OutputWriter<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            Self::RawCompressed(w) => w.write(buf),
+            Self::Base64(w) => w.write(buf),
         }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            Self::RawCompressed(w) => w.flush(),
+            Self::Base64(w) => w.flush(),
+        }
+    }
+}
+
+impl<'a> BlueprintEncoder<'a> {
+    pub fn new(blueprint_generator: BlueprintGenerator<'a>, args: &'a BlueprintArgs) -> Self {
+        let chunks = Arc::new(Mutex::new(VecDeque::new()));
+        let stream_writer = StreamingWriter::new(Arc::clone(&chunks));
 
         Self {
+            args,
             blueprint_generator,
             chunks,
             finished: false,
             started: false,
-            zlib_encoder: zlib,
+            writer: match args.output_format {
+                OutputFormat::RawCompressed => Some(ZlibEncoder::new(
+                    OutputWriter::RawCompressed(stream_writer),
+                    Compression::best(),
+                )),
+                OutputFormat::Blueprint => Some(ZlibEncoder::new(
+                    OutputWriter::Base64(EncoderWriter::new(stream_writer, &STANDARD)),
+                    Compression::best(),
+                )),
+                _ => None,
+            },
         }
     }
 
@@ -54,7 +80,8 @@ impl<'a> BlueprintEncoder<'a> {
         // Handle Factorio version prefix
         if !self.started {
             self.started = true; // Set before we return to prevent infinite loop
-            if self.zlib_encoder.is_some() {
+
+            if self.args.output_format == OutputFormat::Blueprint {
                 return Ok(Some(FACTORIO_VERSION_PREFIX.as_bytes().to_vec()));
             }
         }
@@ -68,24 +95,25 @@ impl<'a> BlueprintEncoder<'a> {
             }
 
             if !self.blueprint_generator.done() {
-                if self.zlib_encoder.is_some() {
+                if self.writer.is_some() {
                     self.blueprint_generator
-                        .next_chunk(&mut self.zlib_encoder.as_mut().unwrap())?;
+                        .next_chunk(&mut self.writer.as_mut().unwrap())?;
                 } else {
                     let mut buf = Vec::new();
                     self.blueprint_generator.next_chunk(&mut buf)?;
                     self.chunks.lock().unwrap().push_back(buf);
                 }
                 continue;
-            } else if self.zlib_encoder.is_none() {
+            } else if self.writer.is_none() {
                 return Ok(None);
             }
 
             report_progress(1.0, "Finishing...");
 
-            let zlib = self.zlib_encoder.take().unwrap();
-            let mut b64 = zlib.finish().unwrap_throw();
-            let _writer = b64.finish().unwrap_throw();
+            let zlib = self.writer.take().unwrap();
+            if let OutputWriter::Base64(mut b64) = zlib.finish().unwrap_throw() {
+                let _writer = b64.finish().unwrap_throw();
+            }
 
             self.finished = true;
         }

@@ -31,6 +31,7 @@ lazy_const!(pub SUBSTATION      : str     = "substation"           );
 lazy_const!(pub LAMP            : str     = "small-lamp"           );
 lazy_const!(pub BLUEPRINT       : str     = "blueprint"            );
 
+lazy_const!(pub DEFAULT_QUAL_KEY: str     = "<default>"            );
 lazy_const!(pub SIG_TYPE_VIRTUAL: str     = "virtual"              );
 
 pub const SIG_EACH: std::sync::LazyLock<crate::blueprint::models::Signal> =

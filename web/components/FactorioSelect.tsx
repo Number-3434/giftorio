@@ -11,7 +11,7 @@ export interface FactorioSelectProps extends Omit<JSX.SelectHTMLAttributes<HTMLS
   name?: string;
   onChange(value: string): void;
   tooltip?: string;
-  options: [string, string | SelectOption][];
+  options: (readonly [string, string | SelectOption])[];
   splash?: string;
 }
 export default function FactorioSelect(props: FactorioSelectProps) {

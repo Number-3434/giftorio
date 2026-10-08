@@ -20,6 +20,8 @@ pub struct BlueprintArgs {
     pub image_metadata: ImageMetadata,
     #[serde(rename = "imageRotation")]
     pub image_rotation: ImageRotation,
+    #[serde(rename = "includeSubstations")]
+    pub include_substations: bool,
     #[serde(rename = "displayMarginY")]
     pub lamp_margin_y: u32,
     #[serde(rename = "maxGroupSize")]
@@ -162,4 +164,6 @@ pub enum OutputFormat {
     Blueprint,
     #[serde(rename = "json")]
     Json,
+    #[serde(rename = "rawCompressed")]
+    RawCompressed,
 }

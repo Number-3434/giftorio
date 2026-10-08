@@ -42,28 +42,19 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
 
   return (
     <dialog ref={refDialog}>
-      {/* <dialog class="mt-5 mb-1 flex flex-col items-start gap-1 justify-between w-full" ref={refDialog}> */}
       <KeyboardListener keys={["Escape"]} onKeyDown={() => hide()} />
-      <form
-        class="backdrop flex flex-col items-center justify-center"
-        method="dialog"
-        onSubmit={() => {
-          const { name, description } = formData;
-          const preset = { ...(currData() as SignalData), description };
-          props.onSubmit(name, preset);
-        }}
-      >
-        <div
-          class="panel flex flex-col min-h-md h-[75vh] w-[50vw]"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const STAGES = { copyCommand: "pasteSignals", pasteSignals: "metadata", metadata: null } as const;
-            if ((status() as any) in STAGES) {
-              setStatus(STAGES[status()! as keyof typeof STAGES]);
-            }
-          }}
-        >
-          <Show when={status() === "copyCommand"}>
+      <div class="backdrop flex flex-col items-center justify-center">
+        <Show when={status() === "copyCommand"}>
+          <form
+            class="panel flex flex-col min-h-md h-[75vh] w-[50vw]"
+            method="dialog"
+            onSubmit={() => {
+              // const { name, description } = formData;
+              // const preset = { ...(currData() as SignalData), description };
+              setStatus("pasteSignals");
+              // props.onSubmit(name, preset);
+            }}
+          >
             <EventListener event="copy" handler={() => showToast("Copied to clipboard!")} />
             <KeyboardListener keys={["Enter", "e", "E"]} onKeyDown={() => setStatus("pasteSignals")} />
             <div class="font-semibold mb-5 text-tan-500 text-xl">Create Signal Preset</div>
@@ -102,12 +93,19 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
                 Copy
               </button>
               <div />
-              <button class="button button-green-right" type="button" onClick={() => setStatus("pasteSignals")}>
-                Next
-              </button>
+              <button class="button button-green-right">Next</button>
             </div>
-          </Show>
-          <Show when={status() === "pasteSignals"}>
+          </form>
+        </Show>
+        <Show when={status() === "pasteSignals"}>
+          <form
+            class="panel flex flex-col min-h-md h-[75vh] w-[50vw]"
+            onSubmit={() => {
+              const { signals, qualities } = currData()!;
+              showToast(`Successfully imported ${signals.length} signals and ${qualities.length} qualities!`);
+              setStatus("metadata");
+            }}
+          >
             <div class="font-semibold mb-5 text-tan-500 text-xl">Signal and Quality Extraction: Paste Signals</div>
             <div class="text-white-500">
               <div>Please paste the signals below.</div>
@@ -141,20 +139,19 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
                 Back
               </button>
               <div />
-              <button
-                class="button button-green-right"
-                type="button"
-                onClick={() => {
-                  const { signals, qualities } = currData()!;
-                  showToast(`Successfully imported ${signals.length} signals and ${qualities.length} qualities!`);
-                  setStatus("metadata");
-                }}
-              >
-                Next
-              </button>
+              <button class="button button-green-right">Next</button>
             </div>
-          </Show>
-          <Show when={status() === "metadata"}>
+          </form>
+        </Show>
+        <Show when={status() === "metadata"}>
+          <form
+            class="panel flex flex-col min-h-md h-[75vh] w-[50vw]"
+            onSubmit={() => {
+              const { name, description } = formData;
+              const preset = { ...(currData() as SignalData), description };
+              props.onSubmit(name, preset);
+            }}
+          >
             <div class="font-semibold mb-5 text-tan-500 text-xl">Signal and Quality Extraction: Configuration</div>
             <div class="text-white-500 text-sm">
               <div>Configure settings for this signal preset.</div>
@@ -178,9 +175,11 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
                     const { value } = e.currentTarget;
 
                     if (props.signalPresetKeys.includes(value)) {
+                      console.log(value);
                       errM.report(`The name "${value}" is already in use.`);
                       return;
                     }
+
                     errM.test() && setFormData("name", e.currentTarget.value);
                   }}
                 />
@@ -209,9 +208,9 @@ export default function Extraction({ showToast, ...props }: SignalFormExtraction
               <div />
               <button class="button button-green-right">Import</button>
             </div>
-          </Show>
-        </div>
-      </form>
+          </form>
+        </Show>
+      </div>
     </dialog>
   );
 }

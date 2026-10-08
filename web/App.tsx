@@ -274,6 +274,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
             },
             imageFilters: [],
             imageRotation: `${formData.imageRotation}`,
+            includeSubstations: formData.includeSubstations,
             maxGroupSize: +formData.maxGroupSize! || null,
             maxSize: +formData.maxSize,
             mode: getMode(),
@@ -284,7 +285,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
             signalCompression,
             signalSorting:
               formData.signalSorting === "auto" ? (formData.outputFormat === "json" ? "json" : "compression") : `${formData.signalSorting}`,
-            substationQuality: formData.substationQuality === "none" ? null : `${formData.substationQuality}`,
+            substationQuality: formData.substationQuality,
             targetFps: +formData.targetFps,
             timingSignals: timingSignals(),
             useGreenLampWires: !!(formData.wireColor === "green"),
@@ -618,18 +619,21 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
 
               <Show when={signalPreset()}>
                 <FactorioSelect
-                  name="Substations"
+                  name="Substation Quality"
                   key="substationQuality"
-                  title="The quality level of the substations. Set to 'None' to disable substations."
+                  title="The quality level of the substations."
                   disabled={!formData.includeSubstations}
-                  options={signalPreset()!.qualities.map((q) => [q, { name: q, tooltip: `Maps to the internal quality "${q}".` }])}
+                  options={[
+                    ["<default>", { name: "<Default>", tooltip: "Use the default quality level, if any." }],
+                    ...signalPreset()!.qualities.map((q) => [q, { name: q, tooltip: `Maps to the internal quality "${q}".` }] as const),
+                  ]}
                   tooltip="The quality level of the substations."
                   splash={
                     signalPreset()!.qualities.length === 0
                       ? "Unavailable as the current signal preset does not support quality levels."
                       : ""
                   }
-                  initialValue={formData.substationQuality ?? ""}
+                  initialValue={formData.substationQuality ?? "<default>"}
                   onChange={(v) => setFormData("substationQuality", v)}
                 />
               </Show>

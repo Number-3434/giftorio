@@ -26,10 +26,6 @@ export default function SignalPresetSelect(props: SignalPresetSelectProps) {
   createEffect(() => currPresetKey() && localStorage.setItem(CURR_SIGNAL_PRESET_KEY, currPresetKey()!));
   createEffect(() => props.setSignalPreset(currPreset()!));
 
-  createEffect(() => {
-    console.log(signalPresetKeys());
-  });
-
   return (
     <div class="mt-5 mb-1 flex flex-col items-start gap-1 justify-between w-full">
       <DialogDelete

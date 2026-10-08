@@ -1,30 +1,39 @@
-use crate::blueprint::{constants::*, macros::*, models::*};
+use crate::{
+    blueprint::{constants::*, macros::*, models::*},
+    macros::log,
+};
 use glam::{dvec2, DVec2};
 use std::sync::Arc;
 
 /// Tracks cells occupied by substations.
 pub struct SubstationOccupied {
     pub start_pos: DVec2,
+    include_substations: bool,
     quality: Option<Arc<str>>,
     requests: Vec<DVec2>,
 }
 impl SubstationOccupied {
-    pub fn new(start_pos: DVec2, quality: Option<Arc<str>>) -> Self {
+    pub fn new(start_pos: DVec2, args: &BlueprintArgs) -> Self {
+        let quality = args.substation_quality.clone();
+        let quality = quality.filter(|q| *q != *DEFAULT_QUAL_KEY);
+
         Self {
             start_pos,
             requests: Vec::new(),
+            include_substations: args.include_substations,
             quality,
         }
     }
 
     pub fn coverage(&self) -> f64 {
-        2.0 * self.quality.as_ref().map_or(0, |q| match q.as_ref() {
-            "normal" => 9,
+        const DEFAULT: i32 = 9;
+        2.0 * self.quality.as_ref().map_or(DEFAULT, |q| match q.as_ref() {
+            "normal" => DEFAULT,
             "uncommon" => 10,
             "rare" => 11,
             "epic" => 12,
             "legendary" => 14,
-            _ => 0,
+            _ => DEFAULT,
         }) as f64
     }
 
@@ -34,7 +43,7 @@ impl SubstationOccupied {
     ///
     /// A `bool` indicating whether the substation would NOT occupy the given point.
     pub fn test(&mut self, mut point: DVec2) -> bool {
-        if self.coverage() == 0.0 {
+        if !self.include_substations || self.coverage() == 0.0 {
             return true;
         }
         point -= self.start_pos;
@@ -89,9 +98,14 @@ pub fn generate_substations(
     let mut curr_ent_n: u32 = base_ent_n;
     let cov = occupied.coverage();
 
-    if cov == 0.0 {
+    if !occupied.include_substations || cov == 0.0 {
         return (subs, wires, base_ent_n);
     }
+
+    log!(
+        "Sub qual: {}",
+        occupied.quality.as_ref().unwrap_or(&"...".into())
+    );
 
     // f64 doesn't implement Ord, so we use total_cmp (which also sorts NaN)
     occupied.requests.sort_by(|a, b| a.y.total_cmp(&b.y)); // Group by sorted y

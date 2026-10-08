@@ -43,8 +43,12 @@ async function main() {
 
         if (outputFormat === "blueprint") {
           postMessage({ type: "start", filename: "blueprint.bp" });
-        } else {
+        } else if (outputFormat === "json") {
           postMessage({ type: "start", filename: "blueprint.json" });
+        } else if (outputFormat === "rawCompressed") {
+          postMessage({ type: "start", filename: "blueprint.zlib" });
+        } else {
+          console.error("Unknown output format:", outputFormat);
         }
 
         await writerReady;

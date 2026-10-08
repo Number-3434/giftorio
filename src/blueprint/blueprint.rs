@@ -138,7 +138,7 @@ impl<'a> BlueprintGenerator<'a> {
             dim: frame_dim,
             max_cols_per_grp: max_lamp_cols_per_grp,
             n_groups,
-            occupied: SubstationOccupied::new(sub_base_pos, args.substation_quality.clone()),
+            occupied: SubstationOccupied::new(sub_base_pos, &args),
             should_generate_cbs: match args.mode {
                 Mode::Static { combs: false, .. } | Mode::Lamps | Mode::LampGrid => false,
                 _ => true,

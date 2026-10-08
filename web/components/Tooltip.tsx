@@ -5,7 +5,7 @@ import { JSX } from "solid-js";
 export interface TooltipProps {
   name: string;
   tooltip?: JSX.Element;
-  options?: [string, string | SelectOption][];
+  options?: (readonly [string, string | SelectOption])[];
   splash?: string;
 }
 export default function Tooltip(props: TooltipProps) {
