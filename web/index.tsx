@@ -79,13 +79,11 @@ worker.addEventListener("message", async (event) => {
   }
 });
 
-window.addEventListener("beforeunload", () => {
-  writer?.abort();
-});
+window.addEventListener("beforeunload", () => writer?.abort());
 
 function openDownloadWindow() {
   refApp.showOpenStreamingWindowWarning();
-  return window.open(downloadUrl!, "Giftorio: Streaming Download Unblocker", "noopener,noreferrer,left=0,top=0,width=100,height=100");
+  return window.open(downloadUrl!, "Giftorio: Streaming Download Unblocker", "noopener,noreferrer,width=100,height=100");
 }
 const root = document.getElementById("root");
 

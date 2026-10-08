@@ -1,6 +1,8 @@
 import { SignalData, SignalPreset } from "@/data";
 import { gunzipSync, gzipSync } from "fflate";
 
+const DB_VERSION = 2;
+
 const APP_STORAGE_KEY = "app-storage";
 const FILE_STORAGE_KEY = "file-storage";
 const SIGNAL_PRESETS_STORAGE_KEY = "signal-data-presets";
@@ -18,7 +20,7 @@ const PRESET_MAP = {
 export const DEFAULT_SIGNAL_PRESET_KEYS = Object.keys(PRESET_MAP);
 
 const fileDBPromise: Promise<IDBDatabase> = new Promise((resolve, reject) => {
-  const req = indexedDB.open(APP_STORAGE_KEY, 1);
+  const req = indexedDB.open(APP_STORAGE_KEY, DB_VERSION);
   req.onupgradeneeded = () => {
     const { result } = req;
     result.createObjectStore(FILE_STORAGE_KEY);

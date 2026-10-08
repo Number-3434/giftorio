@@ -2,6 +2,7 @@ use crate::blueprint::{
     combinator::*, constants::*, lamp::*, models::*, signals::*, substation::*, timer::*, util::*,
 };
 use crate::image_processing::FrameData;
+use crate::macros::log;
 use crate::progress::set_progress;
 use glam::{dvec2, uvec2, UVec2};
 use std::{io, sync::Arc};
@@ -67,10 +68,10 @@ impl<'a> BlueprintGenerator<'a> {
         let signals: Vec<Arc<Signal>> = Self::get_signal_data(&args);
         let gray_bits = args.grayscale_bits;
         let comb_comp = args.signal_compression;
-        let time_comp_win = comb_comp.map_or(0, |c| match c {
-            SignalCompression::Temporal { window } => window,
+        let time_comp_win = match comb_comp {
+            Some(SignalCompression::Temporal { window }) => window,
             _ => 0,
-        });
+        };
         let mut frame_info: Option<FrameInfo> = None;
         let frame_dim: UVec2;
 
@@ -96,10 +97,9 @@ impl<'a> BlueprintGenerator<'a> {
                 use_delta_comp: comb_comp.is_some_and(|c| c == SignalCompression::Delta),
             });
         } else {
-            frame_dim = uvec2(
-                args.custom_width.expect("Must have width or frame data."),
-                args.custom_height.expect("Must have height or frame data."),
-            );
+            let w = args.custom_width.expect("Must have width or frame data.");
+            let h = args.custom_height.expect("Must have height or frame data.");
+            frame_dim = uvec2(w, h);
         }
         let use_const_cbs = matches!(args.mode, Mode::Static { const_cb: true, .. });
         let max_lamp_cols_per_grp = if matches!(args.mode, Mode::Static { combs: false, .. }) {
@@ -155,26 +155,21 @@ impl<'a> BlueprintGenerator<'a> {
             Arc::from(args.timing_sigs.t.clone()),
         ];
         let mut signals = SIGNALS.with_borrow(|data| {
-            data.iter()
-                .filter(|&v| !blacklist_signals.contains(v))
-                .cloned()
-                .collect::<Vec<_>>()
+            let filtered = data.iter().filter(|&v| !blacklist_signals.contains(v));
+            filtered.cloned().collect::<Vec<_>>()
         });
         match args.signal_sorting {
             // Only sort by name (compressor really likes this)
-            SignalSorting::Compression => signals.sort_by_key(|s| s.name.len()),
+            SignalSorting::Compression => signals.sort_by(|a, b| a.name.cmp(&b.name)),
+            // Sort by total length of the type + name + quality (actual smallest JSON)
             SignalSorting::Json => signals.sort_by_key(|s| {
-                // Sort by total length of the type + name + quality (actual smallest JSON)
                 s.quality.as_ref().map_or(0, |q| match q.as_ref() {
-                    "normal" => -1 * ",'quality':''".len() as i64,
+                    "normal" => -1 * ",\"quality\":\"normal\"".len() as i64,
                     _ => q.to_string().len() as i64,
-                }) + s.name.len() as i64
-                    + s.type_.len() as i64
-                    + if s.type_.as_ref() == "item" {
-                        -1 * ",'type':''".len() as i64 // type defaults to "item" if not specified
-                    } else {
-                        s.type_.len() as i64
-                    }
+                }) + match s.type_.as_ref() {
+                    "item" => -1 * ",\"type\":\"item\"".len() as i64, // type defaults to "item" if not specified
+                    _ => s.type_.len() as i64,
+                } + s.name.len() as i64
             }),
             _ => {}
         };
@@ -381,11 +376,8 @@ impl<'a> BlueprintGenerator<'a> {
         let n_groups = self.n_groups;
 
         for group_i in 0..n_groups {
-            let thresh = if matches!(args.mode, Mode::Static { .. }) {
-                0.60
-            } else {
-                0.10
-            };
+            let is_static = matches!(args.mode, Mode::Static { .. });
+            let thresh = if is_static { 0.60 } else { 0.10 };
             set_progress(
                 0.00,
                 thresh,
@@ -409,6 +401,8 @@ impl<'a> BlueprintGenerator<'a> {
             );
             let (top_left_lamp_ent_n, top_right_lamp_ent_n) = io_ents_n;
             ent_data.next_ent_n = new_next_ent_n;
+
+            log!("group_left: {grp_left}");
 
             if self.should_generate_cbs {
                 let info = info.as_mut().unwrap();
