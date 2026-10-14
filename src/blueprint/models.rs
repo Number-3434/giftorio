@@ -325,19 +325,29 @@ impl NetworkSwapper for CombinatorOutput {
     }
 }
 
+fn is_none_or_0(value: &Option<i32>) -> bool {
+    return matches!(value, None | Some(0));
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Condition {
-    pub first_signal: Option<Signal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_signal: Option<Arc<Signal>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub second_signal: Option<Arc<Signal>>,
+    #[serde(skip_serializing_if = "is_none_or_0")]
     pub constant: Option<i32>,
     pub comparator: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub compare_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub first_signal_networks: Option<NetworkFilters>,
 }
 impl Condition {
     pub fn new(first_signal: Signal, constant: i32, comparator: &str) -> Self {
         Self {
-            first_signal: Some(first_signal),
+            first_signal: Some(Arc::from(first_signal)),
+            second_signal: None,
             constant: Some(constant),
             comparator: Some(comparator.to_owned()),
             compare_type: None,

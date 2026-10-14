@@ -40,7 +40,7 @@ bp = {
 conds = []
 
 
-for i in range(100_000):
+for i in range(1000):
     conds.extend([
         {"first_signal": {"type": "virtual", "name": "signal-red"}, "comparator": "\u2260"},
         {"first_signal": {"type": "virtual", "name": "signal-T"}, "constant": i + 3, "comparator": "=", "compare_type": "and"},

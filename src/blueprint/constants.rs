@@ -34,9 +34,17 @@ lazy_const!(pub SIG_TYPE_VIRTUAL: str     = "virtual"              );
 
 pub const DEFAULT_POWER_POLE_NAME: &'static str = "substation";
 
+pub const SIG_ANY: std::sync::LazyLock<crate::blueprint::models::Signal> =
+    std::sync::LazyLock::new(|| {
+        crate::blueprint::models::Signal::new_virtual(std::sync::Arc::from("signal-anything"))
+    });
 pub const SIG_EACH: std::sync::LazyLock<crate::blueprint::models::Signal> =
     std::sync::LazyLock::new(|| {
         crate::blueprint::models::Signal::new_virtual(std::sync::Arc::from("signal-each"))
+    });
+pub const SIG_EVERY: std::sync::LazyLock<crate::blueprint::models::Signal> =
+    std::sync::LazyLock::new(|| {
+        crate::blueprint::models::Signal::new_virtual(std::sync::Arc::from("signal-everything"))
     });
 
 /// Comparators

@@ -5,7 +5,7 @@ use crate::image_processing::FrameData;
 use crate::macros::log;
 use crate::progress::set_progress;
 use glam::{dvec2, uvec2, UVec2};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{io, sync::Arc};
 use wasm_bindgen::{JsValue, UnwrapThrowExt};
 
@@ -15,6 +15,7 @@ const ENCODE_CHUNK_SIZE: usize = 100;
 /// Number of wires to encode per chunk. Since wires generate much less data,
 /// we can batch more wires together for better speed.
 const WIRE_ENCODE_CHUNK_SIZE: usize = 5000;
+const USE_V2: bool = true;
 
 pub struct BlueprintGenerator<'a> {
     args: &'a BlueprintArgs,
@@ -27,7 +28,7 @@ pub struct BlueprintGenerator<'a> {
     should_generate_cbs: bool,
     signals: Vec<Arc<Signal>>,
     signals_map: HashMap<Arc<str>, HashMap<Arc<str>, usize>>,
-    pixels: Vec<HashMap<i32, Vec<[usize; 2]>>>, // for each group, map<pixel value, vec<indices>>
+    pixels: Vec<[HashMap<usize, Vec<[i32; 2]>>; 24]>, // for each group, each bit of a 24-bit integer, Map<pixel_idx, [frame_start, frame_end]>
     state: BlueprintState,
 }
 
@@ -88,8 +89,12 @@ impl<'a> BlueprintGenerator<'a> {
 
         if let Some(mut frame_data) = frame_data {
             let n_scaled_frames = frame_data.total_frames() * if time_comp_win > 0 { 2 } else { 1 };
-            let frames_per_cb = if gray_bits > 0 { 32 / gray_bits } else { 1 };
-            let n_buf_frames = if time_comp_win > 0 {
+            let frames_per_cb = if !USE_V2 && gray_bits > 0 {
+                32 / gray_bits
+            } else {
+                1
+            };
+            let n_buf_frames = if !USE_V2 && time_comp_win > 0 {
                 (time_comp_win * args.target_fps).div_ceil(1000 * frames_per_cb)
             } else {
                 1
@@ -159,7 +164,9 @@ impl<'a> BlueprintGenerator<'a> {
             max_cols_per_grp: max_lamp_cols_per_grp,
             n_groups,
             occupied: PowerPoleOccupied::new(dvec2(0.0, -(args.lamp_margin_y as f64)), &args),
-            pixels: vec![HashMap::new(); n_groups as usize],
+            pixels: (0..n_groups)
+                .map(|_| std::array::from_fn(|_| HashMap::new()))
+                .collect(),
             should_generate_cbs: !matches!(
                 args.mode,
                 Mode::Static { combs: false, .. } | Mode::Lamps | Mode::LampGrid
@@ -470,7 +477,11 @@ impl<'a> BlueprintGenerator<'a> {
                 let info = info.as_mut().unwrap();
                 let (other_ents, data_combs, wires, (in_ent_n, out_ent_n, new_base_ent_n)) =
                     generate_combinators(
-                        info.n_scaled_frames.div_ceil(info.frames_per_cb),
+                        if USE_V2 {
+                            25
+                        } else {
+                            info.n_scaled_frames.div_ceil(info.frames_per_cb)
+                        },
                         &mut self.occupied,
                         ent_data.next_ent_n,
                         dvec2(grp_left as f64, -1.0 * args.lamp_margin_y as f64),
@@ -541,7 +552,7 @@ impl<'a> BlueprintGenerator<'a> {
 
         let group_data_combs = &mut info.group_data_combs;
         let frame_data = &mut info.frame_data;
-        let signals = &mut self.signals;
+        let signals = &self.signals;
 
         let frames_per_cb = info.frames_per_cb;
         let gray_bits = self.args.grayscale_bits;
@@ -550,7 +561,11 @@ impl<'a> BlueprintGenerator<'a> {
         let n_groups = self.n_groups;
         let ticks_per_frame = info.ticks_per_frame;
         let use_delta_comp = info.use_delta_comp;
-        let ticks_per_grp = ticks_per_frame * frames_per_cb;
+        let ticks_per_grp = if USE_V2 {
+            24
+        } else {
+            ticks_per_frame * frames_per_cb
+        };
         let mode = self.args.mode;
         let sig_t = self.args.timing_sigs.t.clone();
 
@@ -610,37 +625,40 @@ impl<'a> BlueprintGenerator<'a> {
                 let img = frame.crop_imm(grp_left, 0, grp_right - grp_left, self.dim.y);
                 let target_outputs_len = (img.width() * img.height()) as usize;
 
-                if true {
+                if USE_V2 {
                     use crate::image_processing::rgb_to_int;
 
-                    let rgb = frame.to_rgb8();
-                    let mut outputs = Vec::with_capacity((frame.width() * frame.height()) as usize);
-                    let map = &mut self.pixels[group_i as usize];
+                    let rgb = img.to_rgb8();
+                    let group_data = &mut self.pixels[group_i as usize];
 
-                    for (chunk_i, chunk) in rgb.as_raw().chunks_exact(3).enumerate() {
-                        let pixel_value = rgb_to_int(chunk[0], chunk[1], chunk[2]) as i32;
-                        outputs.push(pixel_value);
+                    for (sig_i, chunk) in rgb.as_raw().chunks_exact(3).enumerate() {
+                        let pixel_value = rgb_to_int(chunk[0], chunk[1], chunk[2]);
+                        let mut bits = pixel_value;
 
-                        if !map.contains_key(&pixel_value) {
-                            map.insert(pixel_value, Vec::new());
-                        }
+                        while bits != 0 {
+                            let bit_i = bits.trailing_zeros();
+                            bits &= bits - 1;
 
-                        let target = map.get_mut(&pixel_value).unwrap();
-                        if let Some(last) = target.last_mut() {
-                            if last[1] == chunk_i - 1 {
-                                last[1] = chunk_i;
-                            } else {
-                                target.push([chunk_i, chunk_i]);
+                            let map = &mut group_data[bit_i as usize];
+                            if !map.contains_key(&sig_i) {
+                                map.insert(sig_i, Vec::new());
                             }
-                        } else {
-                            target.push([chunk_i, chunk_i]);
+                            let t = map.get_mut(&sig_i).unwrap();
+                            if let Some(last) = t.last_mut() {
+                                if last[1] as u32 == state.chunk_i.saturating_sub(1) {
+                                    last[1] = state.chunk_i as i32
+                                } else {
+                                    t.push([state.chunk_i as i32, state.chunk_i as i32]);
+                                }
+                            } else {
+                                t.push([state.chunk_i as i32, state.chunk_i as i32]);
+                            }
                         }
                     }
-                    let n = self
-                        .pixels
-                        .iter()
-                        .fold(0, |acc, x| acc + x.len() * 2 * usize::BITS as usize);
-                    log!("group {}: {:?}", group_i, n);
+                    // let n = self.pixels.iter().fold(0, |n, x| {
+                    //     n + x.iter().fold(0, |n, x| n + x.len()) * 2 * usize::BITS as usize
+                    // });
+                    // log!("group {}: {:?}", group_i, n);
 
                     frame_sigs = Vec::new();
                 } else {
@@ -673,7 +691,134 @@ impl<'a> BlueprintGenerator<'a> {
                     }
                 }
 
-                if true {
+                if USE_V2 {
+                    if is_last_frame {
+                        let sig_any = Arc::from(SIG_ANY.clone());
+                        let sig_each = Arc::from(SIG_EACH.clone());
+                        let sig_every = Arc::from(SIG_EVERY.clone());
+
+                        // `i` is index of pixel value in a 24-bit integer, times is the frame ranges for which it should be active`
+                        for (i, map) in self.pixels[group_i as usize].iter().enumerate() {
+                            log!("{group_i}: {i}");
+
+                            let mut did_use_sig_each = false;
+                            let mut conds = Vec::new();
+                            let mut frames: Vec<Vec<usize>> =
+                                vec![Vec::new(); state.chunk_i as usize];
+
+                            for (&sig_i, ranges) in map {
+                                for r in ranges {
+                                    for f_i in r[0]..r[1] {
+                                        frames[f_i as usize].push(sig_i);
+                                    }
+
+                                    // conds.push(Condition {
+                                    //     first_signal: Some(Arc::clone(&sig_each)),
+                                    //     second_signal: None,
+                                    //     comparator: Some("=".to_owned()),
+                                    //     constant: Some(i32::MAX - sig_i as i32),
+                                    //     compare_type: None,
+                                    //     first_signal_networks: None,
+                                    // });
+
+                                    // if r[0] == r[1] {
+                                    //     conds.push(
+                                    //         Condition::new(sig_t.clone(), r[0], "=")
+                                    //             .with_compare_type(COMP_AND),
+                                    //     );
+                                    // } else {
+                                    //     conds.extend([
+                                    //         Condition::new(sig_t.clone(), r[0], ">=")
+                                    //             .with_compare_type(COMP_AND),
+                                    //         Condition::new(sig_t.clone(), r[1], "<=")
+                                    //             .with_compare_type(COMP_AND),
+                                    //     ])
+                                    // }
+                                }
+                            }
+
+                            for (frame_i, frame_group) in frames.iter().enumerate() {
+                                let frame_sig_i_bounds = *frame_group.iter().min().unwrap()
+                                    ..*frame_group.iter().max().unwrap();
+
+                                conds.push(Condition {
+                                    first_signal: Some(Arc::from(sig_t.clone())),
+                                    second_signal: None,
+                                    comparator: Some("=".to_owned()),
+                                    constant: Some(frame_i as i32),
+                                    compare_type: None,
+                                    first_signal_networks: None,
+                                });
+                                conds.push(Condition {
+                                    first_signal: Some(sig_each.clone()),
+                                    second_signal: None,
+                                    comparator: Some("<=".to_owned()),
+                                    constant: Some(i32::MAX - frame_sig_i_bounds.start as i32),
+                                    compare_type: Some(COMP_AND.to_owned()),
+                                    first_signal_networks: None,
+                                });
+                                conds.push(Condition {
+                                    first_signal: Some(sig_each.clone()),
+                                    second_signal: None,
+                                    comparator: Some(">=".to_owned()),
+                                    constant: Some(i32::MAX - frame_sig_i_bounds.end as i32),
+                                    compare_type: Some(COMP_AND.to_owned()),
+                                    first_signal_networks: None,
+                                });
+
+                                log!("Bounds: {frame_sig_i_bounds:?}");
+
+                                for sig_i in frame_sig_i_bounds.clone() {
+                                    if frame_group.contains(&sig_i) {
+                                        continue;
+                                    }
+
+                                    conds.push(Condition {
+                                        first_signal: Some(sig_each.clone()),
+                                        second_signal: None,
+                                        comparator: Some("!=".to_owned()),
+                                        constant: Some(i32::MAX - sig_i as i32),
+                                        compare_type: Some(COMP_AND.to_owned()),
+                                        first_signal_networks: None,
+                                    });
+                                }
+                            }
+
+                            let en = data_combs[i].clone();
+                            let cb = ControlBehavior::from_decider_conditions(DeciderConditions {
+                                conditions: Some(conds),
+                                outputs: Some(vec![CombinatorOutput::new(
+                                    Arc::clone(&sig_each),
+                                    Some(1 << i),
+                                )]),
+                            });
+                            output_ents.push(en.with_control_behavior(cb));
+
+                            // write_to(&mut writer, b",")?;
+                            // write_json_trimmed_to(&mut writer, &output_ents)?; // Remove braces
+                        }
+
+                        if group_i == 0 {
+                            let en = data_combs[24].clone();
+                            let en_n = en.entity_number;
+                            let mut outputs: Vec<CombinatorOutput> = Vec::new();
+
+                            for (sig_i, sig) in self.signals.iter().enumerate() {
+                                let sig = Arc::clone(&sig);
+                                let count = Some(i32::MAX - sig_i as i32);
+                                outputs.push(CombinatorOutput::new(sig, count));
+                            }
+                            self.entity_data
+                                .wires
+                                .push([en_n, WIRE_R, en_n, WIRE_OUT_R]);
+
+                            let cb = ControlBehavior::from_decider_conditions(DeciderConditions {
+                                conditions: Some(vec![Condition::new(sig_t.clone(), -1, "!=")]),
+                                outputs: Some(outputs),
+                            });
+                            output_ents.push(en.with_control_behavior(cb));
+                        }
+                    }
                 } else if use_delta_comp {
                     // Delta compression branch
                     let prev_outputs = &state.sig_buf[0];
