@@ -766,8 +766,6 @@ impl<'a> BlueprintGenerator<'a> {
                                     first_signal_networks: None,
                                 });
 
-                                log!("Bounds: {frame_sig_i_bounds:?}");
-
                                 for sig_i in frame_sig_i_bounds.clone() {
                                     if frame_group.contains(&sig_i) {
                                         continue;
@@ -784,7 +782,7 @@ impl<'a> BlueprintGenerator<'a> {
                                 }
                             }
 
-                            let en = data_combs[i].clone();
+                            let mut en = data_combs[i].clone();
                             let cb = ControlBehavior::from_decider_conditions(DeciderConditions {
                                 conditions: Some(conds),
                                 outputs: Some(vec![CombinatorOutput::new(
@@ -792,7 +790,14 @@ impl<'a> BlueprintGenerator<'a> {
                                     Some(1 << i),
                                 )]),
                             });
-                            output_ents.push(en.with_control_behavior(cb));
+                            en = en.with_control_behavior(cb);
+
+                            self.occupied.request(en.position); // Request powerage for generated combinators
+                            Self::transform_entity(&self.args, &mut en);
+
+                            let json_bytes = serde_json::to_vec(&en).map_js_err("JSON error")?;
+                            write_to(writer, b",")?;
+                            write_to(writer, &json_bytes)?; // Remove braces
 
                             // write_to(&mut writer, b",")?;
                             // write_json_trimmed_to(&mut writer, &output_ents)?; // Remove braces
