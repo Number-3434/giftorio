@@ -2,8 +2,10 @@ use crate::blueprint::{
     combinator::*, constants::*, lamp::*, models::*, power_pole::*, signals::*, timer::*, util::*,
 };
 use crate::image_processing::FrameData;
+use crate::macros::log;
 use crate::progress::set_progress;
 use glam::{dvec2, uvec2, UVec2};
+use std::collections::HashMap;
 use std::{io, sync::Arc};
 use wasm_bindgen::{JsValue, UnwrapThrowExt};
 
@@ -24,6 +26,8 @@ pub struct BlueprintGenerator<'a> {
     occupied: PowerPoleOccupied,
     should_generate_cbs: bool,
     signals: Vec<Arc<Signal>>,
+    signals_map: HashMap<Arc<str>, HashMap<Arc<str>, usize>>,
+    pixels: Vec<HashMap<i32, Vec<[usize; 2]>>>, // for each group, map<pixel value, vec<indices>>
     state: BlueprintState,
 }
 
@@ -32,6 +36,7 @@ struct FrameInfo<'a> {
     curr_frame: image::DynamicImage,
     frame_data: FrameData<'a>,
     frames_per_cb: u32,
+    image_buf: &'a [u8],
     group_data_combs: Vec<Vec<Entity>>,
     n_buf_frames: u32,
     n_scaled_frames: u32,
@@ -63,7 +68,7 @@ struct GroupPatchState {
 }
 
 impl<'a> BlueprintGenerator<'a> {
-    pub fn new(data: Option<FrameData<'a>>, args: &'a BlueprintArgs) -> Result<Self, JsValue> {
+    pub fn new(image_data: &'a [u8], args: &'a BlueprintArgs) -> Result<Self, JsValue> {
         let signals: Vec<Arc<Signal>> = Self::get_signal_data(&args);
         let gray_bits = args.grayscale_bits;
         let comb_comp = args.signal_compression;
@@ -73,8 +78,15 @@ impl<'a> BlueprintGenerator<'a> {
         };
         let mut frame_info: Option<FrameInfo> = None;
         let frame_dim: UVec2;
+        let mut frame_data: Option<FrameData> = None;
 
-        if let Some(mut frame_data) = data {
+        if matches!(args.mode, Mode::Full | Mode::Static { .. }) {
+            // Create iterator over frames. Auto-detects the total number of frames + total duration
+            // using custom byte scanning.
+            frame_data = Some(FrameData::new(image_data, &args)?);
+        }
+
+        if let Some(mut frame_data) = frame_data {
             let n_scaled_frames = frame_data.total_frames() * if time_comp_win > 0 { 2 } else { 1 };
             let frames_per_cb = if gray_bits > 0 { 32 / gray_bits } else { 1 };
             let n_buf_frames = if time_comp_win > 0 {
@@ -88,6 +100,7 @@ impl<'a> BlueprintGenerator<'a> {
                 frame_data,
                 group_data_combs: Vec::new(),
                 frames_per_cb,
+                image_buf: image_data,
                 n_buf_frames,
                 n_scaled_frames,
                 next_frame: None,
@@ -126,6 +139,14 @@ impl<'a> BlueprintGenerator<'a> {
                 .collect();
         }
 
+        let mut signals_map = HashMap::<Arc<str>, HashMap<Arc<str>, usize>>::new();
+
+        for (i, sig) in signals.iter().enumerate() {
+            if !signals_map.contains_key(&sig.type_) {
+                signals_map.insert(sig.type_.clone(), HashMap::new());
+            }
+        }
+
         Ok(Self {
             args,
             frame_info,
@@ -138,10 +159,12 @@ impl<'a> BlueprintGenerator<'a> {
             max_cols_per_grp: max_lamp_cols_per_grp,
             n_groups,
             occupied: PowerPoleOccupied::new(dvec2(0.0, -(args.lamp_margin_y as f64)), &args),
+            pixels: vec![HashMap::new(); n_groups as usize],
             should_generate_cbs: !matches!(
                 args.mode,
                 Mode::Static { combs: false, .. } | Mode::Lamps | Mode::LampGrid
             ),
+            signals_map,
             signals,
             state: BlueprintState::Start,
         })
@@ -587,35 +610,71 @@ impl<'a> BlueprintGenerator<'a> {
                 let img = frame.crop_imm(grp_left, 0, grp_right - grp_left, self.dim.y);
                 let target_outputs_len = (img.width() * img.height()) as usize;
 
-                if gray_bits > 0 {
-                    state.frame_buf.push(img);
-                    if state.frame_buf.len() < frames_per_cb as usize && !is_last_frame {
-                        continue; // wait until we have a full chunk for this group
+                if true {
+                    use crate::image_processing::rgb_to_int;
+
+                    let rgb = frame.to_rgb8();
+                    let mut outputs = Vec::with_capacity((frame.width() * frame.height()) as usize);
+                    let map = &mut self.pixels[group_i as usize];
+
+                    for (chunk_i, chunk) in rgb.as_raw().chunks_exact(3).enumerate() {
+                        let pixel_value = rgb_to_int(chunk[0], chunk[1], chunk[2]) as i32;
+                        outputs.push(pixel_value);
+
+                        if !map.contains_key(&pixel_value) {
+                            map.insert(pixel_value, Vec::new());
+                        }
+
+                        let target = map.get_mut(&pixel_value).unwrap();
+                        if let Some(last) = target.last_mut() {
+                            if last[1] == chunk_i - 1 {
+                                last[1] = chunk_i;
+                            } else {
+                                target.push([chunk_i, chunk_i]);
+                            }
+                        } else {
+                            target.push([chunk_i, chunk_i]);
+                        }
                     }
-                    frame_sigs = grayscale_frames_to_outputs(&state.frame_buf, gray_bits)?;
-                    state.frame_buf.clear();
+                    let n = self
+                        .pixels
+                        .iter()
+                        .fold(0, |acc, x| acc + x.len() * 2 * usize::BITS as usize);
+                    log!("group {}: {:?}", group_i, n);
+
+                    frame_sigs = Vec::new();
                 } else {
-                    frame_sigs = color_frame_to_outputs(&img)?;
+                    if gray_bits > 0 {
+                        state.frame_buf.push(img);
+                        if state.frame_buf.len() < frames_per_cb as usize && !is_last_frame {
+                            continue; // wait until we have a full chunk for this group
+                        }
+                        frame_sigs = grayscale_frames_to_outputs(&state.frame_buf, gray_bits)?;
+                        state.frame_buf.clear();
+                    } else {
+                        frame_sigs = color_frame_to_outputs(&img)?;
+                    }
+
+                    if frame_sigs.len() != target_outputs_len {
+                        return Err(JsValue::from_str(&format!(
+                            "Outputs length ({}) does not match frame size ({target_outputs_len}).",
+                            frame_sigs.len(),
+                        )));
+                    }
+
+                    if use_delta_comp && state.sig_buf.len() == 0 {
+                        state.sig_buf.push(vec![0i32; target_outputs_len]); // Populate first frame with zeros
+                    } else if !use_delta_comp {
+                        state.sig_buf.push(frame_sigs.clone()); // If we're using delta compression we only compare aginst the previous frame
+                    }
+
+                    if state.sig_buf.len() < n_buf_frames as usize && !is_last_frame {
+                        continue; // Accumulate until we have `compression_level` outputs,
+                    }
                 }
 
-                if frame_sigs.len() != target_outputs_len {
-                    return Err(JsValue::from_str(&format!(
-                        "Outputs length ({}) does not match frame size ({target_outputs_len}).",
-                        frame_sigs.len(),
-                    )));
-                }
-
-                if use_delta_comp && state.sig_buf.len() == 0 {
-                    state.sig_buf.push(vec![0i32; target_outputs_len]); // Populate first frame with zeros
-                } else if !use_delta_comp {
-                    state.sig_buf.push(frame_sigs.clone()); // If we're using delta compression we only compare aginst the previous frame
-                }
-
-                if state.sig_buf.len() < n_buf_frames as usize && !is_last_frame {
-                    continue; // Accumulate until we have `compression_level` outputs,
-                }
-
-                if use_delta_comp {
+                if true {
+                } else if use_delta_comp {
                     // Delta compression branch
                     let prev_outputs = &state.sig_buf[0];
                     let mut target_outputs = Vec::with_capacity(target_outputs_len);

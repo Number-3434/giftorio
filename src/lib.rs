@@ -37,7 +37,6 @@ pub async fn run_blueprint(
     use streaming_writer::StreamingWriter;
 
     let mut args: BlueprintArgs = serde_wasm_bindgen::from_value(options)?;
-    let mut frame_data: Option<FrameData> = None;
     let promises: Rc<RefCell<VecDeque<Vec<js_sys::Promise>>>> =
         Rc::new(RefCell::new(VecDeque::new()));
     let promise_q = Rc::clone(&promises);
@@ -49,7 +48,6 @@ pub async fn run_blueprint(
     if matches!(args.mode, Mode::Full | Mode::Static { .. }) {
         // Create iterator over frames. Auto-detects the total number of frames + total duration
         // using custom byte scanning.
-        frame_data = Some(FrameData::new(image_data, &args)?);
     }
 
     let writer = StreamingWriter::new(1 * 1000 * 1000, move |chunk| {
@@ -60,7 +58,7 @@ pub async fn run_blueprint(
     });
 
     // Yields JSON or compressed blueprint in chunks
-    let gen = BlueprintGenerator::new(frame_data, &args)?;
+    let gen = BlueprintGenerator::new(image_data, &args)?;
     let mut encoder = BlueprintEncoder::new(gen, &args, writer)?;
 
     let flush = async || -> Result<(), JsValue> {
