@@ -15,6 +15,16 @@ import { formatDuration, formatFileSize, kebabCaseToSentenceCase, useErrM, useLo
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import { Portal } from "solid-js/web";
+import type {
+  BlueprintArgs,
+  FlippedAxes,
+  ImageRotation,
+  Mode,
+  OutputFormat,
+  ResamplingFilter,
+  SignalCompression,
+  SignalSorting,
+} from "../pkg/giftorio_wasm";
 
 const MAX_BUFFERED_VIDEO_FRAMES = 4;
 
@@ -187,6 +197,8 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
       return;
     }
 
+    console.log(file.type);
+
     let isStaticImage: boolean | null = null;
     let data: ImageData | undefined = undefined;
 
@@ -272,7 +284,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
           ? new Uint8Array(imageData()!.data.buffer, imageData()!.data.byteOffset, imageData()!.data.byteLength)
           : new Uint8Array(await currFile()!.arrayBuffer())
         : new Uint8Array();
-      let signalCompression = null;
+      let signalCompression: SignalCompression | null = null;
 
       if (formData.signalCompressionType === "delta") {
         signalCompression = "delta";
@@ -295,35 +307,38 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
         generate: {
           imageData: data,
           args: {
-            customHeight: +formData.customHeight,
-            customWidth: +formData.customWidth,
+            customDimensions: [+formData.customWidth, +formData.customHeight],
             displayMarginY: +formData.displayMarginY,
-            flippedAxes: `${formData.flippedAxes}`,
+            flippedAxes: `${formData.flippedAxes}` as FlippedAxes,
             grayscaleBits: +formData.grayscaleBits,
             imageFilters: [],
-            imageMetadata: {
-              dimensions: [animationInfo()!.width, animationInfo()!.height],
+            imageArgs: {
+              dimensions: [animationInfo()!.width!, animationInfo()!.height!],
               duration: currFile()!.type.startsWith("video") ? refVideo.duration : null,
+              maxSize: +formData.maxSize,
               mimeType: currFile()!.type,
+              targetFps: +formData.targetFps,
             },
-            imageRotation: `${formData.imageRotation}`,
+            imageRotation: `${formData.imageRotation}` as ImageRotation,
             includePowerPoles: formData.includePowerPoles,
             maxGroupSize: +formData.maxGroupSize! || null,
-            maxSize: +formData.maxSize,
-            mode: getMode(),
+            mode: getMode() as Mode,
             name: currFile()?.name,
-            outputFormat: `${formData.outputFormat}`,
+            outputFormat: `${formData.outputFormat}` as OutputFormat,
             powerPoleName: formData.powerPoleName,
             powerPoleQuality: formData.powerPoleQuality,
             preferGreenWires: !!(formData.wireColor === "green"),
             preferHorizontalWires: !!(formData.connectionDirection === "horizontal"),
-            resamplingFilter: `${formData.resamplingFilter}`,
+            resamplingFilter: `${formData.resamplingFilter}` as ResamplingFilter,
             signalCompression,
             signalSorting:
-              formData.signalSorting === "auto" ? (formData.outputFormat === "json" ? "json" : "compression") : `${formData.signalSorting}`,
-            targetFps: +formData.targetFps,
+              formData.signalSorting === "auto"
+                ? formData.outputFormat === "json"
+                  ? "json"
+                  : "compression"
+                : (`${formData.signalSorting}` as SignalSorting),
             timingSignals: timingSignals(),
-          },
+          } satisfies BlueprintArgs,
         },
       });
     } catch (err: any) {
@@ -699,7 +714,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
             </form>
 
             <button
-              class="button w-full hidden"
+              class="button w-full"
               type="button"
               onClick={async () => {
                 const data = currFile()
@@ -708,10 +723,25 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
                     : new Uint8Array(await currFile()!.arrayBuffer())
                   : new Uint8Array();
                 setIsGenerating(true);
-                worker.postMessage({ encodeToGif: { imageData: data } });
+                worker.postMessage({ encodeVideo: { name: currFile()!.name, imageData: data, outputFormat: "gif" } });
               }}
             >
               Encode to GIF
+            </button>
+            <button
+              class="button w-full"
+              type="button"
+              onClick={async () => {
+                const data = currFile()
+                  ? imageData()
+                    ? new Uint8Array(imageData()!.data.buffer, imageData()!.data.byteOffset, imageData()!.data.byteLength)
+                    : new Uint8Array(await currFile()!.arrayBuffer())
+                  : new Uint8Array();
+                setIsGenerating(true);
+                worker.postMessage({ encodeVideo: { name: currFile()!.name, imageData: data, outputFormat: "mp4" } });
+              }}
+            >
+              Encode to MP4
             </button>
           </div>
 

@@ -23,7 +23,7 @@ pub fn generate_timer(
     args: &BlueprintArgs,
 ) -> (Vec<BlueprintEntity>, Vec<Wire>) {
     let (sig_f, sig_p, sig_s, sig_t) = {
-        let s = &args.timing_signals;
+        let s = &args.timing_signals.as_ref().expect("Requires timing sigs");
         (&s.f, &s.p, &s.s, &s.t)
     };
 

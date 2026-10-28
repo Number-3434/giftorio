@@ -96,7 +96,7 @@ impl<'a> BlueprintGenerator<'a> {
             let n_scaled_frames = frame_data.total_frames() * if time_comp_win > 0 { 2 } else { 1 };
             let frames_per_cb = 32u32.checked_div(gray_bits).unwrap_or(1);
             let n_buf_frames = match time_comp_win {
-                w if w > 0 => (w * args.target_fps).div_ceil(1000 * frames_per_cb),
+                w if w > 0 => (w * args.image_args.target_fps).div_ceil(1000 * frames_per_cb),
                 _ => 1,
             };
             dim = frame_data.out_dim();
@@ -109,13 +109,11 @@ impl<'a> BlueprintGenerator<'a> {
                 n_scaled_frames,
                 next_frame: None,
                 patch_states: Vec::new(),
-                ticks_per_frame: 60 / args.target_fps,
+                ticks_per_frame: 60 / args.image_args.target_fps,
                 use_delta_comp: comb_comp.is_some_and(|c| c == SignalCompression::Delta),
             });
         } else {
-            let w = args.custom_width.expect("Must have width or frame data.");
-            let h = args.custom_height.expect("Must have height or frame data.");
-            dim = uvec2(w, h);
+            dim = (args.custom_dimensions).expect("Must provide dimensions or frame data.");
         }
         let use_const_cbs = matches!(args.mode, Mode::Static { const_cb: true, .. });
         let max_lamp_cols_per_grp = match args.mode {
@@ -201,6 +199,7 @@ impl<'a> BlueprintGenerator<'a> {
     }
 
     fn get_signal_data(args: &BlueprintArgs) -> Box<[Arc<SignalID>]> {
+        let timing_sigs = (args.timing_signals.as_ref()).expect("Requires timing signals");
         let mut signals = PROTOTYPE_DATA.with_borrow(|v| {
             let signals = &v.as_ref().expect("No signal data loaded yet!").signals;
             if matches!(
@@ -210,21 +209,21 @@ impl<'a> BlueprintGenerator<'a> {
                 return signals.clone();
             }
             let blacklist_sigs = [
-                Arc::clone(&args.timing_signals.f),
-                Arc::clone(&args.timing_signals.p),
-                Arc::clone(&args.timing_signals.s),
-                Arc::clone(&args.timing_signals.t),
+                Arc::clone(&timing_sigs.f),
+                Arc::clone(&timing_sigs.p),
+                Arc::clone(&timing_sigs.s),
+                Arc::clone(&timing_sigs.t),
             ]; // Disallow timing signals from being used
             let filtered = signals.iter().filter(|&v| !blacklist_sigs.contains(v));
             filtered.cloned().collect::<Box<_>>()
         });
         match args.signal_sorting {
             // Only sort by name (compressor really likes this)
-            SignalSorting::Compression => {
+            Some(SignalSorting::Compression) => {
                 signals.sort_by(|a, b| a.type_.cmp(&b.type_).then_with(|| a.name.cmp(&b.name)))
             }
             // Sort by total length of the type + name + quality (actual smallest JSON)
-            SignalSorting::Json => signals.sort_by_key(|s| {
+            Some(SignalSorting::Json) => signals.sort_by_key(|s| {
                 s.quality.as_ref().map_or(0, |q| match q.as_ref() {
                     "normal" => -(",\"quality\":\"normal\"".len() as i64),
                     _ => q.to_string().len() as i64,
@@ -270,6 +269,7 @@ impl<'a> BlueprintGenerator<'a> {
                         Mode::Lamps => format!("{}x{} Lamps", self.dim.x, self.dim.y),
                         Mode::LampGrid => format!("{}x{} Lamp Grid", self.dim.x, self.dim.y),
                         Mode::Static { .. } => self.args.name.clone().unwrap_or("Image".to_owned()),
+                        _ => unreachable!(),
                     }),
                     label_color: Color::from_hex(bp_color),
                     version: BLUEPRINT_VERSION,
@@ -371,7 +371,7 @@ impl<'a> BlueprintGenerator<'a> {
                 x => &format!("{x}"),
             };
             let n_frames = fd.curr_total_frames();
-            let fps = self.args.target_fps;
+            let fps = self.args.image_args.target_fps;
 
             output.push(format!("\n[font=var]Color Format[/font]:   {color_format}"));
             if let Some(compression) = self.args.signal_compression {
@@ -546,7 +546,7 @@ impl<'a> BlueprintGenerator<'a> {
         let use_delta_comp = info.use_delta_comp;
         let ticks_per_grp = ticks_per_frame * frames_per_cb;
         let mode = self.args.mode;
-        let sig_p = self.args.timing_signals.p.clone();
+        let sig_p = Arc::clone(&self.args.timing_signals.as_ref().unwrap().p);
 
         let mk_cb = |start: u32, end: u32, outputs: Vec<DeciderCombinatorOutput>| {
             if matches!(mode, Mode::Static { const_cb: true, .. }) {

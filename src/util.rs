@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-pub fn js_num<N: Into<f64>>(num: N) -> js_sys::Number {
+pub fn js_num(num: impl Into<f64>) -> js_sys::Number {
     js_sys::Number::from(num.into())
 }
 
@@ -13,10 +13,9 @@ pub fn format_duration<T: Into<u128>>(ms: T) -> String {
     let minutes = (total_seconds % 3600) / 60;
     let seconds = total_seconds % 60;
 
-    if hours == 0 {
-        format!("{minutes:02}:{seconds:02}")
-    } else {
-        format!("{hours:02}:{minutes:02}:{seconds:02}")
+    match hours {
+        0 => format!("{minutes:02}:{seconds:02}"),
+        _ => format!("{hours:02}:{minutes:02}:{seconds:02}"),
     }
 }
 
@@ -35,11 +34,13 @@ pub fn now_ms() -> f64 {
 }
 
 pub fn wasm_shared_memory(data: &[u8]) -> Result<js_sys::Object, JsValue> {
+    use crate::util::JsReflectGetSet;
+
     let obj = js_sys::Object::new();
 
-    js_sys::Reflect::set(&obj, &"memory".into(), &wasm_bindgen::memory())?;
-    js_sys::Reflect::set(&obj, &"ptr".into(), &js_num(data.as_ptr() as u32))?;
-    js_sys::Reflect::set(&obj, &"len".into(), &js_num(data.len() as u32))?;
+    obj.reflect_set("memory", wasm_bindgen::memory())?;
+    obj.reflect_set("ptr", js_num(data.as_ptr() as u32))?;
+    obj.reflect_set("len", js_num(data.len() as u32))?;
 
     Ok(obj)
 }
@@ -60,15 +61,18 @@ impl<T: Clone> OneOrMany<T> {
     }
 }
 
-pub trait JsReflectGetSet: Into<JsValue> + Clone {
-    fn reflect_get<T: JsCast>(&self, k: impl Into<JsValue>) -> Result<T, JsValue> {
-        js_sys::Reflect::get(&self.clone().into(), &k.into())?.dyn_into()
+pub trait JsReflectGetSet {
+    fn reflect_get<R: JsCast>(&self, k: impl Into<JsValue>) -> Result<R, JsValue>;
+    fn reflect_set(&self, k: impl Into<JsValue>, v: impl Into<JsValue>) -> Result<bool, JsValue>;
+}
+impl<TSelf: AsRef<JsValue>> JsReflectGetSet for TSelf {
+    fn reflect_get<R: JsCast>(&self, k: impl Into<JsValue>) -> Result<R, JsValue> {
+        js_sys::Reflect::get(self.as_ref(), &k.into())?.dyn_into()
     }
     fn reflect_set(&self, k: impl Into<JsValue>, v: impl Into<JsValue>) -> Result<bool, JsValue> {
-        js_sys::Reflect::set(&self.clone().into(), &k.into(), &v.into())
+        js_sys::Reflect::set(self.as_ref(), &k.into(), &v.into())
     }
 }
-impl<T: Into<JsValue> + Clone> JsReflectGetSet for T {}
 
 pub trait ResultJsExt<T, E> {
     fn map_js_err(self, prefix: &str) -> Result<T, JsValue>;

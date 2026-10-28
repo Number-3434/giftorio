@@ -149,8 +149,7 @@ pub fn gif_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
                     pending_delay_cs = u16::from_le_bytes([data[pos + 2], data[pos + 3]]) as u64;
                     pos += 6;
                 } else {
-                    // Other extension data
-                    skip_sub_blocks(data, &mut pos)?;
+                    skip_sub_blocks(data, &mut pos)?; // Other extension data
                 }
             }
             0x3B => {
@@ -161,9 +160,7 @@ pub fn gif_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
                     timestamps_ms: Some(timestamps_ms),
                 });
             }
-            _ => {
-                return Err("Invalid GIF block introducer");
-            }
+            _ => return Err("Invalid GIF block introducer"),
         }
     }
 }
@@ -193,7 +190,7 @@ pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
     let mut pos: usize = 12;
     let mut frames: u32 = 0u32;
     let mut duration_ms: u64 = 0u64;
-    let mut timestamps_ms = Vec::<u64>::new();
+    let mut timestamps_ms: Vec<u64> = Vec::<u64>::new();
 
     while end.saturating_sub(pos) >= 8 {
         let chunk_type = &data[pos..pos + 4];
@@ -226,9 +223,8 @@ pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
 
         pos += chunk_size;
 
-        // RIFF chunks are padded to an even size.
         if chunk_size & 1 != 0 {
-            pos += 1;
+            pos += 1; // RIFF chunks are padded to an even size.
         }
     }
 
@@ -240,11 +236,9 @@ pub fn webp_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
 }
 
 pub fn animation_info(data: &[u8]) -> Result<AnimationInfo, &'static str> {
-    if data.len() >= 6 && matches!(&data[..6], b"GIF87a" | b"GIF89a") {
-        gif_info(data)
-    } else if data.len() >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" {
-        webp_info(data)
-    } else {
-        Err("Unsupported image format")
+    match data.len() {
+        l if l >= 6 && matches!(&data[..6], b"GIF87a" | b"GIF89a") => gif_info(data),
+        l if l >= 12 && &data[..4] == b"RIFF" && &data[8..12] == b"WEBP" => webp_info(data),
+        _ => Err("Unsupported image format"),
     }
 }

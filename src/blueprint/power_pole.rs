@@ -2,7 +2,7 @@ use crate::blueprint::data::PROTOTYPE_DATA;
 use crate::blueprint::{constants::*, models::*};
 use crate::models::ImageRotation::*;
 use glam::{DVec2, dvec2};
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
 use wasm_bindgen::JsValue;
 
 /// Tracks cells occupied by power poles.
@@ -17,11 +17,11 @@ impl PowerPoleOccupied {
         let quality = args.power_pole_quality.clone();
         let quality = quality.filter(|q| *q != *DEFAULT_QUAL_KEY);
         let name = args.power_pole_name.clone();
-        let name = name.unwrap_or(DEFAULT_POWER_POLE_NAME.to_owned());
+        let name = name.unwrap_or(DEFAULT_POWER_POLE_NAME.into());
         let data = PROTOTYPE_DATA.with_borrow(|data| {
             let data = &data.as_ref().expect("No power pole data loaded yet!");
             let poles = &data.electric_poles;
-            let p = poles.iter().find(|p| *p.name == name);
+            let p = poles.iter().find(|p| p.name == name);
             p.unwrap_or_else(|| panic!("No power pole with name '{name}'!"))
                 .clone()
         });
@@ -34,7 +34,7 @@ impl PowerPoleOccupied {
 
         Ok(Self {
             bounding_box,
-            ref_entity: BlueprintEntity::new(0, Arc::from(name), start_pos).with_quality(quality),
+            ref_entity: BlueprintEntity::new(0, name, start_pos).with_quality(quality),
             coverage: cov * (args.include_power_poles as i32 as f64),
             requests: Vec::new(),
         })

@@ -1,5 +1,6 @@
 import { ALL_FORMATS, BlobSource, Input, InputVideoTrack, VideoSample, VideoSampleSink } from "mediabunny";
 import init, {
+  type BlueprintArgs,
   encode_gif,
   init as prepare_wasm,
   run_blueprint,
@@ -66,9 +67,10 @@ async function main() {
       const { showPreview } = evt.data.showPreview;
       state.shouldShowPreview = showPreview;
     } else if (evt.data.generate) {
-      const { imageData, args: blueprintArgs } = evt.data.generate;
-      const { outputFormat, targetFps } = blueprintArgs;
-      const isVideo = blueprintArgs.imageMetadata.mimeType.startsWith("video/");
+      const { imageData, args: blueprintArgs } = evt.data.generate as { imageData: Uint8Array<ArrayBuffer>; args: BlueprintArgs };
+      const { outputFormat } = blueprintArgs;
+      const { mimeType, targetFps } = blueprintArgs.imageArgs;
+      const isVideo = mimeType.startsWith("video/");
 
       let videoDuration: number | null = null;
       let videoInput: Input | null = null;
@@ -268,74 +270,112 @@ async function main() {
     } else if (evt.data.type === "writerReady") {
       writerReadyResolve?.();
       writerReadyResolve = null;
-    } else if (evt.data.encodeToGif) {
-      const { imageData } = evt.data.encodeToGif;
+    } else if (evt.data.encodeVideo) {
+      const { imageData, outputFormat, name } = evt.data.encodeVideo;
       const videoInput = new Input({ source: new BlobSource(new Blob([imageData])), formats: ALL_FORMATS });
       const videoTrack = await videoInput.getPrimaryVideoTrack();
       if (!videoTrack) throw new Error("No video track found");
       if (!(await videoTrack.canDecode())) throw new Error("This browser cannot decode this video");
 
       const [width, height] = [await videoTrack.getDisplayWidth(), await videoTrack.getDisplayHeight()];
-
       const videoSink = new VideoSampleSink(videoTrack);
       const videoSamples = videoSink.samples();
 
-      const args = {
-        dim: [width, height],
-        speed: 10,
-      };
+      if (outputFormat === "gif") {
+        postMessage({ writerArgs: { type: "start", filename: `${name}.gif` } });
 
-      postMessage({ writerArgs: { type: "start", filename: `image.gif` } });
+        const args = { dim: [width, height], speed: 10 };
 
-      await encode_gif(args, {
-        async getFrameData({ inBuffer }: { inBuffer: WasmSharedMemory }) {
-          try {
-            const nextSample = await videoSamples!.next();
-            if (nextSample.done) return { isFinished: true };
-
-            const sample = nextSample.value;
-
+        await encode_gif(args, {
+          async getFrameData({ inBuffer }: { inBuffer: WasmSharedMemory }) {
             try {
-              const { canvas, ctx } = state;
-              if (!canvas || !ctx) throw new Error("Canvas is not initialized");
-              if (canvas.width !== width || canvas.height !== height) {
-                canvas.width = width;
-                canvas.height = height;
+              const nextSample = await videoSamples!.next();
+              if (nextSample.done) return { isFinished: true };
+
+              const sample = nextSample.value;
+
+              try {
+                const { canvas, ctx } = state;
+                if (!canvas || !ctx) throw new Error("Canvas is not initialized");
+                if (canvas.width !== width || canvas.height !== height) {
+                  canvas.width = width;
+                  canvas.height = height;
+                }
+                const { duration, timestamp } = sample;
+
+                // Mediabunny handles the sample's rotation and flip metadata.
+                sample.draw(ctx, 0, 0, width, height);
+
+                const pixels = ctx.getImageData(0, 0, width, height).data;
+                const dest = new Uint8Array(inBuffer.memory.buffer, inBuffer.ptr, inBuffer.len);
+
+                if (pixels.byteLength > dest.byteLength) throw new Error("Video frame exceeds WASM buffer capacity");
+
+                dest.set(pixels);
+
+                return { isFinished: false, duration, timestamp };
+              } finally {
+                sample.close();
               }
-              const { duration, timestamp } = sample;
-
-              // Mediabunny handles the sample's rotation and flip metadata.
-              sample.draw(ctx, 0, 0, width, height);
-
-              const pixels = ctx.getImageData(0, 0, width, height).data;
-              const dest = new Uint8Array(inBuffer.memory.buffer, inBuffer.ptr, inBuffer.len);
-
-              if (pixels.byteLength > dest.byteLength) throw new Error("Video frame exceeds WASM buffer capacity");
-
-              dest.set(pixels);
-
-              return { isFinished: false, duration, timestamp };
-            } finally {
-              sample.close();
-            }
-          } catch (e) {
-            console.error(e);
-            throw e;
-          }
-        },
-        async onChunk(data: Uint8Array) {
-          return new Promise<void>((resolve, reject) => {
-            try {
-              const id = nextWriteId++;
-              pendingWrites.set(id, { resolve, reject });
-              postMessage({ writerArgs: { chunk: { id, data } } }, { targetOrigin: "*", transfer: [data.buffer] });
             } catch (e) {
               console.error(e);
-              reject(e);
+              throw e;
             }
-          });
-        },
-      });
+          },
+          async onChunk(data: Uint8Array) {
+            return new Promise<void>((resolve, reject) => {
+              try {
+                const id = nextWriteId++;
+                pendingWrites.set(id, { resolve, reject });
+                postMessage({ writerArgs: { chunk: { id, data } } }, { targetOrigin: "*", transfer: [data.buffer] });
+              } catch (e) {
+                console.error(e);
+                reject(e);
+              }
+            });
+          },
+        });
+      } else if (outputFormat === "mp4") {
+        const { Conversion, Mp4OutputFormat, Output, StreamTarget } = await import("mediabunny");
+
+        postMessage({ writerArgs: { type: "start", filename: `${name}.mp4` } });
+
+        const output = new Output({
+          format: new Mp4OutputFormat({ fastStart: "fragmented" }),
+          target: new StreamTarget(
+            new WritableStream({
+              write({ data }) {
+                // StreamTarget chunks contain both data and byte position.
+                // Fragmented MP4 is append-only, so these can be forwarded sequentially.
+                return new Promise<void>((resolve, reject) => {
+                  try {
+                    const id = nextWriteId++;
+                    pendingWrites.set(id, { resolve, reject });
+                    postMessage({ writerArgs: { chunk: { id, data } } }, { targetOrigin: "*", transfer: [data.buffer] });
+                  } catch (e) {
+                    console.error(e);
+                    reject(e);
+                  }
+                });
+              },
+            }),
+            { chunked: true, chunkSize: 128 * 1024 },
+          ),
+        });
+
+        const conversion = await Conversion.init({ input: videoInput, output });
+        if (!conversion.isValid) throw new Error("This video cannot be converted to MP4");
+
+        conversion.onProgress = (progress) => {
+          // postMessage({ progress })
+          console.log(progress);
+        };
+
+        await conversion.execute();
+      } else {
+        throw new Error("Worker: unknown video encode output format", outputFormat);
+      }
+
       postMessage({ writerArgs: { type: "done" } });
     } else {
       throw new Error("Worker: Unhandled message", evt.data);

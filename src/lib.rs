@@ -1,4 +1,4 @@
-use serde_wasm_bindgen::{from_value as from_js_value, to_value as to_js_value};
+use serde_wasm_bindgen::to_value as to_js_value;
 use wasm_bindgen::prelude::*;
 
 mod blueprint;
@@ -29,12 +29,8 @@ pub fn init() {
 #[wasm_bindgen]
 pub async fn run_blueprint(
     image_data: &[u8], // note: may be empty
-    args: JsValue,
+    args: tsify::Ts<models::BlueprintArgs>,
     callbacks: JsValue,
-    // on_chunk: &js_sys::Function<fn(js_sys::Uint8Array) -> js_sys::Promise>,
-    // on_preview: &js_sys::Function<
-    //     fn(js_sys::Uint8Array, js_sys::Number, js_sys::Number) -> js_sys::Undefined,
-    // >,
 ) -> Result<JsValue, JsValue> {
     use blueprint::{encoder::BlueprintEncoder, generator::BlueprintGenerator};
     use image::GenericImageView;
@@ -63,26 +59,26 @@ pub async fn run_blueprint(
     let should_show_preview = Rc::new(should_show_preview);
     let yield_to_js = Rc::new(yield_to_js);
 
-    let mut args: BlueprintArgs = from_js_value(args)?;
+    let mut args: BlueprintArgs = args.to_rust().map_js_err("Could not convert args")?;
     let mut frame_data: Option<FrameData> = None;
     let promises = Rc::new(const { RefCell::new(VecDeque::<Vec<js::Promise>>::new()) });
     let promise_q = Rc::clone(&promises);
     let next_yield_time = Rc::new(Cell::new(now_ms() + SYNC_TIME_MS));
 
-    if matches!(args.mode, Mode::Static { .. }) {
+    if !args.dry_run && matches!(args.mode, Mode::Static { .. }) {
         args.signal_compression = None;
-        args.target_fps = 1;
+        args.image_args.target_fps = 1;
     }
-    if matches!(args.mode, Mode::Full | Mode::Static { .. }) {
+    if matches!(args.mode, Mode::Full | Mode::Static { .. } | Mode::Other) {
         let on_frame: FrameCallback = Box::new(move |result| {
             let on_frame = on_frame.clone();
-            let should_show_preview = Rc::clone(&should_show_preview);
+            let should_preview = Rc::clone(&should_show_preview);
             let yield_to_js = Rc::clone(&yield_to_js);
             let next_yield_time = Rc::clone(&next_yield_time);
 
             Box::pin(async move {
-                let show_preview = should_show_preview.call0(&JsValue::NULL)?;
-                let show_preview = show_preview.as_bool() == Some(true);
+                let show_preview =
+                    args.dry_run || (should_preview.call0(&JsValue::NULL)?.as_bool() == Some(true));
                 let now = now_ms();
 
                 // yield to js so preview can be updated
@@ -91,26 +87,24 @@ pub async fn run_blueprint(
                     JsFuture::from(yield_to_js.call0(&JsValue::NULL)?).await?;
                 }
                 if !show_preview {
-                    return Ok(());
+                    let img = result?;
+                    let rgba = match img.as_rgba8() {
+                        Some(v) => v,
+                        _ => &img.to_rgba8(),
+                    };
+
+                    let args_obj = js::Object::new();
+                    args_obj.reflect_set("outBuffer", wasm_shared_memory(rgba)?)?;
+                    args_obj.reflect_set("dimensions", to_js_value(&img.dimensions())?)?;
+
+                    on_frame.call(&JsValue::NULL, (&args_obj.into(),))?;
                 }
-
-                let img = result?;
-                let rgba = match img.as_rgba8() {
-                    Some(rgba) => rgba,
-                    _ => &img.to_rgba8(),
-                };
-
-                let args_obj = js::Object::new();
-                args_obj.reflect_set("outBuffer", wasm_shared_memory(rgba)?)?;
-                args_obj.reflect_set("dimensions", to_js_value(&img.dimensions())?)?;
-
-                on_frame.call(&JsValue::NULL, (&args_obj.into(),))?;
 
                 Ok(())
             })
         });
 
-        let js_next_frame = (args.image_metadata.mime_type)
+        let js_next_frame = (args.image_args.mime_type)
             .starts_with("video/")
             .then(|| get_next_frame.clone());
 
@@ -130,7 +124,6 @@ pub async fn run_blueprint(
         if let Some(q) = promise_q.borrow_mut().back_mut() {
             q.push(promise)
         }
-
         Ok(())
     });
 

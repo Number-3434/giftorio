@@ -126,6 +126,7 @@ pub fn generate_combinators(
     let mut best_pos_data: Option<CombinatorPositionData> = None;
     let mut pos_dict: HashMap<String, &BlueprintEntity> = HashMap::new();
     let mut base_pos = start_pos;
+    let timing_sigs = args.timing_signals.as_ref().expect("Requires timing sigs!");
     let use_compact_layout = max_cols_per_grp < 2;
     let use_delta_comp = args.signal_compression == Some(SignalCompression::Delta);
 
@@ -192,7 +193,7 @@ pub fn generate_combinators(
             conditions: vec![
                 DeciderCombinatorCondition::new(SIG_EACH.clone(), 0, CompStr::Ne)
                     .with_first_signal_networks(CircuitNetworkSelection::green()),
-                DeciderCombinatorCondition::new(args.timing_signals.p.clone(), 0, CompStr::Ne)
+                DeciderCombinatorCondition::new(Arc::clone(&timing_sigs.p), 0, CompStr::Ne)
                     .with_compare_type(CompareTypeString::And)
                     .with_first_signal_networks(CircuitNetworkSelection::red()),
             ],
@@ -213,7 +214,7 @@ pub fn generate_combinators(
         let desc = "Shifts the input numbers until they are in the range of the current frame.";
         let ac = ArithmeticCombinatorParameters {
             first_signal: Some(SIG_EACH.clone()),
-            second_signal: Some(args.timing_signals.f.clone()),
+            second_signal: Some(Arc::clone(&timing_sigs.f)),
             second_constant: 0,
             operation: ArithmeticCombinatorParameterOperation::Shr,
             output_signal: Some(SIG_EACH.clone()),

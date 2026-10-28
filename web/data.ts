@@ -25,48 +25,48 @@ export interface SignalPreset extends SignalData {
   description: string;
 }
 const SIGNAL_DATA_SCHEMA = {
-  type: "object",
-  properties: {
-    signals: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          type: { type: "string" },
-          name: { type: "string" },
+  "type": "object",
+  "properties": {
+    "signals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "string" },
+          "name": { "type": "string" },
         },
-        required: ["type", "name"],
+        "required": ["type", "name"],
       },
     },
-    qualities: {
-      type: "array",
-      items: { type: "string" },
+    "qualities": {
+      "type": "array",
+      "items": { "type": "string" },
     },
-    electric_poles: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          name: { type: "string" },
-          supply_area_distances: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                quality: { type: "string" },
-                supply_area_distance: { type: "number" },
+    "electric_poles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "supply_area_distances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "quality": { "type": "string" },
+                "supply_area_distance": { "type": "number" },
               },
-              required: ["quality", "supply_area_distance"],
+              "required": ["quality", "supply_area_distance"],
             },
           },
-          tile_width: { type: "number" },
-          tile_height: { type: "number" },
+          "tile_width": { "type": "number" },
+          "tile_height": { "type": "number" },
         },
-        required: ["name", "supply_area_distances", "tile_width", "tile_height"],
+        "required": ["name", "supply_area_distances", "tile_width", "tile_height"],
       },
     },
   },
-  required: ["signals", "qualities", "electric_poles"],
+  "required": ["signals", "qualities", "electric_poles"],
 } satisfies JSONSchemaType<SignalData>;
 const ajv = new Ajv();
 
