@@ -558,14 +558,16 @@ impl<'a> BlueprintGenerator<'a> {
         let mk_cb = |start: u32, end: u32, indices: Box<[(usize, i32)]>| -> ControlBehavior {
             if matches!(mode, Mode::Static { const_cb: true, .. }) {
                 let sections = indices.chunks(1000).enumerate().map(|(i, chunk)| {
-                    let sig = &signals[i];
-                    let filters = chunk.iter().map(|&(j, count)| BlueprintLogisticFilter {
-                        index: j as u16 + 1,
-                        type_: Arc::clone(&sig.type_),
-                        name: Arc::clone(&sig.name),
-                        quality: sig.quality.clone(),
-                        comparator: Some(ComparatorString::Eq),
-                        count,
+                    let filters = chunk.iter().enumerate().map(|(j, &(sig_i, count))| {
+                        let sig = &signals[sig_i];
+                        BlueprintLogisticFilter {
+                            index: j as u16 + 1,
+                            type_: Arc::clone(&sig.type_),
+                            name: Arc::clone(&sig.name),
+                            quality: sig.quality.clone(),
+                            comparator: Some(ComparatorString::Eq),
+                            count,
+                        }
                     });
                     LogisticSection {
                         index: i as u8 + 1,
