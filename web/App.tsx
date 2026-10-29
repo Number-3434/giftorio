@@ -40,7 +40,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
   const [imageData, setImageData] = createSignal<ImageData>();
   const [workerShouldShowPreview, setWorkerShouldShowPreview] = createSignal(false);
   const [isStaticImage, setIsStaticImage] = createSignal(false);
-  const [showPreview, setShowPreview] = useLocalStorageJSON("giftorio-show-preview", true);
+  const [showPreview, setShowPreview] = useLocalStorageJSON("anitorio-show-preview", true);
   const [signalPreset, setSignalPreset] = createSignal<SignalPreset | null>(null);
   const [signalPresetRaw, setSignalPresetRaw] = createSignal<Uint8Array | null>(null);
   const [timingSignals, setTimingSignals] = createSignal<TimingSignals | null>(null);
@@ -550,7 +550,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
 
       <div class="fixed top-0 left-0 right-0 font-semibold">
         <Show when={isMobile()}>
-          <div class="mobile-warning">⚠️ GIFtorio works best on desktop devices. Features may be limited on mobile.</div>
+          <div class="mobile-warning">⚠️ Anitorio works best on desktop devices. Features may be limited on mobile.</div>
         </Show>
         <Show when={!streamingAvailable}>
           <div class="streaming-unavailable-warning">
@@ -863,7 +863,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
               </div>
               <div class="mt-6 text-center text-white-500">
                 <p>
-                  Liking GIFtorio? Consider{" "}
+                  Liking Anitorio? Consider{" "}
                   <a
                     href="https://www.buymeacoffee.com/colinchilds"
                     target="_blank"
@@ -880,7 +880,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
         </div>
 
         <footer class="fixed bottom-8 w-full gap-8 text-center text-gray-300">
-          <a href="https://github.com/Number-3434/giftorio" class="pr-8" target="_blank" rel="noopener noreferrer">
+          <a href="https://github.com/crkit-chan/anitorio" class="pr-8" target="_blank" rel="noopener noreferrer">
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 30 30"

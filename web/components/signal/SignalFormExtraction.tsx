@@ -167,7 +167,7 @@ export default function SignalFormExtraction(props: SignalFormExtractionProps) {
                 <div>
                   4. A pop-up will be displayed prompting you to copy the data. Use <code>Ctrl+C</code> to copy the list.
                 </div>
-                <div>5. Go back to the GIFtorio, and press "Next" to continue.</div>
+                <div>5. Go back to the Anitorio, and press "Next" to continue.</div>
               </div>
               <div class="my-5" />
 

@@ -87,7 +87,7 @@ render(() => {
         );
       }}
     >
-      <iframe ref={downloadFrame} class="hidden" name="giftorio-download" />
+      <iframe ref={downloadFrame} class="hidden" name="anitorio-download" />
       <App ref={(api) => (refApp = api)} worker={worker} streamingAvailable={streamSaver.supported} />
     </ErrorBoundary>
   );

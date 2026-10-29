@@ -6,7 +6,7 @@ import init, {
   set_comb_pos_data,
   set_progress_callback,
   set_signal_data,
-} from "../pkg/giftorio_wasm.js";
+} from "../pkg/anitorio_wasm.js";
 import { type WasmSharedMemory } from "./types";
 import { BASE_URL, nullify } from "./utils";
 

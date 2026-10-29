@@ -7,9 +7,9 @@ export { FORM_ELEMENTS };
 // Constants
 export const DEFAULT_SIGNAL_PRESET = "base-2.0.77";
 export const LAST_FILE_KEY = "last-file-user-uploaded";
-export const FORM_DATA_KEY = "giftorio-form-data";
-export const SHOW_ADVANCED_KEY = "giftorio-form-data-show-advanced";
-export const CURR_SIGNAL_PRESET_KEY = "giftorio-curr-signal-preset-key";
+export const FORM_DATA_KEY = "anitorio-form-data";
+export const SHOW_ADVANCED_KEY = "anitorio-form-data-show-advanced";
+export const CURR_SIGNAL_PRESET_KEY = "anitorio-curr-signal-preset-key";
 
 export interface SignalData {
   signals: { type: string; name: string }[];

@@ -1,10 +1,12 @@
-# GIFtorio
+# Anitorio
 
-[GIFtorio](https://giftor.io) is a web application that converts animated GIFs
+Anitorio is a spin-off project from [GIFtorio](https://giftor.io/).
+
+[Anitorio](https://crkit-chan.github.io/anitorio/) is a web application that converts animated GIFs
 into Factorio blueprints. The resulting blueprint creates an animated display
 using the game's circuit network and lamps. It requires no mods - works on
 vanilla Factorio version 2.0 and the Space Age DLC.
-![example nyan gif](https://github.com/colinchilds/giftorio/blob/main/web/assets/img/nyan.gif?raw=true)
+![example nyan gif](https://github.com/crkit-chan/anitorio/blob/main/web/assets/img/nyan.gif?raw=true)
 
 ## Features
 
@@ -16,7 +18,7 @@ vanilla Factorio version 2.0 and the Space Age DLC.
 - Supports different power pole qualities when using the Space Age DLC
 - Supports using small, medium, and large power poles as well as substations
 
-## Additional Features (in 2.0)
+## Features (in 2.0)
 
 ### Temporal Compression
 
@@ -60,7 +62,7 @@ cannot be safely seeked, and must always be played from the beginning._
 
 ### Signal Sorting
 
-In Factorio, signals come with a `type` and a `name` field. GIFtorio uses a
+In Factorio, signals come with a `type` and a `name` field. Anitorio uses a
 pre-compiled list of all available signals to store the pixel data.
 
 However, some signals take up more space in JSON as their `type` and `name`
@@ -82,7 +84,7 @@ direction can also be configured (horizontal or vertical).
 ### Server-Side Optimisations
 
 Most content is streamed from the source instead of being accumulated into one
-buffer. This allows processing larger GIFs. GIFtorio can now support 13,000+
+buffer. This allows processing larger GIFs. Anitorio can now support 13,000+
 frame GIFs and a longest side up to 1,000 lamps.
 
 - Includes a utility script that scans the byte-level frame data of the GIF /
@@ -125,8 +127,8 @@ For development:
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/colinchilds/giftorio.git
-cd giftorio
+git clone https://github.com/crkit-chan/anitorio.git
+cd anitorio
 ```
 
 2. Build the WebAssembly module:

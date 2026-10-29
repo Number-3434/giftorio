@@ -1,9 +1,9 @@
 [package]
-name = "giftorio_wasm"
+name = "anitorio_wasm"
 description = "A Factorio blueprint generator for GIF (or WebP) images."
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
-repository = "https://github.com/colinchilds/giftorio"
+repository = "https://github.com/crkit-chan/anitorio"
 license = "Apache-2.0"
 keywords = ["factorio", "blueprint", "gif", "webp", "image"]
 categories = ["multimedia::images", "multimedia::encoding"]

@@ -5,7 +5,7 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 
 export default defineConfig({
   appType: "mpa",
-  base: "/giftorio/",
+  base: "/anitorio/",
   plugins: [solidPlugin(), viteStaticCopy({ targets: [{ src: "robots.txt", dest: "." }] })],
   server: { host: "0.0.0.0", port: 3000 },
   build: { target: "esnext" },
