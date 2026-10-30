@@ -10,6 +10,10 @@ export default defineConfig({
   server: { host: "0.0.0.0", port: 3000 },
   build: { target: "esnext" },
   assetsInclude: ["**/*.png", "**/*.jpg", "**/*.gif", "**/*.jpeg", "**/*.lua"],
+  define: {
+    __BUILD_NUMBER__: JSON.stringify(process.env.GITHUB_RUN_NUMBER ?? "local"),
+    __BUILD_COMMIT__: JSON.stringify(process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown"),
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "web"),

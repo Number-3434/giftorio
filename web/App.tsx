@@ -908,6 +908,9 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
           </a>
         </footer>
       </div>
+      <div class="fixed bottom-0 left-0 text-tan-500 m-1 text-xs opacity-20">
+        Build #{__BUILD_NUMBER__} ({__BUILD_COMMIT__})
+      </div>
     </>
   );
 }

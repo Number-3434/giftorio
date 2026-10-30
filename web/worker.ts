@@ -80,6 +80,12 @@ async function main() {
         videoInput = new Input({ source: new BlobSource(new Blob([imageData])), formats: ALL_FORMATS });
         videoTrack = await videoInput.getPrimaryVideoTrack();
 
+        console.log({
+          codec: videoTrack.codec,
+          canDecode: await videoTrack.canDecode(),
+          decoderConfig: await videoTrack.getDecoderConfig(),
+        });
+
         if (!videoTrack) throw new Error("No video track found");
         if (!(await videoTrack.canDecode())) throw new Error("This browser cannot decode this video");
 

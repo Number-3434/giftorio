@@ -47,6 +47,9 @@ jobs:
         run: |
           npm ci
           npm run build:opt
+        env:
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_SHA: ${{ github.sha }}
 
       - name: Upload artifact for GitHub Pages
         uses: actions/upload-pages-artifact@v3
