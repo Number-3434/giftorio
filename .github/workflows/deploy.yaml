@@ -41,17 +41,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Enable Yarn
-        run: corepack enable
-
-      - name: Build with wasm-pack
-        run: wasm-pack build --target web --release
+          cache: npm
 
       - name: Install dependencies and build frontend
         run: |
-          yarn install
-          yarn build
+          npm ci
+          npm run build:opt
 
       - name: Upload artifact for GitHub Pages
         uses: actions/upload-pages-artifact@v3
