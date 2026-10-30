@@ -15,6 +15,7 @@ import { formatDuration, formatFileSize, kebabCaseToSentenceCase, useErrM, useLo
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js";
 import { createStore } from "solid-js/store";
 import { Portal } from "solid-js/web";
+import { getVideoData } from "./worker";
 
 export interface AppApi {
   setDownloadUrl(url: string): void;
@@ -210,13 +211,28 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
       refVideo.src = src;
       isStaticImage = false;
 
-      refVideo.addEventListener(
-        "loadedmetadata",
-        () =>
-          refVideo.src === src &&
-          setAnimationInfo(new AnimationInfo(0, refVideo.duration * 1000, refVideo.videoWidth, refVideo.videoHeight)),
-        { once: true },
-      );
+      function cleanup() {
+        refVideo.removeEventListener("loadedmetadata", onLoad);
+        refVideo.removeEventListener("error", onError);
+      }
+      function onLoad() {
+        cleanup();
+
+        if (refVideo.src === src) {
+          setAnimationInfo(new AnimationInfo(0, refVideo.duration * 1000, refVideo.videoWidth, refVideo.videoHeight));
+        }
+      }
+      async function onError(e: ErrorEvent) {
+        cleanup();
+
+        console.log(e);
+
+        const { videoInput, videoTrack } = await getVideoData(file!);
+        console.log(videoInput, videoTrack);
+      }
+
+      refVideo.addEventListener("loadedmetadata", onLoad, { once: true });
+      refVideo.addEventListener("error", onError, { once: true });
     } else throw new Error(`Unsupported MIME type "${file.type}"`);
 
     setIsStaticImage(isStaticImage);
@@ -262,54 +278,63 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
       return;
     }
 
+    const [data, transfer] = currFile()
+      ? imageData()
+        ? [imageData()!, [imageData()!.data.buffer]]
+        : [currFile()!, []]
+      : [new Uint8Array(), []];
+
     try {
-      worker.postMessage({
-        generate: {
-          imageData: currFile()
-            ? imageData()
-              ? new Uint8Array(imageData()!.data.buffer, imageData()!.data.byteOffset, imageData()!.data.byteLength)
-              : new Uint8Array(await currFile()!.arrayBuffer())
-            : new Uint8Array(),
-          args: {
-            customHeight: +formData.customHeight,
-            customWidth: +formData.customWidth,
-            displayMarginY: +formData.displayMarginY,
-            flippedAxes: `${formData.flippedAxes}`,
-            grayscaleBits: +formData.grayscaleBits,
-            imageFilters: [],
-            imageMetadata: {
-              dimensions: [animationInfo()!.width, animationInfo()!.height],
-              duration: currFile()!.type.startsWith("video") ? refVideo.duration : null,
-              mimeType: currFile()!.type,
-            },
-            imageRotation: `${formData.imageRotation}`,
-            includePowerPoles: formData.includePowerPoles,
-            maxGroupSize: +formData.maxGroupSize! || null,
-            maxSize: +formData.maxSize,
-            mode: ((!currFile() || !isStaticImage()) && formData.mode) || {
-              staticImage: {
-                useConstantCombinators: formData.staticImageMode === "constant",
-                useCombinators: formData.staticImageMode !== "lamps",
-                useTimer: formData.staticImageMode === "video",
+      worker.postMessage(
+        {
+          generate: {
+            imageData: data,
+            args: {
+              customHeight: +formData.customHeight,
+              customWidth: +formData.customWidth,
+              displayMarginY: +formData.displayMarginY,
+              flippedAxes: `${formData.flippedAxes}`,
+              grayscaleBits: +formData.grayscaleBits,
+              imageFilters: [],
+              imageMetadata: {
+                dimensions: [animationInfo()!.width, animationInfo()!.height],
+                duration: currFile()!.type.startsWith("video") ? refVideo.duration : null,
+                mimeType: currFile()!.type,
               },
+              imageRotation: `${formData.imageRotation}`,
+              includePowerPoles: formData.includePowerPoles,
+              maxGroupSize: +formData.maxGroupSize! || null,
+              maxSize: +formData.maxSize,
+              mode: ((!currFile() || !isStaticImage()) && formData.mode) || {
+                staticImage: {
+                  useConstantCombinators: formData.staticImageMode === "constant",
+                  useCombinators: formData.staticImageMode !== "lamps",
+                  useTimer: formData.staticImageMode === "video",
+                },
+              },
+              name: currFile()?.name,
+              outputFormat: `${formData.outputFormat}`,
+              powerPoleName: formData.powerPoleName,
+              powerPoleQuality: formData.powerPoleQuality,
+              preferGreenWires: !!(formData.wireColor === "green"),
+              preferHorizontalWires: !!(formData.connectionDirection === "horizontal"),
+              resamplingFilter: `${formData.resamplingFilter}`,
+              signalCompression:
+                (formData.signalCompressionType === "delta" && "delta") ||
+                (formData.signalCompressionType === "temporal" ? { temporal: { window: +formData.temporalCompressionWindow } } : null),
+              signalSorting:
+                formData.signalSorting === "auto"
+                  ? formData.outputFormat === "json"
+                    ? "json"
+                    : "compression"
+                  : `${formData.signalSorting}`,
+              targetFps: +formData.targetFps,
+              timingSignals: timingSignals(),
             },
-            name: currFile()?.name,
-            outputFormat: `${formData.outputFormat}`,
-            powerPoleName: formData.powerPoleName,
-            powerPoleQuality: formData.powerPoleQuality,
-            preferGreenWires: !!(formData.wireColor === "green"),
-            preferHorizontalWires: !!(formData.connectionDirection === "horizontal"),
-            resamplingFilter: `${formData.resamplingFilter}`,
-            signalCompression:
-              (formData.signalCompressionType === "delta" && "delta") ||
-              (formData.signalCompressionType === "temporal" ? { temporal: { window: +formData.temporalCompressionWindow } } : null),
-            signalSorting:
-              formData.signalSorting === "auto" ? (formData.outputFormat === "json" ? "json" : "compression") : `${formData.signalSorting}`,
-            targetFps: +formData.targetFps,
-            timingSignals: timingSignals(),
           },
         },
-      });
+        transfer,
+      );
     } catch (err: any) {
       console.error("Failed to process file:", err);
       showToast(`Failed to process file: ${err}`, { isError: true });
@@ -892,7 +917,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
           </a>
         </footer>
       </div>
-      <div class="fixed bottom-0 left-0 text-tan-500 m-1 text-xs opacity-0">
+      <div class="fixed bottom-0 left-0 text-tan-500 m-1 text-xs opacity-20">
         Build #{__BUILD_NUMBER__} ({__BUILD_COMMIT__})
       </div>
     </>

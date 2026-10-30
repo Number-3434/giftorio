@@ -728,7 +728,9 @@ input[type="checkbox"]:checked ~ .checkbox {
   .button,
   .button-green,
   .button-green-right {
-    @apply min-w-[100px];
+    &:not(.icon-button) {
+      @apply min-w-[100px];
+    }
   }
 
   footer {

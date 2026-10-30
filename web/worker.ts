@@ -1,4 +1,4 @@
-import { ALL_FORMATS, BlobSource, Input, InputVideoTrack, VideoSample, VideoSampleSink } from "mediabunny";
+import type { InputVideoTrack, VideoSample, VideoSampleSink } from "mediabunny";
 import init, {
   encode_gif,
   init as prepare_wasm,
@@ -7,10 +7,40 @@ import init, {
   set_progress_callback,
   set_signal_data,
 } from "../pkg/anitorio_wasm.js";
-import { type WasmSharedMemory } from "./types";
+import type { WasmSharedMemory } from "./types";
 import { BASE_URL, nullify } from "./utils";
 
 const FILE_PREFIX_MAP = { blueprint: "txt", json: "json", rawCompressed: "zlib" } as const;
+
+export async function getVideoData(source: Blob) {
+  async function getData() {
+    const { ALL_FORMATS, BlobSource, Input } = await import("mediabunny");
+    const videoInput = new Input({ source: new BlobSource(source), formats: ALL_FORMATS });
+    const videoTrack = await videoInput.getPrimaryVideoTrack();
+    if (!videoTrack) throw new Error("No video track found");
+    return { videoInput, videoTrack };
+  }
+
+  let { videoInput, videoTrack } = await getData();
+
+  if (!(await videoTrack.canDecode())) {
+    const codec = await videoTrack?.getCodec();
+
+    if (codec === "hevc") {
+      const { registerHevcDecoder } = await import("@hevcjs/mediabunny-plugin");
+      await registerHevcDecoder({ workerUrl: `${import.meta.env.BASE_URL}hevcjs/decode-worker.js` });
+
+      ({ videoTrack } = await getData());
+
+      // Check again now that the HEVC decoder is registered.
+      if (!(await videoTrack.canDecode())) throw new Error("HEVC decoding is unavailable.");
+    } else {
+      throw new Error(`This browser cannot decode this video with format ${await videoTrack.getCodecParameterString()}`);
+    }
+  }
+
+  return { videoInput, videoTrack };
+}
 
 async function main() {
   const wasmReadyPromises = {
@@ -66,39 +96,21 @@ async function main() {
       const { showPreview } = evt.data.showPreview;
       state.shouldShowPreview = showPreview;
     } else if (evt.data.generate) {
-      const { imageData, args: blueprintArgs } = evt.data.generate;
+      const { imageData }: { imageData: File | Uint8Array<ArrayBuffer> | ImageData } = evt.data.generate;
+      const { args: blueprintArgs } = evt.data.generate;
       const { outputFormat, targetFps } = blueprintArgs;
       const isVideo = blueprintArgs.imageMetadata.mimeType.startsWith("video/");
 
       let videoDuration: number | null = null;
-      let videoInput: Input | null = null;
+
       let videoSink: VideoSampleSink | null = null;
       let videoSamples: ReturnType<VideoSampleSink["samples"]> | null = null;
       let videoTrack: InputVideoTrack | null = null;
 
-      async function hydateVideoInputs() {
-        videoInput = new Input({ source: new BlobSource(new Blob([imageData])), formats: ALL_FORMATS });
-        const videoTrack = await videoInput.getPrimaryVideoTrack();
-        if (!videoTrack) throw new Error("No video track found");
-        return { videoInput, videoTrack };
-      }
-
       if (isVideo) {
-        ({ videoInput, videoTrack } = await hydateVideoInputs());
+        const { VideoSampleSink } = await import("mediabunny");
 
-        if (!(await videoTrack.canDecode())) {
-          const codec = await videoTrack?.getCodec();
-
-          if (codec === "hevc") {
-            const { registerHevcDecoder } = await import("@hevcjs/mediabunny-plugin");
-            await registerHevcDecoder({ workerUrl: `${import.meta.env.BASE_URL}hevcjs/decode-worker.js` });
-
-            ({ videoInput, videoTrack } = await hydateVideoInputs());
-
-            // Check again now that the HEVC decoder is registered.
-            if (!(await videoTrack.canDecode())) throw new Error("HEVC decoding is unavailable.");
-          } else throw new Error(`This browser cannot decode this video with format ${await videoTrack.getCodecParameterString()}`);
-        }
+        ({ videoTrack } = await getVideoData(new Blob([imageData as File | Uint8Array<ArrayBuffer>])));
 
         videoDuration = await videoTrack.computeDuration();
         videoSink = new VideoSampleSink(videoTrack, { optimizeForLatency: true });
@@ -182,7 +194,13 @@ async function main() {
 
         await writerReady;
 
-        const blueprintMetadata = await run_blueprint(imageData, blueprintArgs, {
+        const inputData =
+          imageData instanceof File
+            ? new Uint8Array(await imageData.arrayBuffer())
+            : imageData instanceof ImageData
+              ? new Uint8Array(imageData.data.buffer, imageData.data.byteOffset, imageData.data.byteLength)
+              : new Uint8Array();
+        const blueprintMetadata = await run_blueprint(inputData, blueprintArgs, {
           onChunk(data: Uint8Array) {
             return new Promise<void>((resolve, reject) => {
               try {
@@ -286,6 +304,8 @@ async function main() {
       writerReadyResolve?.();
       writerReadyResolve = null;
     } else if (evt.data.encodeToGif) {
+      const { ALL_FORMATS, BlobSource, Input, VideoSampleSink } = await import("mediabunny");
+
       const { imageData } = evt.data.encodeToGif;
       const videoInput = new Input({ source: new BlobSource(new Blob([imageData])), formats: ALL_FORMATS });
       const videoTrack = await videoInput.getPrimaryVideoTrack();

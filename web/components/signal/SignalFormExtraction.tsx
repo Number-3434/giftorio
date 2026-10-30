@@ -5,8 +5,9 @@ import KeyboardListener from "@/components/KeyboardListener";
 import { SignalData, SignalPreset, validateSignalData } from "@/data";
 import { formatJson } from "@/jsonUtil";
 import { BASE_URL, nullify, useErrM } from "@/utils";
-import { createResource, createSignal, Match, onMount, Suspense, Switch } from "solid-js";
+import { createResource, createSignal, Match, onMount, Show, Suspense, Switch } from "solid-js";
 import { createStore } from "solid-js/store";
+import CopyButton from "../CopyButton";
 
 export interface SignalFormExtractionApi {
   show(preset?: SignalPreset, args?: { kind: "edit" | "copy"; name?: string }): void;
@@ -89,6 +90,7 @@ export default function SignalFormExtraction(props: SignalFormExtractionProps) {
               <div class="text-white-500">
                 <div>This is the raw JSON data for the currently selected preset "{formData.name}".</div>
                 <hr class="my-1" />
+
                 {(() => {
                   const { signals: sigs, qualities: quals, electric_poles: poles } = currData()!;
                   return (
@@ -102,23 +104,19 @@ export default function SignalFormExtraction(props: SignalFormExtractionProps) {
                       </div>
                       <div>
                         <span class="text-tan-500 font-semibold">Qualities:</span>{" "}
-                        {quals?.length ? (
+                        <Show when={quals.length} fallback={<span class="text-white font-light italic">(No qualities)</span>}>
                           <span class="text-white font-light">
                             {quals.length} ({quals.join(", ")})
                           </span>
-                        ) : (
-                          <span class="text-white font-light italic">(No qualities)</span>
-                        )}
+                        </Show>
                       </div>
                       <div>
                         <span class="text-tan-500 font-semibold">Power Poles:</span>{" "}
-                        {poles?.length ? (
+                        <Show when={poles?.length} fallback={<span class="text-white font-light italic">(No power poles)</span>}>
                           <span class="text-white font-light">
                             {poles.length} ({poles.map((v) => v.name).join(", ")})
                           </span>
-                        ) : (
-                          <span class="text-white font-light italic">(No power poles)</span>
-                        )}
+                        </Show>
                       </div>
                     </div>
                   );
@@ -131,16 +129,11 @@ export default function SignalFormExtraction(props: SignalFormExtractionProps) {
 
               <div class="my-10" />
               <div class="flex justify-between w-full">
-                <button
-                  class="button bg-gray-100 px-4"
-                  type="button"
-                  onClick={(evt) => {
-                    evt.preventDefault();
-                    navigator.clipboard.writeText(currText()).then(() => props.showToast("Copied to clipboard!"));
-                  }}
-                >
-                  Copy
-                </button>
+                <CopyButton
+                  text={() => currText()}
+                  onSuccess={() => props.showToast("Copied to clipboard!")}
+                  onError={() => props.showToast(`Could not copy to clipboard!`)}
+                />
                 <div />
                 <button class="button button-green-right">Done</button>
               </div>
@@ -182,16 +175,11 @@ export default function SignalFormExtraction(props: SignalFormExtractionProps) {
 
               <div class="my-10" />
               <div class="flex justify-between w-full">
-                <button
-                  class="button bg-gray-100 px-4"
-                  type="button"
-                  onClick={(evt) => {
-                    evt.preventDefault();
-                    navigator.clipboard.writeText(`/c ${codeCommand()}`).then(() => props.showToast("Copied to clipboard!"));
-                  }}
-                >
-                  Copy
-                </button>
+                <CopyButton
+                  text={() => `/c ${codeCommand()}`}
+                  onSuccess={() => props.showToast("Copied to clipboard!")}
+                  onError={() => props.showToast(`Could not copy to clipboard!`)}
+                />
                 <div />
                 <button class="button button-green-right">Next</button>
               </div>

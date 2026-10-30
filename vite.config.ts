@@ -23,11 +23,7 @@ export default defineConfig({
       ],
     }),
   ],
-  resolve: {
-    alias: { "@": path.resolve(__dirname, "web") },
-  },
+  resolve: { alias: { "@": path.resolve(__dirname, "web") } },
   server: { host: "0.0.0.0", port: 3000 },
-  worker: {
-    format: "es",
-  },
+  worker: { format: "es" },
 });
