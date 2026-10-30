@@ -11,6 +11,7 @@ import type { WasmSharedMemory } from "./types";
 import { BASE_URL, nullify } from "./utils";
 
 const FILE_PREFIX_MAP = { blueprint: "txt", json: "json", rawCompressed: "zlib" } as const;
+let hasHevcDecoder = false;
 
 export async function getVideoData(source: Blob) {
   async function getData() {
@@ -26,7 +27,7 @@ export async function getVideoData(source: Blob) {
   if (!(await videoTrack.canDecode())) {
     const codec = await videoTrack?.getCodec();
 
-    if (codec === "hevc") {
+    if (codec === "hevc" && !hasHevcDecoder) {
       const { registerHevcDecoder } = await import("@hevcjs/mediabunny-plugin");
       await registerHevcDecoder({ workerUrl: `${import.meta.env.BASE_URL}hevcjs/decode-worker.js` });
 
@@ -34,6 +35,8 @@ export async function getVideoData(source: Blob) {
 
       // Check again now that the HEVC decoder is registered.
       if (!(await videoTrack.canDecode())) throw new Error("HEVC decoding is unavailable.");
+
+      hasHevcDecoder = true;
     } else {
       throw new Error(`This browser cannot decode this video with format ${await videoTrack.getCodecParameterString()}`);
     }
@@ -113,21 +116,21 @@ async function main() {
         ({ videoTrack } = await getVideoData(new Blob([imageData as File | Uint8Array<ArrayBuffer>])));
 
         videoDuration = await videoTrack.computeDuration();
-        videoSink = new VideoSampleSink(videoTrack, { optimizeForLatency: true });
+        videoSink = new VideoSampleSink(videoTrack, { hardwareAcceleration: "prefer-hardware" });
         videoSamples = videoSink.samples();
       }
 
       type VideoSamples = ReturnType<VideoSampleSink["samples"]>;
       type VideoSampleNext = ReturnType<VideoSamples["next"]>;
 
-      const MAX_LOOKAHEAD_FRAMES = 300;
+      const MAX_LOOKAHEAD_FRAMES = 50;
       const MAX_VIDEO_MEMORY = 512 * 1024 * 1024; // 512 MiB
 
       const videoSampleQueue: VideoSampleNext[] = [];
       let currVideoSample: VideoSample | null = null;
       let nextOutputTime = 0;
       let videoEnded = false;
-      let videoLookahead: number | null = 1;
+      let videoLookahead: number | null = null;
       let videoSampleTail: Promise<void> = Promise.resolve();
 
       function prefetchVideoSamples() {
