@@ -27,6 +27,7 @@
     "vite-plugin-static-copy": "^2.2.0"
   },
   "dependencies": {
+    "@hevcjs/mediabunny-plugin": "^0.1.0",
     "@thisbeyond/solid-dnd": "^0.7.5",
     "ajv": "^8.20.0",
     "fflate": "^0.8.3",

@@ -16,8 +16,6 @@ import { createEffect, createMemo, createSignal, For, onMount, Show } from "soli
 import { createStore } from "solid-js/store";
 import { Portal } from "solid-js/web";
 
-const MAX_BUFFERED_VIDEO_FRAMES = 4;
-
 export interface AppApi {
   setDownloadUrl(url: string): void;
   showOpenStreamingWindowWarning(): void;
@@ -219,9 +217,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
           setAnimationInfo(new AnimationInfo(0, refVideo.duration * 1000, refVideo.videoWidth, refVideo.videoHeight)),
         { once: true },
       );
-    } else {
-      throw new Error(`Unsupported MIME type "${file.type}"`);
-    }
+    } else throw new Error(`Unsupported MIME type "${file.type}"`);
 
     setIsStaticImage(isStaticImage);
     setImageData(data);
@@ -267,33 +263,13 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
     }
 
     try {
-      const data = currFile()
-        ? imageData()
-          ? new Uint8Array(imageData()!.data.buffer, imageData()!.data.byteOffset, imageData()!.data.byteLength)
-          : new Uint8Array(await currFile()!.arrayBuffer())
-        : new Uint8Array();
-      let signalCompression = null;
-
-      if (formData.signalCompressionType === "delta") {
-        signalCompression = "delta";
-      } else if (formData.signalCompressionType === "temporal") {
-        signalCompression = { temporal: { window: +formData.temporalCompressionWindow } };
-      }
-
-      function getMode() {
-        if (!currFile() || !isStaticImage()) return formData.mode;
-        return {
-          staticImage: {
-            useConstantCombinators: formData.staticImageMode === "constant",
-            useCombinators: formData.staticImageMode !== "lamps",
-            useTimer: formData.staticImageMode === "video",
-          },
-        };
-      }
-
       worker.postMessage({
         generate: {
-          imageData: data,
+          imageData: currFile()
+            ? imageData()
+              ? new Uint8Array(imageData()!.data.buffer, imageData()!.data.byteOffset, imageData()!.data.byteLength)
+              : new Uint8Array(await currFile()!.arrayBuffer())
+            : new Uint8Array(),
           args: {
             customHeight: +formData.customHeight,
             customWidth: +formData.customWidth,
@@ -310,7 +286,13 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
             includePowerPoles: formData.includePowerPoles,
             maxGroupSize: +formData.maxGroupSize! || null,
             maxSize: +formData.maxSize,
-            mode: getMode(),
+            mode: ((!currFile() || !isStaticImage()) && formData.mode) || {
+              staticImage: {
+                useConstantCombinators: formData.staticImageMode === "constant",
+                useCombinators: formData.staticImageMode !== "lamps",
+                useTimer: formData.staticImageMode === "video",
+              },
+            },
             name: currFile()?.name,
             outputFormat: `${formData.outputFormat}`,
             powerPoleName: formData.powerPoleName,
@@ -318,7 +300,9 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
             preferGreenWires: !!(formData.wireColor === "green"),
             preferHorizontalWires: !!(formData.connectionDirection === "horizontal"),
             resamplingFilter: `${formData.resamplingFilter}`,
-            signalCompression,
+            signalCompression:
+              (formData.signalCompressionType === "delta" && "delta") ||
+              (formData.signalCompressionType === "temporal" ? { temporal: { window: +formData.temporalCompressionWindow } } : null),
             signalSorting:
               formData.signalSorting === "auto" ? (formData.outputFormat === "json" ? "json" : "compression") : `${formData.signalSorting}`,
             targetFps: +formData.targetFps,
@@ -908,7 +892,7 @@ export default function App({ ref, streamingAvailable, worker }: AppProps) {
           </a>
         </footer>
       </div>
-      <div class="fixed bottom-0 left-0 text-tan-500 m-1 text-xs opacity-20">
+      <div class="fixed bottom-0 left-0 text-tan-500 m-1 text-xs opacity-0">
         Build #{__BUILD_NUMBER__} ({__BUILD_COMMIT__})
       </div>
     </>

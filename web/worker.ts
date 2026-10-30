@@ -76,18 +76,29 @@ async function main() {
       let videoSamples: ReturnType<VideoSampleSink["samples"]> | null = null;
       let videoTrack: InputVideoTrack | null = null;
 
-      if (isVideo) {
+      async function hydateVideoInputs() {
         videoInput = new Input({ source: new BlobSource(new Blob([imageData])), formats: ALL_FORMATS });
-        videoTrack = await videoInput.getPrimaryVideoTrack();
-
-        console.log({
-          codec: videoTrack.codec,
-          canDecode: await videoTrack.canDecode(),
-          decoderConfig: await videoTrack.getDecoderConfig(),
-        });
-
+        const videoTrack = await videoInput.getPrimaryVideoTrack();
         if (!videoTrack) throw new Error("No video track found");
-        if (!(await videoTrack.canDecode())) throw new Error("This browser cannot decode this video");
+        return { videoInput, videoTrack };
+      }
+
+      if (isVideo) {
+        ({ videoInput, videoTrack } = await hydateVideoInputs());
+
+        if (!(await videoTrack.canDecode())) {
+          const codec = await videoTrack?.getCodec();
+
+          if (codec === "hevc") {
+            const { registerHevcDecoder } = await import("@hevcjs/mediabunny-plugin");
+            await registerHevcDecoder({ workerUrl: `${import.meta.env.BASE_URL}hevcjs/decode-worker.js` });
+
+            ({ videoInput, videoTrack } = await hydateVideoInputs());
+
+            // Check again now that the HEVC decoder is registered.
+            if (!(await videoTrack.canDecode())) throw new Error("HEVC decoding is unavailable.");
+          } else throw new Error(`This browser cannot decode this video with format ${await videoTrack.getCodecParameterString()}`);
+        }
 
         videoDuration = await videoTrack.computeDuration();
         videoSink = new VideoSampleSink(videoTrack, { optimizeForLatency: true });

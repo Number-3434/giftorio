@@ -6,7 +6,17 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 export default defineConfig({
   appType: "mpa",
   base: "/anitorio/",
-  plugins: [solidPlugin(), viteStaticCopy({ targets: [{ src: "robots.txt", dest: "." }] })],
+  plugins: [
+    solidPlugin(),
+    viteStaticCopy({ targets: [{ src: "robots.txt", dest: "." }] }),
+    viteStaticCopy({
+      targets: [
+        { src: "node_modules/@hevcjs/core/dist/transcode-worker.js", dest: "." },
+        { src: "node_modules/@hevcjs/core/dist/wasm/hevc-decode.js", dest: "." },
+        { src: "node_modules/@hevcjs/core/dist/wasm/hevc-decode.wasm", dest: "." },
+      ],
+    }),
+  ],
   server: { host: "0.0.0.0", port: 3000 },
   build: { target: "esnext" },
   assetsInclude: ["**/*.png", "**/*.jpg", "**/*.gif", "**/*.jpeg", "**/*.lua"],
@@ -15,8 +25,6 @@ export default defineConfig({
     __BUILD_COMMIT__: JSON.stringify(process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown"),
   },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "web"),
-    },
+    alias: { "@": path.resolve(__dirname, "web") },
   },
 });
