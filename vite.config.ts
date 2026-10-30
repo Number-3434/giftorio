@@ -5,7 +5,13 @@ import { viteStaticCopy } from "vite-plugin-static-copy";
 
 export default defineConfig({
   appType: "mpa",
+  assetsInclude: ["**/*.png", "**/*.jpg", "**/*.gif", "**/*.jpeg", "**/*.lua"],
   base: "/anitorio/",
+  build: { target: "esnext" },
+  define: {
+    __BUILD_NUMBER__: JSON.stringify(process.env.GITHUB_RUN_NUMBER ?? "local"),
+    __BUILD_COMMIT__: JSON.stringify(process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown"),
+  },
   plugins: [
     solidPlugin(),
     viteStaticCopy({ targets: [{ src: "robots.txt", dest: "." }] }),
@@ -17,14 +23,11 @@ export default defineConfig({
       ],
     }),
   ],
-  server: { host: "0.0.0.0", port: 3000 },
-  build: { target: "esnext" },
-  assetsInclude: ["**/*.png", "**/*.jpg", "**/*.gif", "**/*.jpeg", "**/*.lua"],
-  define: {
-    __BUILD_NUMBER__: JSON.stringify(process.env.GITHUB_RUN_NUMBER ?? "local"),
-    __BUILD_COMMIT__: JSON.stringify(process.env.GITHUB_SHA?.slice(0, 7) ?? "unknown"),
-  },
   resolve: {
     alias: { "@": path.resolve(__dirname, "web") },
+  },
+  server: { host: "0.0.0.0", port: 3000 },
+  worker: {
+    format: "es",
   },
 });
